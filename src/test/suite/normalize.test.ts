@@ -1,5 +1,5 @@
 import * as assert from "node:assert";
-import { parseLog, createSyslogFormat } from "../../normalize";
+import { parseLog, createSyslogFormat, formatNormalizedLog } from "../../normalize";
 
 suite("normalize / parseLog", () => {
   test("parses ISO 8601 timestamps with severity and message", () => {
@@ -96,5 +96,55 @@ suite("normalize / parseLog", () => {
     const [entry] = parseLog("2024-02-30T03:04:05Z ERROR impossible date");
     assert.strictEqual(entry.matched, false);
     assert.strictEqual(entry.raw, "2024-02-30T03:04:05Z ERROR impossible date");
+  });
+});
+
+suite("normalize / formatNormalizedLog", () => {
+  test("renders matched entries with a unified ISO timestamp and original line number", () => {
+    const entries = parseLog("[2024-01-02 03:04:05,678] INFO Starting up");
+    const output = formatNormalizedLog(entries);
+
+    assert.strictEqual(output, "1 | 2024-01-02T03:04:05.678Z INFO Starting up");
+  });
+
+  test("keeps original line numbers aligned across multi-line entries", () => {
+    const text = [
+      "2024-01-02T03:04:05Z ERROR Unhandled exception",
+      "java.lang.NullPointerException",
+      "    at com.example.Foo.bar(Foo.java:42)",
+      "2024-01-02T03:04:06Z INFO recovered",
+    ].join("\n");
+
+    const output = formatNormalizedLog(parseLog(text));
+
+    assert.strictEqual(
+      output,
+      [
+        "1 | 2024-01-02T03:04:05.000Z ERROR Unhandled exception",
+        "2 | java.lang.NullPointerException",
+        "3 |     at com.example.Foo.bar(Foo.java:42)",
+        "4 | 2024-01-02T03:04:06.000Z INFO recovered",
+      ].join("\n")
+    );
+  });
+
+  test("passes unrecognized lines through without a timestamp/severity header", () => {
+    const text = ["==== log start ====", "2024-01-02T03:04:05Z INFO real entry"].join("\n");
+
+    const output = formatNormalizedLog(parseLog(text));
+
+    assert.strictEqual(
+      output,
+      ["1 | ==== log start ====", "2 | 2024-01-02T03:04:05.000Z INFO real entry"].join("\n")
+    );
+  });
+
+  test("uses '-' as the severity placeholder when none was recognized", () => {
+    const output = formatNormalizedLog(parseLog("2024-01-02T03:04:05Z no severity here"));
+    assert.strictEqual(output, "1 | 2024-01-02T03:04:05.000Z - no severity here");
+  });
+
+  test("returns an empty string for no entries", () => {
+    assert.strictEqual(formatNormalizedLog([]), "");
   });
 });

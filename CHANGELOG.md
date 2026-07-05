@@ -15,5 +15,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   timestamps, syslog-style timestamps), and keeps unparseable lines as
   "unknown" entries instead of dropping them. This is not yet wired into the
   UI; it's the foundation for filtering, merging, collapsing, and comparing.
+- Add the "Totonoe Log: Show Normalized View" command (`totonoeLog.showNormalizedView`),
+  which normalizes the active editor's log text and opens it as a read-only
+  virtual document. Recognized timestamps are unified to ISO 8601, and each
+  line is prefixed with its original line number so you can trace the
+  normalized view back to the source log.
 
 [Unreleased]: https://github.com/upu/Totonoe-Log/compare/v0.0.1...HEAD

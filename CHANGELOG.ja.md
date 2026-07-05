@@ -15,5 +15,10 @@
   8601、log4j 形式の角括弧付きタイムスタンプ、syslog 形式のタイムスタンプに
   対応。パースできない行も「不明な行」として保持し、落とさない。まだ UI と
   は接続しておらず、絞り込み・マージ・折りたたみ・比較機能の土台となる。
+- 「Totonoe Log: Show Normalized View」コマンド（`totonoeLog.showNormalizedView`）
+  を追加。アクティブなエディタのログを正規化し、読み取り専用の仮想ドキュメント
+  として開く。認識できたタイムスタンプは ISO 8601 に統一され、各行の先頭には
+  元のログでの行番号を付けるため、正規化後の表示から元のログへ対応関係を
+  たどれる。
 
 [Unreleased]: https://github.com/upu/Totonoe-Log/compare/v0.0.1...HEAD
