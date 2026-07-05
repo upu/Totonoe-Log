@@ -12,9 +12,9 @@ argument-hint: "[目標バージョン。例: 0.2.0（省略すると選んだis
 
 ## 手順
 
-1. **現状を把握する** — `gh issue list --state open --json number,title,labels,milestone,body` と `gh api repos/:owner/:repo/milestones --jq '.[] | {title,state,number}'` を実行する。あわせて `package.json` の現在の `version` を読む。すでにオープンなマイルストーンに入っている（スコープ決定済みの）issueは、ユーザーから指示がない限り対象外とする。
+1. **現状を把握する** — `gh issue list --state open --limit 1000 --json number,title,labels,milestone,body` と `gh api repos/:owner/:repo/milestones --paginate --jq '.[] | {title,state,number}'` を実行する（棚卸しなので、デフォルトの取得件数制限で一部のissue/milestoneを見落とさないよう `--limit`/`--paginate` を必ず付ける）。あわせて `package.json` の現在の `version` を読む。すでにオープンなマイルストーンに入っている（スコープ決定済みの）issueは、ユーザーから指示がない限り対象外とする。
 
-2. **不足しているラベルを補う** — このリポジトリではラベルを2軸で使う：種別（`bug` / `enhancement` / `documentation` / `refactor` / `ci` / `chore`）と優先度（`priority:high` / `priority:med` / `priority:low`）。種別/優先度ラベルが付いていない候補issueは、タイトルと本文を読んで判定する：
+2. **不足しているラベルを補う** — このリポジトリではラベルを2軸で使う：種別（`bug` / `enhancement` / `documentation` / `refactor` / `ci` / `chore`）と優先度（`priority:high` / `priority:med` / `priority:low`）。まず `gh label list` でこれらが揃っているか確認し、無いものだけ作成する（`gh label create "priority:high" -c <hex> -d "..."` など。既存のラベルに対して作成コマンドを叩くとエラーになるので、無いものだけに絞る）。これによりラベルが一つも無いリポジトリでもこのスキル単体で完結する。そのうえで、種別/優先度ラベルが付いていない候補issueは、タイトルと本文を読んで判定する：
    - 種別: 内容から推測する（不具合報告 → `bug`、機能要望 → `enhancement`、ドキュメントのみ → `documentation`、挙動を変えない内部整理 → `refactor`、GitHub Actions/ワークフローの変更 → `ci`、依存関係更新など他のどれにも当てはまらない雑務 → `chore`）。
    - 優先度: ユーザーへの影響度、「整える」（正規化/マージ/フィルタ/折りたたみ/比較）のコアにどれだけ近いか、実装コストを勘案する。`backlog`（「まだスケジュールされていない将来のアイデア」）ラベルが付いているissueは、ユーザーが昇格を望まない限り明確に次バージョンの対象外とし、リリース優先度を付けない。
    - `gh issue edit <n> --add-label <種別> --add-label <優先度>` で付与する。
@@ -30,7 +30,7 @@ argument-hint: "[目標バージョン。例: 0.2.0（省略すると選んだis
    - それ以外（バグ修正/ドキュメント/雑務のみ） → **パッチ**を上げる。
    `package.json` の現在のバージョンから `vX.Y.Z` を計算し、`$ARGUMENTS` が未指定、またはこのルールと食い違う場合はユーザーに確認する。
 
-6. **マイルストーンを作成する** — タイトルは `vX.Y.Z`。このスキルを再実行してもエラーや重複が起きないようにする：既存タイトルを一覧し（`gh api repos/:owner/:repo/milestones --jq '.[].title'`）、無い場合のみ作成する（`gh api repos/:owner/:repo/milestones -f title="vX.Y.Z" -f state="open" -f description="..."`）。マイルストーンの `description` は、他のセッションやスキル（例えば実装用のスキル）がユーザーに聞き直さずに計画を引き継げるよう、リリースの共有ブリーフとして書く：
+6. **マイルストーンを作成する** — タイトルは `vX.Y.Z`。このスキルを再実行してもエラーや重複が起きないようにする：既存タイトルを一覧し（`gh api repos/:owner/:repo/milestones --paginate --jq '.[].title'`。過去のマイルストーンが多いと重複判定を誤るため `--paginate` を必ず付ける）、無い場合のみ作成する（`gh api repos/:owner/:repo/milestones -f title="vX.Y.Z" -f state="open" -f description="..."`）。マイルストーンの `description` は、他のセッションやスキル（例えば実装用のスキル）がユーザーに聞き直さずに計画を引き継げるよう、リリースの共有ブリーフとして書く：
    - リリースのテーマ・目的を一行で。
    - 選定したissueの**推奨着手順序**（厳密な依存関係を最優先、次にお得な順序、その次に優先度）。例: `1. #12 → 2. #9（#12に依存） → 3. #7（#15より先にやると安上がり） → 4. #15`
    - 見送った項目とその理由（前提未達、次バージョン以降に持ち越し、など）。
