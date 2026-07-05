@@ -1,4 +1,9 @@
 import * as vscode from "vscode";
+import {
+  NORMALIZED_VIEW_SCHEME,
+  NormalizedViewContentProvider,
+  createShowNormalizedViewCommand,
+} from "./normalizedView";
 
 /**
  * Placeholder command for the Totonoe Log merged/normalized view.
@@ -13,8 +18,18 @@ async function showMergedView(): Promise<void> {
 }
 
 export function activate(context: vscode.ExtensionContext): void {
+  const normalizedViewProvider = new NormalizedViewContentProvider();
+
   context.subscriptions.push(
-    vscode.commands.registerCommand("totonoeLog.showMergedView", showMergedView)
+    vscode.commands.registerCommand("totonoeLog.showMergedView", showMergedView),
+    vscode.workspace.registerTextDocumentContentProvider(
+      NORMALIZED_VIEW_SCHEME,
+      normalizedViewProvider
+    ),
+    vscode.commands.registerCommand(
+      "totonoeLog.showNormalizedView",
+      createShowNormalizedViewCommand(normalizedViewProvider)
+    )
   );
 }
 
