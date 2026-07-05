@@ -1,6 +1,6 @@
 import type { TimestampFormat } from "./types";
 
-/** Three-letter month abbreviations used by syslog-style timestamps. */
+/** syslog 形式のタイムスタンプで使う月の3文字略称。 */
 const MONTH_ABBREVIATIONS: Record<string, number> = {
   jan: 0,
   feb: 1,
@@ -17,14 +17,13 @@ const MONTH_ABBREVIATIONS: Record<string, number> = {
 };
 
 /**
- * Converts the named capture groups shared by the ISO-8601-like formats
- * below into epoch milliseconds. Returns `undefined` for out-of-range
- * components (e.g. month 13) instead of silently producing a bogus date.
+ * 以下の ISO 8601 系フォーマットが共有する名前付きキャプチャグループを
+ * エポックミリ秒に変換する。範囲外の値（月が 13 など）は `undefined` を返し、
+ * 不正な日付をサイレントに受け入れないようにする。
  *
- * When no timezone offset is present, the timestamp is treated as UTC.
- * This keeps parsing deterministic regardless of the host machine's local
- * timezone, which matters both for tests and for comparing logs collected
- * from different machines.
+ * タイムゾーンオフセットがない場合は UTC として扱う。これにより、ホスト
+ * マシンのローカルタイムゾーンに関わらず解析結果が一定になる（テスト時や
+ * 異なるマシンで収集したログを比較する際に重要）。
  */
 function isoLikeGroupsToEpochMs(groups: Record<string, string | undefined>): number | undefined {
   const year = Number(groups.y);
@@ -37,10 +36,9 @@ function isoLikeGroupsToEpochMs(groups: Record<string, string | undefined>): num
 
   const epochMs = Date.UTC(year, month, day, hour, minute, second, ms);
 
-  // Date.UTC normalizes out-of-range fields (e.g. month 12 -> next year), so
-  // round-trip and compare (before applying any timezone offset below) to
-  // catch invalid dates like "2024-02-30" instead of silently accepting a
-  // rolled-over one.
+  // Date.UTC は範囲外の値を繰り上げ処理するため（月12 → 翌年など）、
+  // 逆算して比較することで "2024-02-30" のような不正日付を検出する。
+  // タイムゾーンオフセット適用前に比較すること。
   const check = new Date(epochMs);
   if (
     check.getUTCFullYear() !== year ||
@@ -61,9 +59,9 @@ function isoLikeGroupsToEpochMs(groups: Record<string, string | undefined>): num
 }
 
 /**
- * ISO 8601 / RFC 3339 style timestamps, e.g.:
+ * ISO 8601 / RFC 3339 形式のタイムスタンプ。例:
  * - `2024-01-02T03:04:05.678Z`
- * - `2024-01-02 03:04:05,678` (log4j style, comma millis, no timezone)
+ * - `2024-01-02 03:04:05,678`（log4j 形式、カンマミリ秒、タイムゾーンなし）
  * - `2024-01-02T03:04:05+09:00`
  */
 export const ISO_8601_FORMAT: TimestampFormat = {
@@ -76,8 +74,8 @@ export const ISO_8601_FORMAT: TimestampFormat = {
 };
 
 /**
- * ISO-8601-like timestamps wrapped in brackets, e.g. `[2024-01-02 03:04:05,678]`.
- * Common in log4j/logback-style logs.
+ * 角括弧で囲まれた ISO 8601 系タイムスタンプ。例: `[2024-01-02 03:04:05,678]`。
+ * log4j / logback 系ログでよく見られる形式。
  */
 export const BRACKETED_ISO_8601_FORMAT: TimestampFormat = {
   name: "bracketed-iso8601",
@@ -89,20 +87,20 @@ export const BRACKETED_ISO_8601_FORMAT: TimestampFormat = {
 };
 
 /**
- * Options for {@link createSyslogFormat}.
+ * {@link createSyslogFormat} のオプション。
  */
 export interface SyslogFormatOptions {
   /**
-   * Calendar year to assume, since traditional syslog timestamps
-   * (`MMM d HH:mm:ss`) don't include one. Defaults to the current year.
+   * 年を省略している従来の syslog タイムスタンプ（`MMM d HH:mm:ss`）に
+   * 補完する暦年。省略時は現在の年を使う。
    */
   readonly assumedYear?: number;
 }
 
 /**
- * Traditional syslog timestamps without a year, e.g. `Jan  1 00:00:00`.
- * Since the year is missing from the format itself, it must be supplied
- * (defaults to the current year).
+ * 年を含まない従来の syslog タイムスタンプ。例: `Jan  1 00:00:00`。
+ * フォーマット自体に年がないため、呼び出し側が補完する必要がある
+ *（省略時は現在の年）。
  */
 export function createSyslogFormat(options: SyslogFormatOptions = {}): TimestampFormat {
   const assumedYear = options.assumedYear ?? new Date().getFullYear();
@@ -128,9 +126,8 @@ export function createSyslogFormat(options: SyslogFormatOptions = {}): Timestamp
 }
 
 /**
- * Returns the default set of built-in timestamp formats, tried in order.
- * Callers can pass additional/custom formats to `parseLog` alongside (or
- * instead of) these.
+ * デフォルトの組み込みタイムスタンプフォーマット一覧を返す（試行順）。
+ * 追加 / カスタムフォーマットは `parseLog` に直接渡すことができる。
  */
 export function getDefaultTimestampFormats(
   syslogOptions: SyslogFormatOptions = {}

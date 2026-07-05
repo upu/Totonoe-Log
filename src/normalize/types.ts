@@ -1,59 +1,56 @@
 /**
- * Common normalization model shared by every future Totonoe Log feature
- * (filtering, merging, collapsing, comparing). Diverse log formats are
- * parsed into this shape so downstream features never need to know about
- * the original, messy format.
+ * Totonoe Log の全機能（絞り込み・マージ・折りたたみ・比較）が共有する
+ * 正規化モデル。多様なログ形式をこの構造に変換することで、下流の処理が
+ * 元のフォーマットを意識しなくて済むようにする。
  */
 
 /**
- * A single log entry once normalized.
+ * 正規化後のログエントリ1件。
  *
- * A log "entry" may span multiple physical lines (e.g. a log line followed
- * by a Java stack trace). `raw` preserves the entry's full original text
- * (all of its lines, unmodified, joined with "\n") so nothing is ever lost.
+ * 1件の「エントリ」は複数の物理行にまたがる場合がある
+ *（例: ログ行 + Java スタックトレース）。`raw` にはエントリを構成する
+ * 全行の元テキストをそのまま保持し、情報を決して失わないようにする。
  */
 export interface LogEntry {
-  /** Parsed timestamp in epoch milliseconds, or undefined if unrecognized/unparseable. */
+  /** エポックミリ秒で表したタイムスタンプ。認識・解析できない場合は undefined。 */
   readonly timestampMs: number | undefined;
-  /** The exact substring that was recognized as the timestamp, if any. */
+  /** タイムスタンプとして認識された部分文字列。認識できない場合は undefined。 */
   readonly rawTimestamp: string | undefined;
-  /** Name of the TimestampFormat that matched this entry's timestamp, if any. */
+  /** このエントリのタイムスタンプにマッチした TimestampFormat の名前。認識できない場合は undefined。 */
   readonly timestampFormat: string | undefined;
-  /** Severity/level (e.g. "ERROR", "WARN"), normalized to uppercase, if recognized. */
+  /** セベリティ / レベル（例: "ERROR", "WARN"）。大文字に正規化済み。認識できない場合は undefined。 */
   readonly severity: string | undefined;
   /**
-   * The entry's body text: the first line with the timestamp/severity
-   * removed, plus any continuation lines appended below it.
+   * エントリの本文テキスト：先頭行からタイムスタンプ / セベリティを除いた部分と、
+   * それに続く継続行を結合したもの。
    */
   readonly message: string;
-  /** All original, unmodified physical lines that make up this entry. */
+  /** このエントリを構成する、変更前の全物理行。 */
   readonly lines: readonly string[];
-  /** `lines.join("\n")` — the entry's full original text. */
+  /** `lines.join("\n")` — エントリの完全な元テキスト。 */
   readonly raw: string;
   /**
-   * False when no timestamp format recognized the first line of this entry.
-   * Such entries are still kept (never dropped) so information isn't lost;
-   * they are simply treated as "unknown" lines/entries.
+   * 先頭行をどのタイムスタンプフォーマットも認識できなかった場合は false。
+   * そのようなエントリも「不明な行」として保持し、決して破棄しない。
    */
   readonly matched: boolean;
 }
 
 /**
- * A pluggable, regex-based parser for one timestamp format.
+ * タイムスタンプ形式1種類に対応する、正規表現ベースのプラガブルパーサ。
  *
- * Implementations should anchor `regex` to the start of the line (`^`) so
- * that `parseLog` can reliably tell whether a physical line begins a new
- * entry or is a continuation line of the previous entry.
+ * `parseLog` が各物理行の先頭を確実に判定できるよう、実装側は `regex` を
+ * 行頭（`^`）にアンカーすること。
  */
 export interface TimestampFormat {
-  /** Unique, human-readable name (e.g. "iso8601", "syslog"). */
+  /** 一意の人間可読な名前（例: "iso8601", "syslog"）。 */
   readonly name: string;
-  /** Anchored regular expression that matches a timestamp at the start of a line. */
+  /** 行頭のタイムスタンプにマッチするアンカー付き正規表現。 */
   readonly regex: RegExp;
   /**
-   * Converts a successful `regex` match into epoch milliseconds.
-   * Return `undefined` if the matched text turns out not to be a valid
-   * date/time (e.g. "Feb 30"), so the line can be treated as unmatched.
+   * `regex` のマッチ結果をエポックミリ秒に変換する。
+   * マッチしたテキストが有効な日時でない場合（例: "Feb 30"）は
+   * `undefined` を返し、その行を未マッチとして扱わせる。
    */
   parse(match: RegExpExecArray): number | undefined;
 }

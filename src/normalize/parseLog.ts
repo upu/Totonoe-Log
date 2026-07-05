@@ -2,13 +2,14 @@ import { getDefaultTimestampFormats } from "./timestampFormats";
 import type { LogEntry, TimestampFormat } from "./types";
 
 /**
- * Recognized severity/level tokens, ordered roughly by increasing severity.
- * Matching is case-insensitive; "WARNING" is normalized to "WARN".
+ * 認識済みのセベリティ / レベルトークン（重大度の低い順）。
+ * マッチは大文字・小文字を区別しない。"WARNING" は "WARN" に正規化する。
  */
 const SEVERITY_TOKENS = ["TRACE", "DEBUG", "INFO", "WARNING", "WARN", "ERROR", "FATAL", "CRITICAL"];
 
+// \b を付けることで "ERRORCODE" のような単語の前置部分に誤マッチするのを防ぐ。
 const SEVERITY_REGEX = new RegExp(
-  `^[\\s\\-:|]*\\[?(${SEVERITY_TOKENS.join("|")})\\]?[\\s\\-:|]*`,
+  `^[\\s\\-:|]*\\[?(${SEVERITY_TOKENS.join("|")})\\b\\]?[\\s\\-:|]*`,
   "i"
 );
 
@@ -19,10 +20,9 @@ function normalizeSeverity(token: string): string {
 
 export interface ParseLogOptions {
   /**
-   * Timestamp formats to try, in order, for each physical line. Defaults to
-   * {@link getDefaultTimestampFormats}. Pass a custom list to support
-   * additional formats without touching this module (the parser is
-   * pluggable by design).
+   * 各物理行に試みるタイムスタンプフォーマットの一覧（試行順）。
+   * 省略時は {@link getDefaultTimestampFormats} を使う。カスタムリストを渡すことで、
+   * このモジュールを変更せずに追加フォーマットを対応できる（プラガブル設計）。
    */
   readonly timestampFormats?: readonly TimestampFormat[];
 }
@@ -53,16 +53,15 @@ function finalizeEntry(entry: MutableEntry): LogEntry {
 }
 
 /**
- * Splits raw, possibly messy log text into a common, normalized structure
- * (see {@link LogEntry}). This is the foundation every other Totonoe Log
- * feature (filtering, merging, collapsing, comparing) builds on top of.
+ * 生のログテキストを共通の正規化構造（{@link LogEntry} 参照）に分割する。
+ * これが Totonoe Log の他の全機能（絞り込み・マージ・折りたたみ・比較）の
+ * 土台となる中核関数。
  *
- * Lines that begin with a recognized timestamp start a new entry. Any other
- * line (e.g. a stack trace frame) is treated as a continuation of the
- * previous entry, so multi-line log records stay grouped together. Lines
- * that appear before any recognized timestamp — or an entire log with no
- * recognized timestamps at all — are still kept, grouped into "unknown"
- * entries with `matched: false`; nothing is ever silently dropped.
+ * 認識済みタイムスタンプで始まる行は新規エントリの開始として扱う。それ以外の
+ * 行（スタックトレースのフレームなど）は直前のエントリへの継続行とみなし、
+ * 複数行のログレコードをひとつにまとめる。認識済みタイムスタンプより前に
+ * 現れた行、または全くタイムスタンプが認識されなかった場合も `matched: false`
+ * の「不明」エントリとして保持し、情報を決してサイレントに破棄しない。
  */
 export function parseLog(text: string, options: ParseLogOptions = {}): LogEntry[] {
   const timestampFormats = options.timestampFormats ?? getDefaultTimestampFormats();
@@ -77,6 +76,9 @@ export function parseLog(text: string, options: ParseLogOptions = {}): LogEntry[
     let timestampMs: number | undefined;
 
     for (const format of timestampFormats) {
+      // g / y フラグ付きの正規表現は lastIndex が状態を持つため、
+      // 毎回リセットして次の行で誤動作しないようにする。
+      format.regex.lastIndex = 0;
       const candidate = format.regex.exec(line);
       if (candidate && candidate.index === 0) {
         const epochMs = format.parse(candidate);
