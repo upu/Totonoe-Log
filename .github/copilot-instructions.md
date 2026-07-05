@@ -34,8 +34,12 @@ VSCode 拡張機能「Totonoe Log」。コンセプトは「バラバラなロ�
 
 ## CI
 
-- `.github/workflows/ci.yml` で `npm ci` → `npm run compile` → `npm test` →
-  `npm run check:package` を実行する（windows-latest / Node 24.x）
+- `.github/workflows/ci.yml` で `npm ci` → `npm run compile` → `npm run build` →
+  `npm test` → `npm run check:package` を実行する（windows-latest / Node 24.x）。
+  `npm run build` は `npm test`（拡張機能の読み込みに `out/extension.js` が必要）と
+  `npm run check:package`（パッケージ内容チェック）の両方が使う成果物を1回だけ
+  生成するためのステップなので、`check:package` スクリプト自体はビルドしない
+  （二重ビルドを避けるため）
 - vsce がパッケージするファイル一覧は `scripts/check-package-contents.js` の
   `EXPECTED` で固定している。意図して同梱ファイルを変えた場合は両方（
   `.vscodeignore` とこの `EXPECTED`）を更新すること

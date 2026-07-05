@@ -51,7 +51,7 @@
     "compile": "tsc -p ./",
     "check-types": "tsc --noEmit",
     "test": "vscode-test",
-    "check:package": "npm run build && node scripts/check-package-contents.js",
+    "check:package": "node scripts/check-package-contents.js",
     "package": "node -e \"require('fs').mkdirSync('dist',{recursive:true})\" && vsce package --out dist/totonoe-log.vsix",
     "install:vsix": "code --install-extension dist/totonoe-log.vsix --force",
     "package:install": "npm run package && npm run install:vsix"
