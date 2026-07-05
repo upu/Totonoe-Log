@@ -23,6 +23,10 @@ VSCode 拡張機能「Totonoe Log」。コンセプトは「バラバラなロ�
   構成を踏襲）
 - テストは `@vscode/test-cli`（vscode-test）+ Mocha
 
+## コーディングスタイル
+
+- プログラム中のコメントは日本語で書く（英語のコメントは避ける）
+
 ## 変更時のルール
 
 - 機能追加・変更時は `CHANGELOG.md`（英語）と `CHANGELOG.ja.md`（日本語）の
