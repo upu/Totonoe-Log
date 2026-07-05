@@ -1,0 +1,6 @@
+node_modules/
+out/
+out-tsc/
+.vscode-test/
+*.vsix
+dist/
