@@ -32,7 +32,9 @@
   "categories": [
     "Other"
   ],
-  "activationEvents": [],
+  "activationEvents": [
+    "onCommand:totonoeLog.showMergedView"
+  ],
   "main": "./out/extension.js",
   "contributes": {
     "commands": [

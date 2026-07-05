@@ -9,5 +9,8 @@
 ## [Unreleased]
 
 - プロジェクトの初期骨組みを作成：拡張機能スケルトン、ビルド/テスト環境、CI。
+- 修正: プレースホルダコマンドに明示的な `onCommand:` activation event を追加、
+  CIのパッケージ内容チェックを `npx --no-install` で決定的にし、CIの重複した
+  buildステップを削除。
 
 [Unreleased]: https://github.com/upu/Totonoe-Log/compare/v0.0.1...HEAD

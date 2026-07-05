@@ -7,7 +7,7 @@ const { execSync } = require("node:child_process");
 const EXPECTED = ["CHANGELOG.md", "LICENSE", "README.md", "out/extension.js", "package.json"];
 
 function listPackagedFiles() {
-  const output = execSync("npx vsce ls", { encoding: "utf8" });
+  const output = execSync("npx --no-install vsce ls", { encoding: "utf8" });
   return output
     .split(/\r?\n/)
     .map((line) => line.trim())
