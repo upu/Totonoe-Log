@@ -57,17 +57,23 @@ suite("Totonoe Log normalized view", () => {
     const os = await import("node:os");
     const path = await import("node:path");
 
-    const tempFilePath = path.join(await fs.mkdtemp(path.join(os.tmpdir(), "totonoe-log-")), "app.log");
-    await fs.writeFile(tempFilePath, "2024-01-02T03:04:05Z INFO hello");
+    const tempDir = await fs.mkdtemp(path.join(os.tmpdir(), "totonoe-log-"));
+    try {
+      const tempFilePath = path.join(tempDir, "app.log");
+      await fs.writeFile(tempFilePath, "2024-01-02T03:04:05Z INFO hello");
 
-    const source = await vscode.workspace.openTextDocument(vscode.Uri.file(tempFilePath));
-    await vscode.window.showTextDocument(source);
+      const source = await vscode.workspace.openTextDocument(vscode.Uri.file(tempFilePath));
+      await vscode.window.showTextDocument(source);
 
-    await vscode.commands.executeCommand("totonoeLog.showNormalizedView");
+      await vscode.commands.executeCommand("totonoeLog.showNormalizedView");
 
-    const activeEditor = vscode.window.activeTextEditor;
-    assert.ok(activeEditor, "a normalized view editor should be shown");
-    assert.match(activeEditor!.document.uri.path, /^\/app\.normalized-\d+\.log$/);
+      const activeEditor = vscode.window.activeTextEditor;
+      assert.ok(activeEditor, "a normalized view editor should be shown");
+      assert.match(activeEditor!.document.uri.path, /^\/app\.normalized-\d+\.log$/);
+    } finally {
+      await vscode.commands.executeCommand("workbench.action.closeAllEditors");
+      await fs.rm(tempDir, { recursive: true, force: true });
+    }
   });
 
   test("keeps a leading dot intact for dotfiles with no other extension", async () => {
@@ -78,17 +84,23 @@ suite("Totonoe Log normalized view", () => {
     const os = await import("node:os");
     const path = await import("node:path");
 
-    const tempFilePath = path.join(await fs.mkdtemp(path.join(os.tmpdir(), "totonoe-log-")), ".env");
-    await fs.writeFile(tempFilePath, "2024-01-02T03:04:05Z INFO hello");
+    const tempDir = await fs.mkdtemp(path.join(os.tmpdir(), "totonoe-log-"));
+    try {
+      const tempFilePath = path.join(tempDir, ".env");
+      await fs.writeFile(tempFilePath, "2024-01-02T03:04:05Z INFO hello");
 
-    const source = await vscode.workspace.openTextDocument(vscode.Uri.file(tempFilePath));
-    await vscode.window.showTextDocument(source);
+      const source = await vscode.workspace.openTextDocument(vscode.Uri.file(tempFilePath));
+      await vscode.window.showTextDocument(source);
 
-    await vscode.commands.executeCommand("totonoeLog.showNormalizedView");
+      await vscode.commands.executeCommand("totonoeLog.showNormalizedView");
 
-    const activeEditor = vscode.window.activeTextEditor;
-    assert.ok(activeEditor, "a normalized view editor should be shown");
-    assert.match(activeEditor!.document.uri.path, /^\/\.env\.normalized-\d+\.log$/);
+      const activeEditor = vscode.window.activeTextEditor;
+      assert.ok(activeEditor, "a normalized view editor should be shown");
+      assert.match(activeEditor!.document.uri.path, /^\/\.env\.normalized-\d+\.log$/);
+    } finally {
+      await vscode.commands.executeCommand("workbench.action.closeAllEditors");
+      await fs.rm(tempDir, { recursive: true, force: true });
+    }
   });
 
   test("release() clears cached content for the normalized-view scheme", async () => {
