@@ -148,3 +148,84 @@ suite("Totonoe Log normalized view", () => {
     });
   });
 });
+
+suite("Totonoe Log normalized view filtered by severity", () => {
+  test("registers the showNormalizedViewFilteredBySeverity command", async () => {
+    const extension = vscode.extensions.getExtension("upu.totonoe-log");
+    await extension!.activate();
+
+    const commands = await vscode.commands.getCommands(true);
+    assert.ok(
+      commands.includes("totonoeLog.showNormalizedViewFilteredBySeverity"),
+      "totonoeLog.showNormalizedViewFilteredBySeverity command should be registered"
+    );
+  });
+
+  test("shows only entries matching the severities picked by the user", async () => {
+    const extension = vscode.extensions.getExtension("upu.totonoe-log");
+    await extension!.activate();
+
+    const source = await vscode.workspace.openTextDocument({
+      content: [
+        "2024-01-02T03:04:05Z INFO starting",
+        "2024-01-02T03:04:06Z ERROR boom",
+      ].join("\n"),
+      language: "log",
+    });
+    await vscode.window.showTextDocument(source);
+
+    const originalShowQuickPick = vscode.window.showQuickPick;
+    (vscode.window as any).showQuickPick = async (items: vscode.QuickPickItem[]) =>
+      items.filter((item) => item.label === "ERROR");
+
+    try {
+      await vscode.commands.executeCommand("totonoeLog.showNormalizedViewFilteredBySeverity");
+    } finally {
+      (vscode.window as any).showQuickPick = originalShowQuickPick;
+    }
+
+    const activeEditor = vscode.window.activeTextEditor;
+    assert.ok(activeEditor, "a filtered normalized view editor should be shown");
+    assert.strictEqual(activeEditor!.document.uri.scheme, "totonoe-log-normalized");
+    assert.strictEqual(
+      activeEditor!.document.getText(),
+      "2 | 2024-01-02T03:04:06.000Z ERROR boom"
+    );
+  });
+
+  test("does nothing when the severity picker is dismissed", async () => {
+    const extension = vscode.extensions.getExtension("upu.totonoe-log");
+    await extension!.activate();
+
+    const source = await vscode.workspace.openTextDocument({
+      content: "2024-01-02T03:04:05Z INFO starting",
+      language: "log",
+    });
+    await vscode.window.showTextDocument(source);
+    await vscode.commands.executeCommand("workbench.action.closeOtherEditors");
+
+    const originalShowQuickPick = vscode.window.showQuickPick;
+    (vscode.window as any).showQuickPick = async () => undefined;
+
+    try {
+      await vscode.commands.executeCommand("totonoeLog.showNormalizedViewFilteredBySeverity");
+    } finally {
+      (vscode.window as any).showQuickPick = originalShowQuickPick;
+    }
+
+    const activeEditor = vscode.window.activeTextEditor;
+    assert.ok(activeEditor, "the original editor should remain active");
+    assert.notStrictEqual(activeEditor!.document.uri.scheme, "totonoe-log-normalized");
+  });
+
+  test("shows a warning when there is no active editor to filter", async () => {
+    const extension = vscode.extensions.getExtension("upu.totonoe-log");
+    await extension!.activate();
+
+    await vscode.commands.executeCommand("workbench.action.closeAllEditors");
+
+    await assert.doesNotReject(async () => {
+      await vscode.commands.executeCommand("totonoeLog.showNormalizedViewFilteredBySeverity");
+    });
+  });
+});

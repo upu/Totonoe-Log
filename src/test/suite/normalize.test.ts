@@ -1,5 +1,11 @@
 import * as assert from "node:assert";
-import { parseLog, createSyslogFormat, formatNormalizedLog } from "../../normalize";
+import {
+  parseLog,
+  createSyslogFormat,
+  formatNormalizedLog,
+  getDistinctSeverities,
+  filterEntriesBySeverity,
+} from "../../normalize";
 
 suite("normalize / parseLog", () => {
   test("parses ISO 8601 timestamps with severity and message", () => {
@@ -146,5 +152,45 @@ suite("normalize / formatNormalizedLog", () => {
 
   test("returns an empty string for no entries", () => {
     assert.strictEqual(formatNormalizedLog([]), "");
+  });
+});
+
+suite("normalize / filterEntriesBySeverity", () => {
+  test("getDistinctSeverities lists severities in order of first appearance, using '' for unrecognized", () => {
+    const text = [
+      "no timestamp here",
+      "2024-01-02T03:04:05Z INFO starting",
+      "2024-01-02T03:04:06Z ERROR boom",
+      "2024-01-02T03:04:07Z WARNING low disk",
+      "2024-01-02T03:04:08Z INFO another info",
+    ].join("\n");
+
+    const severities = getDistinctSeverities(parseLog(text));
+
+    assert.deepStrictEqual(severities, ["", "INFO", "ERROR", "WARN"]);
+  });
+
+  test("filterEntriesBySeverity keeps only entries whose severity is selected", () => {
+    const text = [
+      "2024-01-02T03:04:05Z INFO starting",
+      "2024-01-02T03:04:06Z ERROR boom",
+      "2024-01-02T03:04:07Z WARN low disk",
+    ].join("\n");
+    const entries = parseLog(text);
+
+    const filtered = filterEntriesBySeverity(entries, new Set(["ERROR"]));
+
+    assert.strictEqual(filtered.length, 1);
+    assert.strictEqual(filtered[0].severity, "ERROR");
+  });
+
+  test("filterEntriesBySeverity treats '' as the key for entries without a recognized severity", () => {
+    const text = ["==== banner ====", "2024-01-02T03:04:05Z INFO hello"].join("\n");
+    const entries = parseLog(text);
+
+    const filtered = filterEntriesBySeverity(entries, new Set([""]));
+
+    assert.strictEqual(filtered.length, 1);
+    assert.strictEqual(filtered[0].matched, false);
   });
 });
