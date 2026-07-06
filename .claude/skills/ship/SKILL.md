@@ -53,7 +53,7 @@ argument-hint: <issue番号>
       - 単なる提案・nit・スタイルの指摘のみ → 内容をユーザーに一言報告し、そのままマージへ進む（必要なら別issueとしてフォローアップを提案する）。
       - 実際のバグ・見落とし・スコープ内の問題を指摘している → 追加コミットで修正し、手順6（テストのゲート）をやり直し、`git push` して手順9（CI待ち）からやり直す。
 11. **マージする** — `gh pr merge --squash --delete-branch` を実行する（許可されているマージ方式はsquash/rebaseのみ）。`--delete-branch` はリモートの作業ブランチの削除を試みるが、権限や状況によっては削除に失敗することもあるため、必ず消える前提は置かない。その後 `git checkout main && git pull` でローカルの `main` を同期する。
-12. **ローカルブランチを掃除する** — 過去のshipで作られたローカルブランチが、共有のメインチェックアウト（例: `C:\Users\<user>\workspace\<repo>`）に残り続けやすい。マージ後、メインチェックアウトで `git fetch --prune origin` を実行する（許可されているマージ方式はsquash/rebaseのみなので、ローカルブランチの先端コミットは `origin/main` の履歴に直接含まれず `git branch --merged origin/main` ではほぼ列挙されない——掃除対象の判定には使わない）。代わりに `git branch -vv` で upstream が `[origin/<branch>: gone]` になっているローカルブランチ（＝リモート側は `--delete-branch` で削除済み）を探し、それらを `git branch -D <branch>` で削除する。
+12. **ローカルブランチを掃除する** — 過去のshipで作られたローカルブランチが、共有のメインチェックアウト（例: `C:\Users\<user>\workspace\<repo>`）に残り続けやすい。マージ後、メインチェックアウトで `git fetch --prune origin` を実行する（squashマージだとローカルブランチの先端コミットが `origin/main` の履歴に含まれないため `git branch --merged origin/main` では列挙されないが、rebaseマージなら含まれるため列挙されうる——マージ方式によって挙動が変わる点に注意）。掃除の起点には `git branch -vv` で upstream が `[origin/<branch>: gone]` になっているローカルブランチ（＝リモート側のブランチが削除済み）を探す。ただし `gone` は削除済みを示すだけでマージ済みを保証しないため、削除前に対応するPRが `gh pr view <番号> --json state,mergedAt` でmerged済みであることを確認するか、`git log <branch> --not origin/main --oneline` が空（＝未マージのコミットが残っていない）ことを確認してから `git branch -D <branch>` で削除する。
 13. **報告する** — マージされたPR番号、`Closes #N` によりissueが自動クローズされたこと、新しい `main` のコミット、Copilotレビューの結果（あれば）、掃除したローカル/リモートブランチを述べる。
 
 ## 補足
