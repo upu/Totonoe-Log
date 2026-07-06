@@ -52,8 +52,8 @@ argument-hint: <issue番号>
     - Copilotのレビューが手に入ったら（上記いずれの分岐でも）本文とインラインコメントを読み、次のいずれかを判断する:
       - 単なる提案・nit・スタイルの指摘のみ → 内容をユーザーに一言報告し、そのままマージへ進む（必要なら別issueとしてフォローアップを提案する）。
       - 実際のバグ・見落とし・スコープ内の問題を指摘している → 追加コミットで修正し、手順6（テストのゲート）をやり直し、`git push` して手順9（CI待ち）からやり直す。
-11. **マージする** — `gh pr merge --squash --delete-branch` を実行する（許可されているマージ方式はsquash/rebaseのみ）。`--delete-branch` によりリモートの作業ブランチは自動削除される。その後 `git checkout main && git pull` でローカルの `main` を同期する。
-12. **ローカルブランチを掃除する** — このセッションの作業ブランチ（worktree）はセッション終了時に片付くが、共有のメインチェックアウト（例: `C:\Users\<user>\workspace\<repo>`）には過去のshipで作られたローカルブランチが残り続けやすい。マージ後、メインチェックアウトで `git fetch --prune origin` を実行する（許可されているマージ方式はsquash/rebaseのみなので、ローカルブランチの先端コミットは `origin/main` の履歴に直接含まれず `git branch --merged origin/main` ではほぼ列挙されない——掃除対象の判定には使わない）。代わりに `git branch -vv` で upstream が `[origin/<branch>: gone]` になっているローカルブランチ（＝リモート側は `--delete-branch` で削除済み）を探し、それらを `git branch -D <branch>` で削除する。
+11. **マージする** — `gh pr merge --squash --delete-branch` を実行する（許可されているマージ方式はsquash/rebaseのみ）。`--delete-branch` はリモートの作業ブランチの削除を試みるが、権限や状況によっては削除に失敗することもあるため、必ず消える前提は置かない。その後 `git checkout main && git pull` でローカルの `main` を同期する。
+12. **ローカルブランチを掃除する** — 過去のshipで作られたローカルブランチが、共有のメインチェックアウト（例: `C:\Users\<user>\workspace\<repo>`）に残り続けやすい。マージ後、メインチェックアウトで `git fetch --prune origin` を実行する（許可されているマージ方式はsquash/rebaseのみなので、ローカルブランチの先端コミットは `origin/main` の履歴に直接含まれず `git branch --merged origin/main` ではほぼ列挙されない——掃除対象の判定には使わない）。代わりに `git branch -vv` で upstream が `[origin/<branch>: gone]` になっているローカルブランチ（＝リモート側は `--delete-branch` で削除済み）を探し、それらを `git branch -D <branch>` で削除する。
 13. **報告する** — マージされたPR番号、`Closes #N` によりissueが自動クローズされたこと、新しい `main` のコミット、Copilotレビューの結果（あれば）、掃除したローカル/リモートブランチを述べる。
 
 ## 補足
