@@ -4,6 +4,7 @@ import {
   NormalizedViewContentProvider,
   createShowNormalizedViewCommand,
   createShowNormalizedViewFilteredBySeverityCommand,
+  createShowNormalizedViewFilteredByDateRangeCommand,
 } from "./normalizedView";
 
 /**
@@ -35,6 +36,10 @@ export function activate(context: vscode.ExtensionContext): void {
     vscode.commands.registerCommand(
       "totonoeLog.showNormalizedViewFilteredBySeverity",
       createShowNormalizedViewFilteredBySeverityCommand(normalizedViewProvider)
+    ),
+    vscode.commands.registerCommand(
+      "totonoeLog.showNormalizedViewFilteredByDateRange",
+      createShowNormalizedViewFilteredByDateRangeCommand(normalizedViewProvider)
     )
   );
 }

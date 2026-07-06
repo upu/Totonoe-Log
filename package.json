@@ -35,7 +35,8 @@
   "activationEvents": [
     "onCommand:totonoeLog.showMergedView",
     "onCommand:totonoeLog.showNormalizedView",
-    "onCommand:totonoeLog.showNormalizedViewFilteredBySeverity"
+    "onCommand:totonoeLog.showNormalizedViewFilteredBySeverity",
+    "onCommand:totonoeLog.showNormalizedViewFilteredByDateRange"
   ],
   "main": "./out/extension.js",
   "contributes": {
@@ -51,6 +52,10 @@
       {
         "command": "totonoeLog.showNormalizedViewFilteredBySeverity",
         "title": "Totonoe Log: Show Normalized View Filtered by Severity"
+      },
+      {
+        "command": "totonoeLog.showNormalizedViewFilteredByDateRange",
+        "title": "Totonoe Log: Show Normalized View Filtered by Date Range"
       }
     ]
   },

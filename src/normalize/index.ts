@@ -3,6 +3,8 @@ export type { ParseLogOptions } from "./parseLog";
 export { parseLog } from "./parseLog";
 export { formatNormalizedLog } from "./formatNormalizedLog";
 export { UNRECOGNIZED_SEVERITY_KEY, getDistinctSeverities, filterEntriesBySeverity } from "./filterBySeverity";
+export type { DateRange } from "./filterByDateRange";
+export { parseDateBoundary, filterEntriesByDateRange } from "./filterByDateRange";
 export type { SyslogFormatOptions } from "./timestampFormats";
 export {
   ISO_8601_FORMAT,

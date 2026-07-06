@@ -5,6 +5,8 @@ import {
   formatNormalizedLog,
   getDistinctSeverities,
   filterEntriesBySeverity,
+  parseDateBoundary,
+  filterEntriesByDateRange,
 } from "../../normalize";
 
 suite("normalize / parseLog", () => {
@@ -192,5 +194,74 @@ suite("normalize / filterEntriesBySeverity", () => {
 
     assert.strictEqual(filtered.length, 1);
     assert.strictEqual(filtered[0].matched, false);
+  });
+});
+
+suite("normalize / filterEntriesByDateRange", () => {
+  test("parseDateBoundary parses a date-only string as UTC midnight", () => {
+    assert.strictEqual(parseDateBoundary("2024-01-02"), Date.UTC(2024, 0, 2, 0, 0, 0));
+  });
+
+  test("parseDateBoundary parses a date and time string as UTC", () => {
+    assert.strictEqual(
+      parseDateBoundary("2024-01-02T03:04:05"),
+      Date.UTC(2024, 0, 2, 3, 4, 5)
+    );
+    assert.strictEqual(
+      parseDateBoundary("2024-01-02 03:04"),
+      Date.UTC(2024, 0, 2, 3, 4, 0)
+    );
+  });
+
+  test("parseDateBoundary returns undefined for an unrecognized or invalid string", () => {
+    assert.strictEqual(parseDateBoundary("not a date"), undefined);
+    assert.strictEqual(parseDateBoundary("2024-02-30"), undefined);
+    assert.strictEqual(parseDateBoundary("2024-01-02T24:00:00"), undefined);
+    assert.strictEqual(parseDateBoundary("2024-01-02T03:60:00"), undefined);
+  });
+
+  test("filterEntriesByDateRange keeps only entries within [startMs, endMs]", () => {
+    const text = [
+      "2024-01-01T00:00:00Z INFO before range",
+      "2024-01-02T03:04:05Z INFO in range",
+      "2024-01-03T00:00:00Z INFO after range",
+    ].join("\n");
+    const entries = parseLog(text);
+
+    const filtered = filterEntriesByDateRange(entries, {
+      startMs: Date.UTC(2024, 0, 2, 0, 0, 0),
+      endMs: Date.UTC(2024, 0, 2, 23, 59, 59),
+    });
+
+    assert.strictEqual(filtered.length, 1);
+    assert.strictEqual(filtered[0].message, "in range");
+  });
+
+  test("filterEntriesByDateRange treats an omitted bound as unbounded", () => {
+    const text = [
+      "2024-01-01T00:00:00Z INFO first",
+      "2024-01-05T00:00:00Z INFO second",
+    ].join("\n");
+    const entries = parseLog(text);
+
+    const onlyStart = filterEntriesByDateRange(entries, {
+      startMs: Date.UTC(2024, 0, 3),
+    });
+    assert.strictEqual(onlyStart.length, 1);
+    assert.strictEqual(onlyStart[0].message, "second");
+
+    const onlyEnd = filterEntriesByDateRange(entries, { endMs: Date.UTC(2024, 0, 3) });
+    assert.strictEqual(onlyEnd.length, 1);
+    assert.strictEqual(onlyEnd[0].message, "first");
+  });
+
+  test("filterEntriesByDateRange excludes entries without a recognized timestamp", () => {
+    const text = ["==== banner ====", "2024-01-02T03:04:05Z INFO hello"].join("\n");
+    const entries = parseLog(text);
+
+    const filtered = filterEntriesByDateRange(entries, {});
+
+    assert.strictEqual(filtered.length, 1);
+    assert.strictEqual(filtered[0].message, "hello");
   });
 });
