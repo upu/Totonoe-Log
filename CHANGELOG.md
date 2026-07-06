@@ -21,4 +21,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   line is prefixed with its original line number so you can trace the
   normalized view back to the source log.
 
+### Fixed
+
+- Fix the normalized view's virtual document name so it no longer duplicates
+  the source file's extension (e.g. `app.normalized-1.log` instead of
+  `app.log.normalized-1.log`).
+- Release cached normalized view content when its editor tab is closed,
+  instead of holding it in memory for the rest of the session.
+
 [Unreleased]: https://github.com/upu/Totonoe-Log/compare/v0.0.1...HEAD

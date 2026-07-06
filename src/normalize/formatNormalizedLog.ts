@@ -38,8 +38,8 @@ export function formatNormalizedLog(entries: readonly LogEntry[]): string {
   for (const entry of entries) {
     const messageLines = entry.message.split("\n");
 
-    const headerText = entry.matched
-      ? `${formatTimestamp(entry.timestampMs as number)} ${entry.severity ?? SEVERITY_PLACEHOLDER} ${messageLines[0]}`
+    const headerText = entry.matched && entry.timestampMs !== undefined
+      ? `${formatTimestamp(entry.timestampMs)} ${entry.severity ?? SEVERITY_PLACEHOLDER} ${messageLines[0]}`
       : messageLines[0];
     outputLines.push(formatGutter(originalLineNumber, gutterWidth) + headerText);
 

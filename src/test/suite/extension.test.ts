@@ -42,11 +42,60 @@ suite("Totonoe Log normalized view", () => {
 
     const activeEditor = vscode.window.activeTextEditor;
     assert.ok(activeEditor, "a normalized view editor should be shown");
-    assert.notStrictEqual(activeEditor!.document.uri.scheme, "file");
+    assert.strictEqual(activeEditor!.document.uri.scheme, "totonoe-log-normalized");
     assert.strictEqual(
       activeEditor!.document.getText(),
       "1 | 2024-01-02T03:04:05.000Z ERROR boom"
     );
+  });
+
+  test("does not duplicate the file extension in the virtual document name", async () => {
+    const extension = vscode.extensions.getExtension("upu.totonoe-log");
+    await extension!.activate();
+
+    const source = await vscode.workspace.openTextDocument({
+      content: "2024-01-02T03:04:05Z INFO hello",
+      language: "log",
+    });
+    await vscode.window.showTextDocument(source);
+
+    await vscode.commands.executeCommand("totonoeLog.showNormalizedView");
+
+    const activeEditor = vscode.window.activeTextEditor;
+    assert.ok(activeEditor, "a normalized view editor should be shown");
+    assert.match(activeEditor!.document.uri.path, /^\/Untitled-\d+\.normalized-\d+\.log$/);
+  });
+
+  test("release() clears cached content for the normalized-view scheme", async () => {
+    const { NormalizedViewContentProvider, NORMALIZED_VIEW_SCHEME } = await import(
+      "../../normalizedView"
+    );
+    const provider = new NormalizedViewContentProvider();
+    const uri = vscode.Uri.from({ scheme: NORMALIZED_VIEW_SCHEME, path: "/sample.normalized-1.log" });
+
+    provider.register(uri, "cached content");
+    assert.strictEqual(provider.provideTextDocumentContent(uri), "cached content");
+
+    provider.release(uri);
+    assert.strictEqual(
+      provider.provideTextDocumentContent(uri),
+      "",
+      "release() should drop the cached content for the given uri"
+    );
+
+    provider.dispose();
+  });
+
+  test("ignores release() for uris outside the normalized-view scheme", async () => {
+    const { NormalizedViewContentProvider } = await import("../../normalizedView");
+    const provider = new NormalizedViewContentProvider();
+
+    const otherUri = vscode.Uri.parse("untitled:not-a-normalized-view");
+    provider.register(otherUri, "should stay");
+    provider.release(otherUri);
+
+    assert.strictEqual(provider.provideTextDocumentContent(otherUri), "should stay");
+    provider.dispose();
   });
 
   test("shows a warning when there is no active editor to normalize", async () => {

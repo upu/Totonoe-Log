@@ -6,10 +6,10 @@ import {
 } from "./normalizedView";
 
 /**
- * Placeholder command for the Totonoe Log merged/normalized view.
- * The real implementation (log parsing, normalization, merging, filtering,
- * collapsing, and comparing) will be built up incrementally, one issue/PR
- * at a time. See the project README for the feature roadmap.
+ * `totonoeLog.showMergedView` のプレースホルダーコマンド。
+ * 実際のマージ表示機能（複数ログファイルの統合表示）は、他の機能
+ * （正規化・絞り込み・折りたたみ・比較）と同様に issue/PR 単位で
+ * 段階的に実装していく。ロードマップはプロジェクトの README を参照。
  */
 async function showMergedView(): Promise<void> {
   vscode.window.showInformationMessage(
@@ -26,6 +26,7 @@ export function activate(context: vscode.ExtensionContext): void {
       NORMALIZED_VIEW_SCHEME,
       normalizedViewProvider
     ),
+    normalizedViewProvider,
     vscode.commands.registerCommand(
       "totonoeLog.showNormalizedView",
       createShowNormalizedViewCommand(normalizedViewProvider)
