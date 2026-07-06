@@ -53,17 +53,42 @@ suite("Totonoe Log normalized view", () => {
     const extension = vscode.extensions.getExtension("upu.totonoe-log");
     await extension!.activate();
 
-    const source = await vscode.workspace.openTextDocument({
-      content: "2024-01-02T03:04:05Z INFO hello",
-      language: "log",
-    });
+    const fs = await import("node:fs/promises");
+    const os = await import("node:os");
+    const path = await import("node:path");
+
+    const tempFilePath = path.join(await fs.mkdtemp(path.join(os.tmpdir(), "totonoe-log-")), "app.log");
+    await fs.writeFile(tempFilePath, "2024-01-02T03:04:05Z INFO hello");
+
+    const source = await vscode.workspace.openTextDocument(vscode.Uri.file(tempFilePath));
     await vscode.window.showTextDocument(source);
 
     await vscode.commands.executeCommand("totonoeLog.showNormalizedView");
 
     const activeEditor = vscode.window.activeTextEditor;
     assert.ok(activeEditor, "a normalized view editor should be shown");
-    assert.match(activeEditor!.document.uri.path, /^\/Untitled-\d+\.normalized-\d+\.log$/);
+    assert.match(activeEditor!.document.uri.path, /^\/app\.normalized-\d+\.log$/);
+  });
+
+  test("keeps a leading dot intact for dotfiles with no other extension", async () => {
+    const extension = vscode.extensions.getExtension("upu.totonoe-log");
+    await extension!.activate();
+
+    const fs = await import("node:fs/promises");
+    const os = await import("node:os");
+    const path = await import("node:path");
+
+    const tempFilePath = path.join(await fs.mkdtemp(path.join(os.tmpdir(), "totonoe-log-")), ".env");
+    await fs.writeFile(tempFilePath, "2024-01-02T03:04:05Z INFO hello");
+
+    const source = await vscode.workspace.openTextDocument(vscode.Uri.file(tempFilePath));
+    await vscode.window.showTextDocument(source);
+
+    await vscode.commands.executeCommand("totonoeLog.showNormalizedView");
+
+    const activeEditor = vscode.window.activeTextEditor;
+    assert.ok(activeEditor, "a normalized view editor should be shown");
+    assert.match(activeEditor!.document.uri.path, /^\/\.env\.normalized-\d+\.log$/);
   });
 
   test("release() clears cached content for the normalized-view scheme", async () => {
