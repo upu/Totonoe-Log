@@ -26,6 +26,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   severity) to show via a checkbox-style picker, then opens a normalized view
   containing only the matching entries. Original line numbers are preserved
   even when entries are filtered out.
+- Add the "Totonoe Log: Show Normalized View Filtered by Date Range" command
+  (`totonoeLog.showNormalizedViewFilteredByDateRange`), which prompts for an
+  optional start and end date/time (either bound can be left blank) and opens
+  a normalized view containing only entries within that range. Entries
+  without a recognized timestamp are treated as out of range. A notification
+  reports how many lines were hidden by the filter.
 
 ### Fixed
 

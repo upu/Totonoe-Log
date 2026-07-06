@@ -26,6 +26,11 @@
   チェックボックス形式のピッカーで選択すると、該当するエントリだけを含む
   正規化ビューが開く。エントリを絞り込んだ場合でも、各行の元の行番号は
   正しく保たれる。
+- 「Totonoe Log: Show Normalized View Filtered by Date Range」コマンド
+  （`totonoeLog.showNormalizedViewFilteredByDateRange`）を追加。開始・終了
+  日時（どちらも省略可）を入力すると、その範囲に含まれるエントリだけを
+  含む正規化ビューが開く。タイムスタンプを認識できなかったエントリは範囲外
+  として扱う。絞り込みで非表示にした行数は通知で表示する。
 
 ### Fixed
 

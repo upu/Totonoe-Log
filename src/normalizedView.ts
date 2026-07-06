@@ -5,6 +5,8 @@ import {
   getDistinctSeverities,
   filterEntriesBySeverity,
   UNRECOGNIZED_SEVERITY_KEY,
+  parseDateBoundary,
+  filterEntriesByDateRange,
 } from "./normalize";
 
 /** 正規化ビュー用の仮想ドキュメントに割り当てる URI スキーム。 */
@@ -51,6 +53,7 @@ export class NormalizedViewContentProvider implements vscode.TextDocumentContent
 
 let normalizedViewCounter = 0;
 let severityFilteredViewCounter = 0;
+let dateRangeFilteredViewCounter = 0;
 
 /**
  * 正規化ビュー系コマンドが共有する、仮想ドキュメントの発行・登録・表示処理。
@@ -164,6 +167,86 @@ export function createShowNormalizedViewFilteredBySeverityCommand(
       content,
       "severity-filtered",
       severityFilteredViewCounter
+    );
+  };
+}
+
+/**
+ * 日付範囲の境界（開始・終了いずれか）を入力ボックスで尋ねる。
+ * 入力を空のまま確定した場合は「境界なし」を表す `undefined` を返す。
+ * Esc 等でキャンセルされた場合は呼び出し側にキャンセルを伝えるため `null` を返す。
+ */
+async function promptDateBoundary(
+  promptLabel: string
+): Promise<number | undefined | null> {
+  const input = await vscode.window.showInputBox({
+    prompt: `${promptLabel}（YYYY-MM-DD、または YYYY-MM-DD HH:mm[:ss]。省略可）`,
+    placeHolder: "例: 2024-01-02 or 2024-01-02T03:04:05",
+  });
+
+  if (input === undefined) {
+    return null;
+  }
+  if (input.trim() === "") {
+    return undefined;
+  }
+
+  const boundaryMs = parseDateBoundary(input);
+  if (boundaryMs === undefined) {
+    vscode.window.showWarningMessage(
+      `Totonoe Log: 日時を解釈できませんでした: "${input}"`
+    );
+    return null;
+  }
+
+  return boundaryMs;
+}
+
+/**
+ * アクティブなエディタの内容を正規化し、ユーザーが指定した開始・終了日時の
+ * 範囲に含まれるエントリだけを読み取り専用の仮想ドキュメントとして開くコマンド。
+ * 範囲外として非表示にした行数は、開いた直後に通知として表示する。
+ */
+export function createShowNormalizedViewFilteredByDateRangeCommand(
+  provider: NormalizedViewContentProvider
+): () => Promise<void> {
+  return async function showNormalizedViewFilteredByDateRange(): Promise<void> {
+    const activeEditor = vscode.window.activeTextEditor;
+    if (!activeEditor) {
+      vscode.window.showWarningMessage(
+        "Totonoe Log: 絞り込むログファイルが開かれていません。"
+      );
+      return;
+    }
+
+    const startMs = await promptDateBoundary("開始日時");
+    // null はキャンセル、または不正な入力による中断を表す。
+    if (startMs === null) {
+      return;
+    }
+
+    const endMs = await promptDateBoundary("終了日時");
+    if (endMs === null) {
+      return;
+    }
+
+    const sourceDocument = activeEditor.document;
+    const entries = parseLog(sourceDocument.getText());
+    const filteredEntries = filterEntriesByDateRange(entries, { startMs, endMs });
+    const content = formatNormalizedLog(filteredEntries);
+
+    dateRangeFilteredViewCounter += 1;
+    await openVirtualNormalizedDocument(
+      provider,
+      sourceDocument,
+      content,
+      "date-range-filtered",
+      dateRangeFilteredViewCounter
+    );
+
+    const hiddenCount = entries.length - filteredEntries.length;
+    vscode.window.showInformationMessage(
+      `Totonoe Log: 指定範囲外の ${hiddenCount} 行を非表示にしました（${filteredEntries.length}/${entries.length} 行を表示）。`
     );
   };
 }
