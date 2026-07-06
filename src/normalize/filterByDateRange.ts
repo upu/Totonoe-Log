@@ -24,6 +24,13 @@ export function parseDateBoundary(input: string): number | undefined {
   const minute = Number(match[5] ?? "0");
   const second = Number(match[6] ?? "0");
 
+  // Date.UTC は時刻の範囲外値（24:00 や 03:60 等）も繰り上げてしまうため、
+  // 日付だけでなく時刻の各要素も事前に範囲チェックし、不正な入力を
+  // サイレントに受け入れないようにする。
+  if (hour > 23 || minute > 59 || second > 59) {
+    return undefined;
+  }
+
   const epochMs = Date.UTC(year, month, day, hour, minute, second);
 
   // Date.UTC は範囲外の値を繰り上げ処理するため（例: 2024-02-30 → 2024-03-01）、

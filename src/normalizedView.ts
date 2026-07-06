@@ -7,6 +7,7 @@ import {
   UNRECOGNIZED_SEVERITY_KEY,
   parseDateBoundary,
   filterEntriesByDateRange,
+  type LogEntry,
 } from "./normalize";
 
 /** 正規化ビュー用の仮想ドキュメントに割り当てる URI スキーム。 */
@@ -174,7 +175,8 @@ export function createShowNormalizedViewFilteredBySeverityCommand(
 /**
  * 日付範囲の境界（開始・終了いずれか）を入力ボックスで尋ねる。
  * 入力を空のまま確定した場合は「境界なし」を表す `undefined` を返す。
- * Esc 等でキャンセルされた場合は呼び出し側にキャンセルを伝えるため `null` を返す。
+ * Esc 等でのキャンセル、および日時を解釈できない不正な入力の場合は、
+ * どちらも呼び出し側に処理を中断させるため `null` を返す。
  */
 async function promptDateBoundary(
   promptLabel: string
@@ -200,6 +202,15 @@ async function promptDateBoundary(
   }
 
   return boundaryMs;
+}
+
+/**
+ * エントリ群が構成する物理行の総数を数える。1エントリは複数の物理行
+ *（スタックトレース等の継続行）にまたがりうるため、単純な `entries.length`
+ * ではなく `lines.length` の合計を使う必要がある。
+ */
+function countLines(entries: readonly LogEntry[]): number {
+  return entries.reduce((total, entry) => total + entry.lines.length, 0);
 }
 
 /**
@@ -244,9 +255,9 @@ export function createShowNormalizedViewFilteredByDateRangeCommand(
       dateRangeFilteredViewCounter
     );
 
-    const hiddenCount = entries.length - filteredEntries.length;
+    const hiddenLineCount = countLines(entries) - countLines(filteredEntries);
     vscode.window.showInformationMessage(
-      `Totonoe Log: 指定範囲外の ${hiddenCount} 行を非表示にしました（${filteredEntries.length}/${entries.length} 行を表示）。`
+      `Totonoe Log: 指定範囲外の ${hiddenLineCount} 行を非表示にしました（${countLines(filteredEntries)}/${countLines(entries)} 行を表示）。`
     );
   };
 }

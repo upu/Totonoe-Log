@@ -216,6 +216,8 @@ suite("normalize / filterEntriesByDateRange", () => {
   test("parseDateBoundary returns undefined for an unrecognized or invalid string", () => {
     assert.strictEqual(parseDateBoundary("not a date"), undefined);
     assert.strictEqual(parseDateBoundary("2024-02-30"), undefined);
+    assert.strictEqual(parseDateBoundary("2024-01-02T24:00:00"), undefined);
+    assert.strictEqual(parseDateBoundary("2024-01-02T03:60:00"), undefined);
   });
 
   test("filterEntriesByDateRange keeps only entries within [startMs, endMs]", () => {
