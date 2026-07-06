@@ -25,6 +25,12 @@ export interface LogEntry {
    * それに続く継続行を結合したもの。
    */
   readonly message: string;
+  /**
+   * このエントリの先頭行の、元のログファイルにおける行番号（1始まり）。
+   * 絞り込み等でエントリの一部だけを表示する場合でも、元ファイルとの
+   * 対応関係を保つために使う。
+   */
+  readonly startLine: number;
   /** このエントリを構成する、変更前の全物理行。 */
   readonly lines: readonly string[];
   /** `lines.join("\n")` — エントリの完全な元テキスト。 */

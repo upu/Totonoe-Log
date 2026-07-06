@@ -3,6 +3,7 @@ import {
   NORMALIZED_VIEW_SCHEME,
   NormalizedViewContentProvider,
   createShowNormalizedViewCommand,
+  createShowNormalizedViewFilteredBySeverityCommand,
 } from "./normalizedView";
 
 /**
@@ -30,6 +31,10 @@ export function activate(context: vscode.ExtensionContext): void {
     vscode.commands.registerCommand(
       "totonoeLog.showNormalizedView",
       createShowNormalizedViewCommand(normalizedViewProvider)
+    ),
+    vscode.commands.registerCommand(
+      "totonoeLog.showNormalizedViewFilteredBySeverity",
+      createShowNormalizedViewFilteredBySeverityCommand(normalizedViewProvider)
     )
   );
 }

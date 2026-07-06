@@ -20,6 +20,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   virtual document. Recognized timestamps are unified to ISO 8601, and each
   line is prefixed with its original line number so you can trace the
   normalized view back to the source log.
+- Add the "Totonoe Log: Show Normalized View Filtered by Severity" command
+  (`totonoeLog.showNormalizedViewFilteredBySeverity`), which lets you pick
+  which severities (ERROR / WARN / INFO / ... and entries with no recognized
+  severity) to show via a checkbox-style picker, then opens a normalized view
+  containing only the matching entries. Original line numbers are preserved
+  even when entries are filtered out.
 
 ### Fixed
 

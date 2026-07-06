@@ -33,6 +33,7 @@ interface MutableEntry {
   timestampFormat: string | undefined;
   severity: string | undefined;
   firstLineMessage: string | undefined;
+  startLine: number;
   lines: string[];
   matched: boolean;
 }
@@ -46,6 +47,7 @@ function finalizeEntry(entry: MutableEntry): LogEntry {
     timestampFormat: entry.timestampFormat,
     severity: entry.severity,
     message,
+    startLine: entry.startLine,
     lines: entry.lines,
     raw: entry.lines.join("\n"),
     matched: entry.matched,
@@ -70,7 +72,9 @@ export function parseLog(text: string, options: ParseLogOptions = {}): LogEntry[
   const entries: LogEntry[] = [];
   let current: MutableEntry | undefined;
 
-  for (const line of lines) {
+  for (let lineIndex = 0; lineIndex < lines.length; lineIndex++) {
+    const line = lines[lineIndex];
+    const lineNumber = lineIndex + 1;
     let matchedFormat: TimestampFormat | undefined;
     let match: RegExpExecArray | undefined;
     let timestampMs: number | undefined;
@@ -109,6 +113,7 @@ export function parseLog(text: string, options: ParseLogOptions = {}): LogEntry[
         timestampFormat: matchedFormat.name,
         severity,
         firstLineMessage: remainderAfterSeverity,
+        startLine: lineNumber,
         lines: [line],
         matched: true,
       };
@@ -121,6 +126,7 @@ export function parseLog(text: string, options: ParseLogOptions = {}): LogEntry[
         timestampFormat: undefined,
         severity: undefined,
         firstLineMessage: undefined,
+        startLine: lineNumber,
         lines: [line],
         matched: false,
       };

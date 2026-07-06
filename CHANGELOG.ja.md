@@ -20,6 +20,12 @@
   として開く。認識できたタイムスタンプは ISO 8601 に統一され、各行の先頭には
   元のログでの行番号を付けるため、正規化後の表示から元のログへ対応関係を
   たどれる。
+- 「Totonoe Log: Show Normalized View Filtered by Severity」コマンド
+  （`totonoeLog.showNormalizedViewFilteredBySeverity`）を追加。表示したい
+  セベリティ（ERROR / WARN / INFO / ... やセベリティ未認識のエントリ）を
+  チェックボックス形式のピッカーで選択すると、該当するエントリだけを含む
+  正規化ビューが開く。エントリを絞り込んだ場合でも、各行の元の行番号は
+  正しく保たれる。
 
 ### Fixed
 
