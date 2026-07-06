@@ -67,7 +67,9 @@ export function createShowNormalizedViewCommand(
     const content = formatNormalizedLog(entries);
 
     const sourceBaseName = sourceDocument.uri.path.split("/").pop() ?? "log";
-    const sourceNameWithoutExtension = sourceBaseName.replace(/\.[^./]+$/, "");
+    // 先頭のドット（`.env` などのドットファイル）は拡張子とみなさず、
+    // 直前に別の文字がある最後の拡張子だけを除去する。
+    const sourceNameWithoutExtension = sourceBaseName.replace(/(?<=[^.])\.[^./]+$/, "");
     normalizedViewCounter += 1;
     const uri = vscode.Uri.from({
       scheme: NORMALIZED_VIEW_SCHEME,

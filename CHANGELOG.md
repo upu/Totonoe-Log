@@ -28,5 +28,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `app.log.normalized-1.log`).
 - Release cached normalized view content when its editor tab is closed,
   instead of holding it in memory for the rest of the session.
+- Fix the normalized view's virtual document name incorrectly stripping the
+  entire base name for dotfiles with no other extension (e.g. `.env`),
+  producing a path like `/.normalized-1.log`. Leading dots are now preserved.
 
 [Unreleased]: https://github.com/upu/Totonoe-Log/compare/v0.0.1...HEAD
