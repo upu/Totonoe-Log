@@ -1,0 +1,14 @@
+2024-01-02T03:04:05.678Z INFO Application starting up
+2024-01-02T03:04:06.100Z INFO Loaded configuration from /etc/app/config.yaml
+[2024-01-02 03:04:07,200] INFO Connecting to database at db.internal:5432
+2024-01-02T03:04:08Z WARNING Disk usage at 85%
+2024-01-02T03:04:09.500Z ERROR Unhandled exception while processing request
+java.lang.NullPointerException
+    at com.example.Foo.bar(Foo.java:42)
+    at com.example.Foo.main(Foo.java:10)
+==== retry banner ====
+2024-01-02T03:04:10Z INFO Retrying request
+2024-01-02T03:04:11+09:00 INFO Request completed in 250ms
+Jan  2 03:04:12 host myapp: heartbeat ok
+2024-01-02T03:05:00.000Z ERROR Connection to db.internal:5432 timed out
+2024-01-02T03:06:00.000Z INFO Shutting down gracefully
