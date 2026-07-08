@@ -1,0 +1,96 @@
+name: Release
+on:
+  push:
+    branches: [main]
+    paths:
+      - package.json
+
+jobs:
+  release:
+    runs-on: windows-latest
+    permissions:
+      contents: write
+      issues: write
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 24.x
+          cache: npm
+      - run: npm ci
+      - run: npm run compile
+      - run: npm run build
+      - run: npm test
+      - run: npm run check:package
+
+      - name: Determine version and whether it's already released
+        id: version
+        shell: bash
+        run: |
+          VERSION=$(node -p "require('./package.json').version")
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+          if git tag -l "v$VERSION" | grep -qx "v$VERSION"; then
+            echo "already_released=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "already_released=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Package extension
+        if: steps.version.outputs.already_released == 'false'
+        run: npm run package
+
+      - name: Extract release notes
+        if: steps.version.outputs.already_released == 'false'
+        shell: bash
+        run: node scripts/extract-changelog-section.js "${{ steps.version.outputs.version }}" > release-notes.md
+
+      - name: Create GitHub Release
+        if: steps.version.outputs.already_released == 'false'
+        shell: bash
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          gh release create "v${{ steps.version.outputs.version }}" \
+            dist/totonoe-log.vsix \
+            --title "v${{ steps.version.outputs.version }}" \
+            --notes-file release-notes.md \
+            --target "${{ github.sha }}"
+
+      - name: Verify Marketplace PAT
+        if: steps.version.outputs.already_released == 'false'
+        id: verify-pat
+        shell: bash
+        run: |
+          if [ -n "${{ secrets.VSCE_PAT }}" ]; then
+            echo "has_pat=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "::warning::VSCE_PAT secret is not set; skipping Marketplace publish."
+            echo "has_pat=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Publish to Marketplace
+        if: steps.version.outputs.already_released == 'false' && steps.verify-pat.outputs.has_pat == 'true'
+        run: npx vsce publish --packagePath dist/totonoe-log.vsix -p ${{ secrets.VSCE_PAT }}
+
+      - name: Close milestone
+        if: steps.version.outputs.already_released == 'false'
+        shell: bash
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          TITLE="v${{ steps.version.outputs.version }}"
+          INFO=$(gh api "repos/${{ github.repository }}/milestones" --jq ".[] | select(.title==\"$TITLE\") | \"\(.number) \(.open_issues) \(.state)\"")
+          if [ -z "$INFO" ]; then
+            echo "::warning::No milestone titled $TITLE found; skipping close."
+            exit 0
+          fi
+          read -r NUMBER OPEN_ISSUES STATE <<< "$INFO"
+          if [ "$STATE" = "closed" ]; then
+            echo "Milestone $TITLE is already closed."
+            exit 0
+          fi
+          if [ "$OPEN_ISSUES" != "0" ]; then
+            echo "::warning::Milestone $TITLE still has $OPEN_ISSUES open issue(s); not closing automatically."
+            exit 0
+          fi
+          gh api -X PATCH "repos/${{ github.repository }}/milestones/$NUMBER" -f state=closed
