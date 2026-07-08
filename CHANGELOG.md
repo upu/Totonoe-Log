@@ -8,6 +8,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.1.0] - 2026-07-08
+
 - Add the log normalization engine (`src/normalize`): parses raw log text
   into a common `LogEntry` structure (timestamp / severity / message / raw
   text), groups multi-line records (e.g. stack traces) together, supports
@@ -44,4 +46,5 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   entire base name for dotfiles with no other extension (e.g. `.env`),
   producing a path like `/.normalized-1.log`. Leading dots are now preserved.
 
-[Unreleased]: https://github.com/upu/Totonoe-Log/compare/v0.0.1...HEAD
+[Unreleased]: https://github.com/upu/Totonoe-Log/compare/v0.1.0...HEAD
+[0.1.0]: https://github.com/upu/Totonoe-Log/releases/tag/v0.1.0

@@ -8,6 +8,8 @@
 
 ## [Unreleased]
 
+## [0.1.0] - 2026-07-08
+
 - ログ正規化エンジン（`src/normalize`）を追加：生ログのテキストを共通の
   `LogEntry` 構造（タイムスタンプ / セベリティ / 本文 / 元の生テキスト）に
   分解し、スタックトレースなど複数行にまたがるログをひとつのエントリとして
@@ -43,4 +45,5 @@
   ドットファイルの場合に名前全体が消えてしまい、`/.normalized-1.log`
   のようなパスになっていた問題を修正。先頭のドットは保持されるようにした。
 
-[Unreleased]: https://github.com/upu/Totonoe-Log/compare/v0.0.1...HEAD
+[Unreleased]: https://github.com/upu/Totonoe-Log/compare/v0.1.0...HEAD
+[0.1.0]: https://github.com/upu/Totonoe-Log/releases/tag/v0.1.0
