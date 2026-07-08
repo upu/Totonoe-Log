@@ -1,0 +1,5 @@
+{
+  "enabledPlugins": {
+    "dev-flow@upu-agent-marketplace": true
+  }
+}
