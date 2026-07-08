@@ -4,3 +4,4 @@ out-tsc/
 .vscode-test/
 *.vsix
 dist/
+release-notes.md
