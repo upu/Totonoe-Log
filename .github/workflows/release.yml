@@ -17,11 +17,6 @@ jobs:
         with:
           node-version: 24.x
           cache: npm
-      - run: npm ci
-      - run: npm run compile
-      - run: npm run build
-      - run: npm test
-      - run: npm run check:package
 
       - name: Determine version and whether it's already released
         id: version
@@ -36,6 +31,22 @@ jobs:
           else
             echo "already_released=false" >> "$GITHUB_OUTPUT"
           fi
+
+      - name: npm ci
+        if: steps.version.outputs.already_released == 'false'
+        run: npm ci
+      - name: Compile
+        if: steps.version.outputs.already_released == 'false'
+        run: npm run compile
+      - name: Build
+        if: steps.version.outputs.already_released == 'false'
+        run: npm run build
+      - name: Test
+        if: steps.version.outputs.already_released == 'false'
+        run: npm test
+      - name: Check package contents
+        if: steps.version.outputs.already_released == 'false'
+        run: npm run check:package
 
       - name: Package extension
         if: steps.version.outputs.already_released == 'false'
@@ -62,8 +73,10 @@ jobs:
         if: steps.version.outputs.already_released == 'false'
         id: verify-pat
         shell: bash
+        env:
+          VSCE_PAT: ${{ secrets.VSCE_PAT }}
         run: |
-          if [ -n "${{ secrets.VSCE_PAT }}" ]; then
+          if [ -n "$VSCE_PAT" ]; then
             echo "has_pat=true" >> "$GITHUB_OUTPUT"
           else
             echo "::warning::VSCE_PAT secret is not set; skipping Marketplace publish."
@@ -72,7 +85,10 @@ jobs:
 
       - name: Publish to Marketplace
         if: steps.version.outputs.already_released == 'false' && steps.verify-pat.outputs.has_pat == 'true'
-        run: npx vsce publish --packagePath dist/totonoe-log.vsix -p ${{ secrets.VSCE_PAT }}
+        shell: bash
+        env:
+          VSCE_PAT: ${{ secrets.VSCE_PAT }}
+        run: npx --no-install vsce publish --packagePath dist/totonoe-log.vsix -p "$VSCE_PAT"
 
       - name: Close milestone
         if: steps.version.outputs.already_released == 'false'
