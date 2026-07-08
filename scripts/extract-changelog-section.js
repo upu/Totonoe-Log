@@ -1,11 +1,11 @@
 // Extract the release notes body for a single version from CHANGELOG.md, for
 // use as the GitHub Release description. Usage:
-//   node extract-changelog-section.js <x.y.z>
+//   node scripts/extract-changelog-section.js <x.y.z>
 const fs = require("node:fs");
 
 const version = process.argv[2];
 if (!version) {
-  console.error("Usage: node extract-changelog-section.js <x.y.z>");
+  console.error("Usage: node scripts/extract-changelog-section.js <x.y.z>");
   process.exit(1);
 }
 

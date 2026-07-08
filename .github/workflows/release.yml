@@ -26,10 +26,12 @@ jobs:
       - name: Determine version and whether it's already released
         id: version
         shell: bash
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           VERSION=$(node -p "require('./package.json').version")
           echo "version=$VERSION" >> "$GITHUB_OUTPUT"
-          if git tag -l "v$VERSION" | grep -qx "v$VERSION"; then
+          if gh release view "v$VERSION" >/dev/null 2>&1; then
             echo "already_released=true" >> "$GITHUB_OUTPUT"
           else
             echo "already_released=false" >> "$GITHUB_OUTPUT"
@@ -79,7 +81,7 @@ jobs:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           TITLE="v${{ steps.version.outputs.version }}"
-          INFO=$(gh api "repos/${{ github.repository }}/milestones" --jq ".[] | select(.title==\"$TITLE\") | \"\(.number) \(.open_issues) \(.state)\"")
+          INFO=$(gh api "repos/${{ github.repository }}/milestones" -f state=all --paginate --jq ".[] | select(.title==\"$TITLE\") | \"\(.number) \(.open_issues) \(.state)\"")
           if [ -z "$INFO" ]; then
             echo "::warning::No milestone titled $TITLE found; skipping close."
             exit 0
