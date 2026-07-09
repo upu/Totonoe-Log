@@ -41,9 +41,10 @@ export interface MergedEntry {
 
 /**
  * タイムスタンプ昇順の比較関数。未認識（`undefined`）のタイムスタンプは
- * 常に末尾へ回す。両方 `undefined` の場合は `0` を返し、`Array.prototype.sort`
- * の安定性に順序を委ねる（`Infinity - Infinity` のような算術に頼ると `NaN`
- * を返しうり意図が読み取りづらいため、分岐で明示する）。
+ * 常に末尾へ回す。両方 `undefined` の場合は `0` を返す（同点の場合の順序は
+ * 呼び出し側が明示的なタイブレークで決める）。`Infinity - Infinity` の
+ * ような算術に頼ると `NaN` を返しうる（意図が読み取りづらい）ため、分岐で
+ * 明示する。
  */
 function compareByTimestamp(a: MergedEntry, b: MergedEntry): number {
   const aMs = a.entry.timestampMs;
@@ -66,9 +67,10 @@ function compareByTimestamp(a: MergedEntry, b: MergedEntry): number {
  * {@link LogEntry.timestampMs} で比較するため正しく並ぶ（正規化エンジンに
  * 依存）。
  *
- * タイムスタンプを認識できなかったエントリは、末尾にまとめて配置する
- * （安定ソートのため、複数ファイルにまたがる場合もファイルの入力順・
- * ファイル内の出現順は保たれる）。
+ * タイムスタンプを認識できなかったエントリは、末尾にまとめて配置する。
+ * 同点（両方未認識、または同一タイムスタンプ）の場合は、投入順（ファイルの
+ * 入力順・ファイル内の出現順）を明示的なタイブレークとして使う——
+ * `Array.prototype.sort` の安定性のみに順序を委ねない。
  */
 export function mergeLogFiles(files: readonly LogFileInput[]): MergedEntry[] {
   const merged: MergedEntry[] = [];
@@ -80,7 +82,8 @@ export function mergeLogFiles(files: readonly LogFileInput[]): MergedEntry[] {
     }
   }
 
-  merged.sort(compareByTimestamp);
-
-  return merged;
+  return merged
+    .map((item, insertionIndex) => ({ item, insertionIndex }))
+    .sort((a, b) => compareByTimestamp(a.item, b.item) || a.insertionIndex - b.insertionIndex)
+    .map(({ item }) => item);
 }
