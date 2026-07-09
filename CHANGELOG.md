@@ -12,11 +12,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - Add the "Totonoe Log: Show Normalized View Filtered by Ignore Pattern"
   command (`totonoeLog.showNormalizedViewFilteredByIgnorePattern`), which
-  prompts for a pattern (a plain substring or a regular expression) and opens
-  a normalized view with every entry that matches it hidden — useful for
-  cutting noisy, irrelevant lines (e.g. heartbeats) out of the way while
-  investigating. Matching is checked against an entry's full raw text, so a
-  match on any line of a multi-line entry (e.g. a stack trace) hides the
+  prompts for a pattern — always compiled as a regular expression (plain text
+  without special regex characters works as a literal substring search) —
+  and opens a normalized view with every entry that matches it hidden —
+  useful for cutting noisy, irrelevant lines (e.g. heartbeats) out of the way
+  while investigating. Matching is checked against an entry's full raw text,
+  so a match on any line of a multi-line entry (e.g. a stack trace) hides the
   whole entry. A notification reports how many lines were hidden. The
   pattern is entered fresh each time; saving patterns for reuse is tracked
   separately.

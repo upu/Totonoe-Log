@@ -324,16 +324,16 @@ export function createShowNormalizedViewFilteredByDateRangeAndSeverityCommand(
 
 /**
  * 非表示にする行のパターンを入力ボックスで尋ね、コンパイル済みの正規表現を
- * 返す。入力は常に正規表現として解釈する（`.` や `*` 等のメタ文字を含まない
- * プレーンな文字列は、結果として部分一致の検索になる）ため、メタ文字を
- * 含む文字列をそのまま検索したい場合は呼び出し側でエスケープする必要が
- * ある。Esc 等でのキャンセル、入力が空、および正規表現として解釈できない
- * 不正な入力の場合は、どれも呼び出し側に処理を中断させるため `undefined`
- * を返す。
+ * 返す。入力は常に正規表現として解釈され、フラグは "im" 固定。`.` `*` `(`
+ * 等のメタ文字を含まない入力は、結果として部分一致の検索と同じ挙動になる
+ * が、メタ文字を含む文字列をそのまま検索したい場合は呼び出し側でエスケープ
+ * する必要がある。Esc 等でのキャンセル、入力が空、および正規表現として
+ * 解釈できない不正な入力の場合は、どれも呼び出し側に処理を中断させるため
+ * `undefined` を返す。
  */
 async function promptIgnorePattern(): Promise<RegExp | undefined> {
   const input = await vscode.window.showInputBox({
-    prompt: "非表示にする行のパターン（文字列または正規表現）",
+    prompt: "非表示にする行のパターン（正規表現として解釈されます）",
     placeHolder: "例: heartbeat または ^DEBUG",
   });
 
@@ -352,10 +352,9 @@ async function promptIgnorePattern(): Promise<RegExp | undefined> {
 }
 
 /**
- * アクティブなエディタの内容を正規化し、ユーザーが入力したパターン
- * （文字列または正規表現）にマッチするエントリを非表示にした読み取り専用の
- * 仮想ドキュメントとして開くコマンド。非表示にした行数は、開いた直後に
- * 通知として表示する。
+ * アクティブなエディタの内容を正規化し、ユーザーが入力した正規表現パターンに
+ * マッチするエントリを非表示にした読み取り専用の仮想ドキュメントとして開く
+ * コマンド。非表示にした行数は、開いた直後に通知として表示する。
  */
 export function createShowNormalizedViewFilteredByIgnorePatternCommand(
   provider: NormalizedViewContentProvider

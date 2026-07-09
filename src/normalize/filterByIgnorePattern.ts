@@ -8,15 +8,17 @@ import type { LogEntry } from "./types";
  *
  * `pattern` が `g` / `y` フラグ付きの場合、`RegExp#test` はマッチのたびに
  * `lastIndex` を進めてしまい、エントリをまたいだ呼び出し順で判定が
- * 不安定になる。呼び出し側のフラグ指定に関わらず安定させるため、毎回
- * `lastIndex` をリセットしてから判定する。
+ * 不安定になる。呼び出し側から渡された `RegExp` インスタンス自体を
+ * 書き換える副作用を避けつつ安定させるため、ローカルに複製した上で
+ * 毎回 `lastIndex` をリセットしてから判定する。
  */
 export function filterEntriesByIgnorePattern(
   entries: readonly LogEntry[],
   pattern: RegExp
 ): LogEntry[] {
+  const matcher = new RegExp(pattern.source, pattern.flags);
   return entries.filter((entry) => {
-    pattern.lastIndex = 0;
-    return !pattern.test(entry.raw);
+    matcher.lastIndex = 0;
+    return !matcher.test(entry.raw);
   });
 }
