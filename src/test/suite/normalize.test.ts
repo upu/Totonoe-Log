@@ -3,6 +3,7 @@ import {
   parseLog,
   createSyslogFormat,
   formatNormalizedLog,
+  formatMaskedLogForCompare,
   getDistinctSeverities,
   filterEntriesBySeverity,
   parseDateBoundary,
@@ -263,5 +264,71 @@ suite("normalize / filterEntriesByDateRange", () => {
 
     assert.strictEqual(filtered.length, 1);
     assert.strictEqual(filtered[0].message, "hello");
+  });
+});
+
+suite("normalize / formatMaskedLogForCompare", () => {
+  test("replaces a recognized timestamp with a fixed placeholder", () => {
+    const output = formatMaskedLogForCompare(parseLog("2024-01-02T03:04:05Z ERROR boom"));
+    assert.strictEqual(output, "1 | <TIMESTAMP> ERROR boom");
+  });
+
+  test("masks IPv4 addresses anywhere in the message", () => {
+    const output = formatMaskedLogForCompare(
+      parseLog("2024-01-02T03:04:05Z INFO connect to 192.168.1.10 failed")
+    );
+    assert.strictEqual(output, "1 | <TIMESTAMP> INFO connect to <HOST> failed");
+  });
+
+  test("masks the RFC3164 hostname token for syslog-format entries", () => {
+    const entries = parseLog("Jan  2 03:04:05 web01 myapp: something happened", {
+      timestampFormats: [createSyslogFormat({ assumedYear: 2024 })],
+    });
+    const output = formatMaskedLogForCompare(entries);
+    assert.strictEqual(output, "1 | <TIMESTAMP> - <HOST> myapp: something happened");
+  });
+
+  test("does not mask dotted tokens that are not IPv4 addresses or syslog hostnames", () => {
+    const text = [
+      "2024-01-02T03:04:05Z ERROR Unhandled exception",
+      "    at com.example.Foo.bar(Foo.java:42)",
+    ].join("\n");
+
+    const output = formatMaskedLogForCompare(parseLog(text));
+
+    assert.strictEqual(
+      output,
+      ["1 | <TIMESTAMP> ERROR Unhandled exception", "2 |     at com.example.Foo.bar(Foo.java:42)"].join(
+        "\n"
+      )
+    );
+  });
+
+  test("passes unrecognized lines through unmasked aside from IPv4 addresses", () => {
+    const output = formatMaskedLogForCompare(parseLog("==== log start on 10.0.0.1 ===="));
+    assert.strictEqual(output, "1 | ==== log start on <HOST> ====");
+  });
+
+  test("keeps original line numbers aligned across multi-line entries", () => {
+    const text = [
+      "2024-01-02T03:04:05Z ERROR Unhandled exception",
+      "java.lang.NullPointerException",
+      "2024-01-02T03:04:06Z INFO recovered",
+    ].join("\n");
+
+    const output = formatMaskedLogForCompare(parseLog(text));
+
+    assert.strictEqual(
+      output,
+      [
+        "1 | <TIMESTAMP> ERROR Unhandled exception",
+        "2 | java.lang.NullPointerException",
+        "3 | <TIMESTAMP> INFO recovered",
+      ].join("\n")
+    );
+  });
+
+  test("returns an empty string for no entries", () => {
+    assert.strictEqual(formatMaskedLogForCompare([]), "");
   });
 });
