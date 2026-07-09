@@ -337,15 +337,17 @@ async function promptIgnorePattern(): Promise<RegExp | undefined> {
     placeHolder: "例: heartbeat または ^DEBUG",
   });
 
-  if (input === undefined || input.trim() === "") {
+  const trimmedInput = input?.trim();
+  if (!trimmedInput) {
     return undefined;
   }
 
   try {
-    return new RegExp(input, "im");
-  } catch {
+    return new RegExp(trimmedInput, "im");
+  } catch (error) {
+    const reason = error instanceof Error ? error.message : String(error);
     vscode.window.showWarningMessage(
-      `Totonoe Log: 正規表現として解釈できませんでした: "${input}"`
+      `Totonoe Log: 正規表現として解釈できませんでした: "${trimmedInput}"（${reason}）`
     );
     return undefined;
   }

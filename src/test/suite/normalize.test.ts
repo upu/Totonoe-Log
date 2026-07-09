@@ -275,7 +275,7 @@ suite("normalize / filterEntriesByDateRange", () => {
 });
 
 suite("normalize / filterEntriesByIgnorePattern", () => {
-  test("excludes entries whose raw text matches the pattern (plain substring)", () => {
+  test("excludes entries whose raw text matches a metacharacter-free pattern (substring match)", () => {
     const text = [
       "2024-01-02T03:04:05Z INFO heartbeat ok",
       "2024-01-02T03:04:06Z ERROR boom",

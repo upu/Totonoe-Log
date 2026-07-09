@@ -604,6 +604,38 @@ suite("Totonoe Log normalized view filtered by ignore pattern", () => {
     assert.notStrictEqual(activeEditor!.document.uri.scheme, "totonoe-log-normalized");
   });
 
+  test("trims surrounding whitespace from the entered pattern before matching", async () => {
+    const extension = vscode.extensions.getExtension("upu.totonoe-log");
+    await extension!.activate();
+
+    const source = await vscode.workspace.openTextDocument({
+      content: [
+        "2024-01-02T03:04:05Z INFO heartbeat ok",
+        "2024-01-02T03:04:06Z ERROR boom",
+      ].join("\n"),
+      language: "log",
+    });
+    await vscode.window.showTextDocument(source);
+
+    const originalShowInputBox = vscode.window.showInputBox;
+    (vscode.window as any).showInputBox = async () => "  heartbeat  ";
+
+    try {
+      await vscode.commands.executeCommand(
+        "totonoeLog.showNormalizedViewFilteredByIgnorePattern"
+      );
+    } finally {
+      (vscode.window as any).showInputBox = originalShowInputBox;
+    }
+
+    const activeEditor = vscode.window.activeTextEditor;
+    assert.ok(activeEditor, "a filtered normalized view editor should be shown");
+    assert.strictEqual(
+      activeEditor!.document.getText(),
+      "2 | 2024-01-02T03:04:06.000Z ERROR boom"
+    );
+  });
+
   test("shows a warning and does nothing when the entered pattern is not a valid regular expression", async () => {
     const extension = vscode.extensions.getExtension("upu.totonoe-log");
     await extension!.activate();
