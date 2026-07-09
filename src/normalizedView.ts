@@ -333,7 +333,7 @@ export function createShowNormalizedViewFilteredByDateRangeAndSeverityCommand(
  */
 async function promptIgnorePattern(): Promise<RegExp | undefined> {
   const input = await vscode.window.showInputBox({
-    prompt: "非表示にする行のパターン（正規表現として解釈されます）",
+    prompt: "非表示にする行のパターン（正規表現として解釈されます。大文字小文字は区別しません）",
     placeHolder: "例: heartbeat または ^DEBUG",
   });
 
