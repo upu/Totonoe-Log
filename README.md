@@ -38,10 +38,10 @@ for the current roadmap.
 - Merge multiple log files by timestamp for cross-file investigation, with
   source file name / file "kind" columns (e.g. `message_20240101.log` →
   kind `message`) (`Totonoe Log: Show Merged View`)
-
-## Planned features
-
-- Hide (ignore) specific noisy log lines
+- Hide entries matching a pattern, always compiled as a regular expression
+  (plain text without special regex characters works as a literal substring
+  search) to cut noisy lines out of the way
+  (`Totonoe Log: Show Normalized View Filtered by Ignore Pattern`)
 
 ## Series
 

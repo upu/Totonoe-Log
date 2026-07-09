@@ -38,6 +38,7 @@
     "onCommand:totonoeLog.showNormalizedViewFilteredBySeverity",
     "onCommand:totonoeLog.showNormalizedViewFilteredByDateRange",
     "onCommand:totonoeLog.showNormalizedViewFilteredByDateRangeAndSeverity",
+    "onCommand:totonoeLog.showNormalizedViewFilteredByIgnorePattern",
     "onCommand:totonoeLog.compareLogs",
     "onCommand:totonoeLog.copyMaskedText",
     "onCommand:totonoeLog.showCollapsedView"
@@ -64,6 +65,10 @@
       {
         "command": "totonoeLog.showNormalizedViewFilteredByDateRangeAndSeverity",
         "title": "Totonoe Log: Show Normalized View Filtered by Date Range and Severity"
+      },
+      {
+        "command": "totonoeLog.showNormalizedViewFilteredByIgnorePattern",
+        "title": "Totonoe Log: Show Normalized View Filtered by Ignore Pattern"
       },
       {
         "command": "totonoeLog.compareLogs",

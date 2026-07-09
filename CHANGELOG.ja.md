@@ -10,6 +10,16 @@
 
 ### Added
 
+- 「Totonoe Log: Show Normalized View Filtered by Ignore Pattern」コマンド
+  （`totonoeLog.showNormalizedViewFilteredByIgnorePattern`）を追加。
+  パターン（常に正規表現として解釈される。メタ文字を含まない文字列は
+  部分一致の検索として動作）を入力すると、それにマッチするエントリを
+  非表示にした正規化ビューを開く。ハートビート等のノイズとなる行を調査の
+  邪魔にならないようにするのに便利。判定はエントリの元テキスト全体に対して
+  行うため、スタックトレースなど複数行にまたがるエントリでもいずれかの行が
+  マッチすればエントリごと非表示になる。非表示にした行数は通知で表示する。
+  パターンはコマンド実行のたびに入力する方式で、保存して再利用する機能は
+  別途検討する。
 - 「Totonoe Log: Show Normalized View Filtered by Date Range and Severity」
   コマンド（`totonoeLog.showNormalizedViewFilteredByDateRangeAndSeverity`）を
   追加。既存の日付範囲絞り込みとセベリティ絞り込みを組み合わせ、まず表示する

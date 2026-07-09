@@ -13,6 +13,7 @@ export { formatMergedLog } from "./formatMergedLog";
 export { UNRECOGNIZED_SEVERITY_KEY, getDistinctSeverities, filterEntriesBySeverity } from "./filterBySeverity";
 export type { DateRange } from "./filterByDateRange";
 export { parseDateBoundary, filterEntriesByDateRange } from "./filterByDateRange";
+export { filterEntriesByIgnorePattern } from "./filterByIgnorePattern";
 export type { SyslogFormatOptions } from "./timestampFormats";
 export {
   ISO_8601_FORMAT,
