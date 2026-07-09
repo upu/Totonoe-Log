@@ -29,6 +29,10 @@ for the current roadmap.
   (`Totonoe Log: Show Normalized View Filtered by Severity`)
 - Compare two logs that differ in dates/hosts, without those differences
   showing up as noise in the diff (`Totonoe Log: Compare Logs`)
+- Copy log text with timestamps/hosts masked, ready to paste into an
+  external diff tool (`Totonoe Log: Copy Masked Text`)
+- Collapse repeated patterns (e.g. "×5")
+  (`Totonoe Log: Show Collapsed View`)
 
 ## Planned features
 
@@ -36,9 +40,6 @@ for the current roadmap.
 - Merge multiple log files by timestamp for cross-file investigation
   - Add source file name / file "kind" columns when merging
     (e.g. `message_20240101.log` → kind `message`)
-- Collapse repeated patterns (e.g. "×5")
-- Copy log text with dates/hosts masked or stripped, ready to paste into
-  an external diff tool
 
 ## Series
 

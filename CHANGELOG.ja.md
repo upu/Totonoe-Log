@@ -24,6 +24,13 @@
   テキストの見た目をそのまま保つ。マスク対象は
   `totonoeLog.copyMasked.maskTimestamp` / `totonoeLog.copyMasked.maskHost`
   設定（いずれも既定値 `true`）で個別に無効化できる。
+- 「Totonoe Log: Show Collapsed View」コマンド（`totonoeLog.showCollapsedView`）
+  を追加。アクティブなエディタのログを正規化し、タイムスタンプの違いや
+  メッセージ中のIPv4アドレスの違いを無視して連続して繰り返されるエントリを
+  検出し、繰り返し回数（例: `(×5)`）と元の行範囲を付けた1行にまとめて
+  表示する。`totonoeLog.collapse.threshold` 設定（既定値 `3`）未満の繰り
+  返しは折りたたまない。元の全行を確認したい場合は、通常のShow Normalized
+  Viewを別途開けばよい。
 
 ## [0.1.0] - 2026-07-08
 

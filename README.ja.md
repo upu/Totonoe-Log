@@ -29,6 +29,10 @@ Normalize, merge, filter, collapse, and compare messy logs.
   （`Totonoe Log: Show Normalized View Filtered by Severity`）
 - 日付やホストが異なる2つのログを、それらの違いを diff ノイズとして出さずに比較
   （`Totonoe Log: Compare Logs`）
+- タイムスタンプ/ホスト情報をマスクしたテキストをコピーし、外部の diff
+  ツールに貼り付けやすくする（`Totonoe Log: Copy Masked Text`）
+- 繰り返しパターンの折りたたみ（例: 「×5」）
+  （`Totonoe Log: Show Collapsed View`）
 
 ## 実装予定の機能
 
@@ -36,9 +40,6 @@ Normalize, merge, filter, collapse, and compare messy logs.
 - 複数のログファイルを日時ベースでマージし、ファイルを横断した調査を可能に
   - マージ時にファイル名・ファイル「種類」列を追加
     （例: `message_20240101.log` → 種類 `message`）
-- 繰り返しパターンの折りたたみ（例: 「×5」）
-- 日付やホスト情報をマスク・除去したテキストをコピーし、外部の diff ツールに
-  貼り付けやすくする
 
 ## シリーズ構想
 

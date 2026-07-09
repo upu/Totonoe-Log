@@ -17,8 +17,10 @@ const IPV4_REGEX = new RegExp(`\\b${IPV4_OCTET}(?:\\.${IPV4_OCTET}){3}\\b`, "g")
  * メッセージ中のIPv4アドレスをプレースホルダーに置き換える。
  * ドット区切りの一般的な文字列（クラス名・バージョン番号等）まで
  * ホスト名とみなして誤マスクしないよう、数字のみのIPv4パターンに限定する。
+ * 比較ビュー・コピー機能に加え、繰り返し検出（{@link collapseRepeatedEntries}）
+ * が可変部分を除いた一致判定を行う際にも使う。
  */
-function maskIpv4Addresses(text: string): string {
+export function maskIpv4Addresses(text: string): string {
   return text.replace(IPV4_REGEX, HOST_PLACEHOLDER);
 }
 
