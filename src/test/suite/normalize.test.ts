@@ -323,6 +323,22 @@ suite("normalize / filterEntriesByIgnorePattern", () => {
 
     assert.strictEqual(filtered.length, 1);
   });
+
+  test("matches every entry independently even when the pattern has a global flag", () => {
+    // RegExp#test with a "g" flag advances lastIndex on each call, so without
+    // resetting it, a match on one entry can suppress detection on the next.
+    const text = [
+      "2024-01-02T03:04:05Z INFO heartbeat one",
+      "2024-01-02T03:04:06Z ERROR boom",
+      "2024-01-02T03:04:07Z INFO heartbeat two",
+    ].join("\n");
+    const entries = parseLog(text);
+
+    const filtered = filterEntriesByIgnorePattern(entries, /heartbeat/g);
+
+    assert.strictEqual(filtered.length, 1);
+    assert.strictEqual(filtered[0].message, "boom");
+  });
 });
 
 suite("normalize / formatMaskedLogForCompare", () => {

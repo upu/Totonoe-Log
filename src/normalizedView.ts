@@ -323,11 +323,13 @@ export function createShowNormalizedViewFilteredByDateRangeAndSeverityCommand(
 }
 
 /**
- * 非表示にする行のパターン（文字列または正規表現）を入力ボックスで尋ね、
- * コンパイル済みの正規表現を返す。プレーンな文字列を入力した場合は、
- * それを含む行にマッチする（部分一致）。Esc 等でのキャンセル、入力が空、
- * および正規表現として解釈できない不正な入力の場合は、どれも呼び出し側に
- * 処理を中断させるため `undefined` を返す。
+ * 非表示にする行のパターンを入力ボックスで尋ね、コンパイル済みの正規表現を
+ * 返す。入力は常に正規表現として解釈する（`.` や `*` 等のメタ文字を含まない
+ * プレーンな文字列は、結果として部分一致の検索になる）ため、メタ文字を
+ * 含む文字列をそのまま検索したい場合は呼び出し側でエスケープする必要が
+ * ある。Esc 等でのキャンセル、入力が空、および正規表現として解釈できない
+ * 不正な入力の場合は、どれも呼び出し側に処理を中断させるため `undefined`
+ * を返す。
  */
 async function promptIgnorePattern(): Promise<RegExp | undefined> {
   const input = await vscode.window.showInputBox({
