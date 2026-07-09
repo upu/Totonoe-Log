@@ -11,7 +11,10 @@ function formatTimestamp(timestampMs: number): string {
 
 function rangeLabel(entries: readonly LogEntry[]): string {
   const first = entries[0].startLine;
-  const last = entries[entries.length - 1].startLine;
+  const lastEntry = entries[entries.length - 1];
+  // エントリは複数物理行（スタックトレース等）にまたがりうるため、末尾の
+  // 行番号は startLine ではなく、継続行を含めた最終物理行にする。
+  const last = lastEntry.startLine + lastEntry.lines.length - 1;
   return `${first}-${last}`;
 }
 

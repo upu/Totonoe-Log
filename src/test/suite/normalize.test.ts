@@ -411,9 +411,9 @@ suite("normalize / maskLogTextForCopy", () => {
 });
 
 suite("normalize / collapseRepeatedEntries", () => {
-  function repeatedEntriesText(count: number, startHour = 5): string {
+  function repeatedEntriesText(count: number, startSecond = 5): string {
     return Array.from({ length: count }, (_, i) =>
-      `2024-01-02T03:04:0${startHour + i}Z INFO connect ok`
+      `2024-01-02T03:04:${String(startSecond + i).padStart(2, "0")}Z INFO connect ok`
     ).join("\n");
   }
 
@@ -519,6 +519,24 @@ suite("normalize / formatCollapsedLog", () => {
     assert.strictEqual(
       formatCollapsedLog(entries, items),
       ["  1 | ==== banner ====", "2-4 | 2024-01-02T03:04:05.000Z INFO ok (×3)"].join("\n")
+    );
+  });
+
+  test("extends the range label through the last entry's continuation lines", () => {
+    const text = [
+      "2024-01-02T03:04:05Z ERROR boom",
+      "  detail",
+      "2024-01-02T03:04:06Z ERROR boom",
+      "  detail",
+      "2024-01-02T03:04:07Z ERROR boom",
+      "  detail",
+    ].join("\n");
+    const entries = parseLog(text);
+    const items = collapseRepeatedEntries(entries, { threshold: 3 });
+
+    assert.strictEqual(
+      formatCollapsedLog(entries, items),
+      ["1-6 | 2024-01-02T03:04:05.000Z ERROR boom (×3)", "  2 |   detail"].join("\n")
     );
   });
 
