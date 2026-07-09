@@ -5,6 +5,8 @@ import {
   formatNormalizedLog,
   formatMaskedLogForCompare,
   maskLogTextForCopy,
+  collapseRepeatedEntries,
+  formatCollapsedLog,
   getDistinctSeverities,
   filterEntriesBySeverity,
   parseDateBoundary,
@@ -405,5 +407,140 @@ suite("normalize / maskLogTextForCopy", () => {
 
   test("returns an empty string for no entries", () => {
     assert.strictEqual(maskLogTextForCopy([]), "");
+  });
+});
+
+suite("normalize / collapseRepeatedEntries", () => {
+  function repeatedEntriesText(count: number, startSecond = 5): string {
+    return Array.from({ length: count }, (_, i) =>
+      `2024-01-02T03:04:${String(startSecond + i).padStart(2, "0")}Z INFO connect ok`
+    ).join("\n");
+  }
+
+  test("groups consecutive entries with identical messages once the threshold is met", () => {
+    const entries = parseLog(repeatedEntriesText(3));
+    const items = collapseRepeatedEntries(entries, { threshold: 3 });
+
+    assert.strictEqual(items.length, 1);
+    assert.strictEqual(items[0].kind, "group");
+    assert.strictEqual(items[0].kind === "group" ? items[0].entries.length : 0, 3);
+  });
+
+  test("keeps entries below the threshold ungrouped", () => {
+    const entries = parseLog(repeatedEntriesText(3));
+    const items = collapseRepeatedEntries(entries, { threshold: 4 });
+
+    assert.strictEqual(items.length, 3);
+    assert.ok(items.every((item) => item.kind === "single"));
+  });
+
+  test("does not merge non-consecutive repeats separated by a different entry", () => {
+    const text = [
+      "2024-01-02T03:04:05Z INFO A",
+      "2024-01-02T03:04:06Z INFO A",
+      "2024-01-02T03:04:07Z INFO B",
+      "2024-01-02T03:04:08Z INFO A",
+    ].join("\n");
+    const entries = parseLog(text);
+
+    const items = collapseRepeatedEntries(entries, { threshold: 2 });
+
+    assert.strictEqual(items.length, 3);
+    assert.strictEqual(items[0].kind, "group");
+    assert.strictEqual(items[0].kind === "group" ? items[0].entries.length : 0, 2);
+    assert.strictEqual(items[1].kind, "single");
+    assert.strictEqual(items[1].kind === "single" ? items[1].entry.message : "", "B");
+    assert.strictEqual(items[2].kind, "single");
+    assert.strictEqual(items[2].kind === "single" ? items[2].entry.message : "", "A");
+  });
+
+  test("treats entries differing only by a masked IPv4 address as repeats", () => {
+    const text = [
+      "2024-01-02T03:04:05Z ERROR connect to 192.168.1.10 failed",
+      "2024-01-02T03:04:06Z ERROR connect to 192.168.1.11 failed",
+    ].join("\n");
+    const entries = parseLog(text);
+
+    const items = collapseRepeatedEntries(entries, { threshold: 2 });
+
+    assert.strictEqual(items.length, 1);
+    assert.strictEqual(items[0].kind, "group");
+    assert.strictEqual(items[0].kind === "group" ? items[0].entries.length : 0, 2);
+  });
+
+  test("does not merge entries with different severities even when the message matches", () => {
+    const text = ["2024-01-02T03:04:05Z INFO boom", "2024-01-02T03:04:06Z ERROR boom"].join("\n");
+    const entries = parseLog(text);
+
+    const items = collapseRepeatedEntries(entries, { threshold: 2 });
+
+    assert.strictEqual(items.length, 2);
+    assert.ok(items.every((item) => item.kind === "single"));
+  });
+
+  test("returns an empty array for no entries", () => {
+    assert.deepStrictEqual(collapseRepeatedEntries([]), []);
+  });
+});
+
+suite("normalize / formatCollapsedLog", () => {
+  test("renders a collapsed group with a line-range gutter and repeat count suffix", () => {
+    const text = [
+      "2024-01-02T03:04:05Z INFO connect ok",
+      "2024-01-02T03:04:06Z INFO connect ok",
+      "2024-01-02T03:04:07Z INFO connect ok",
+    ].join("\n");
+    const entries = parseLog(text);
+    const items = collapseRepeatedEntries(entries, { threshold: 3 });
+
+    assert.strictEqual(
+      formatCollapsedLog(entries, items),
+      "1-3 | 2024-01-02T03:04:05.000Z INFO connect ok (×3)"
+    );
+  });
+
+  test("renders ungrouped entries exactly like formatNormalizedLog", () => {
+    const entries = parseLog("2024-01-02T03:04:05Z ERROR boom");
+    const items = collapseRepeatedEntries(entries, { threshold: 3 });
+
+    assert.strictEqual(formatCollapsedLog(entries, items), formatNormalizedLog(entries));
+  });
+
+  test("widens the gutter to fit a line-range label wider than the max plain line number", () => {
+    const text = [
+      "==== banner ====",
+      "2024-01-02T03:04:05Z INFO ok",
+      "2024-01-02T03:04:06Z INFO ok",
+      "2024-01-02T03:04:07Z INFO ok",
+    ].join("\n");
+    const entries = parseLog(text);
+    const items = collapseRepeatedEntries(entries, { threshold: 3 });
+
+    assert.strictEqual(
+      formatCollapsedLog(entries, items),
+      ["  1 | ==== banner ====", "2-4 | 2024-01-02T03:04:05.000Z INFO ok (×3)"].join("\n")
+    );
+  });
+
+  test("extends the range label through the last entry's continuation lines", () => {
+    const text = [
+      "2024-01-02T03:04:05Z ERROR boom",
+      "  detail",
+      "2024-01-02T03:04:06Z ERROR boom",
+      "  detail",
+      "2024-01-02T03:04:07Z ERROR boom",
+      "  detail",
+    ].join("\n");
+    const entries = parseLog(text);
+    const items = collapseRepeatedEntries(entries, { threshold: 3 });
+
+    assert.strictEqual(
+      formatCollapsedLog(entries, items),
+      ["1-6 | 2024-01-02T03:04:05.000Z ERROR boom (×3)", "  2 |   detail"].join("\n")
+    );
+  });
+
+  test("returns an empty string for no entries", () => {
+    assert.strictEqual(formatCollapsedLog([], []), "");
   });
 });

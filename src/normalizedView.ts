@@ -7,6 +7,9 @@ import {
   UNRECOGNIZED_SEVERITY_KEY,
   parseDateBoundary,
   filterEntriesByDateRange,
+  collapseRepeatedEntries,
+  formatCollapsedLog,
+  DEFAULT_COLLAPSE_THRESHOLD,
   type LogEntry,
 } from "./normalize";
 import { VirtualDocumentContentProvider } from "./virtualDocumentContentProvider";
@@ -30,6 +33,7 @@ export class NormalizedViewContentProvider extends VirtualDocumentContentProvide
 let normalizedViewCounter = 0;
 let severityFilteredViewCounter = 0;
 let dateRangeFilteredViewCounter = 0;
+let collapsedViewCounter = 0;
 
 /**
  * 正規化ビュー系コマンドが共有する、仮想ドキュメントの発行・登録・表示処理。
@@ -233,6 +237,49 @@ export function createShowNormalizedViewFilteredByDateRangeCommand(
     const hiddenLineCount = countLines(entries) - countLines(filteredEntries);
     vscode.window.showInformationMessage(
       `Totonoe Log: 指定範囲外の ${hiddenLineCount} 行を非表示にしました（${countLines(filteredEntries)}/${countLines(entries)} 行を表示）。`
+    );
+  };
+}
+
+/** 折りたたみのしきい値を読み込むVSCode設定のセクション名。 */
+const COLLAPSE_CONFIG_SECTION = "totonoeLog.collapse";
+
+/**
+ * アクティブなエディタの内容を正規化し、連続して繰り返される（可変部分を
+ * 除いて一致する）エントリを「×N」付きの1行にまとめた、読み取り専用の
+ * 仮想ドキュメントとして開くコマンド。折りたたみのしきい値は
+ * `totonoeLog.collapse.threshold` 設定で調整できる。元の全行を確認したい
+ * 場合は、折りたたまれていない通常の正規化ビュー（`showNormalizedView`）を
+ * 別途開けばよい。
+ */
+export function createShowCollapsedViewCommand(
+  provider: NormalizedViewContentProvider
+): () => Promise<void> {
+  return async function showCollapsedView(): Promise<void> {
+    const activeEditor = vscode.window.activeTextEditor;
+    if (!activeEditor) {
+      vscode.window.showWarningMessage(
+        "Totonoe Log: 折りたたむログファイルが開かれていません。"
+      );
+      return;
+    }
+
+    const threshold = vscode.workspace
+      .getConfiguration(COLLAPSE_CONFIG_SECTION)
+      .get<number>("threshold", DEFAULT_COLLAPSE_THRESHOLD);
+
+    const sourceDocument = activeEditor.document;
+    const entries = parseLog(sourceDocument.getText());
+    const items = collapseRepeatedEntries(entries, { threshold });
+    const content = formatCollapsedLog(entries, items);
+
+    collapsedViewCounter += 1;
+    await openVirtualNormalizedDocument(
+      provider,
+      sourceDocument,
+      content,
+      "collapsed",
+      collapsedViewCounter
     );
   };
 }

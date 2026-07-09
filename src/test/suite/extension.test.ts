@@ -558,3 +558,88 @@ suite("Totonoe Log copy masked text", () => {
     }
   });
 });
+
+suite("Totonoe Log collapsed view", () => {
+  test("registers the showCollapsedView command", async () => {
+    const extension = vscode.extensions.getExtension("upu.totonoe-log");
+    await extension!.activate();
+
+    const commands = await vscode.commands.getCommands(true);
+    assert.ok(
+      commands.includes("totonoeLog.showCollapsedView"),
+      "totonoeLog.showCollapsedView command should be registered"
+    );
+  });
+
+  test("collapses repeated entries into a single line annotated with the repeat count", async () => {
+    const extension = vscode.extensions.getExtension("upu.totonoe-log");
+    await extension!.activate();
+
+    const source = await vscode.workspace.openTextDocument({
+      content: [
+        "2024-01-02T03:04:05Z INFO connect ok",
+        "2024-01-02T03:04:06Z INFO connect ok",
+        "2024-01-02T03:04:07Z INFO connect ok",
+      ].join("\n"),
+      language: "log",
+    });
+    await vscode.window.showTextDocument(source);
+
+    await vscode.commands.executeCommand("totonoeLog.showCollapsedView");
+
+    const activeEditor = vscode.window.activeTextEditor;
+    assert.ok(activeEditor, "a collapsed view editor should be shown");
+    assert.strictEqual(activeEditor!.document.uri.scheme, "totonoe-log-normalized");
+    assert.strictEqual(
+      activeEditor!.document.getText(),
+      "1-3 | 2024-01-02T03:04:05.000Z INFO connect ok (×3)"
+    );
+  });
+
+  test("respects the totonoeLog.collapse.threshold setting", async function () {
+    this.timeout(10000);
+    const extension = vscode.extensions.getExtension("upu.totonoe-log");
+    await extension!.activate();
+
+    const config = vscode.workspace.getConfiguration("totonoeLog.collapse");
+    await config.update("threshold", 5, vscode.ConfigurationTarget.Global);
+
+    try {
+      const source = await vscode.workspace.openTextDocument({
+        content: [
+          "2024-01-02T03:04:05Z INFO connect ok",
+          "2024-01-02T03:04:06Z INFO connect ok",
+          "2024-01-02T03:04:07Z INFO connect ok",
+        ].join("\n"),
+        language: "log",
+      });
+      await vscode.window.showTextDocument(source);
+
+      await vscode.commands.executeCommand("totonoeLog.showCollapsedView");
+
+      const activeEditor = vscode.window.activeTextEditor;
+      assert.ok(activeEditor, "a collapsed view editor should be shown");
+      assert.strictEqual(
+        activeEditor!.document.getText(),
+        [
+          "1 | 2024-01-02T03:04:05.000Z INFO connect ok",
+          "2 | 2024-01-02T03:04:06.000Z INFO connect ok",
+          "3 | 2024-01-02T03:04:07.000Z INFO connect ok",
+        ].join("\n")
+      );
+    } finally {
+      await config.update("threshold", undefined, vscode.ConfigurationTarget.Global);
+    }
+  });
+
+  test("shows a warning when there is no active editor to collapse", async () => {
+    const extension = vscode.extensions.getExtension("upu.totonoe-log");
+    await extension!.activate();
+
+    await vscode.commands.executeCommand("workbench.action.closeAllEditors");
+
+    await assert.doesNotReject(async () => {
+      await vscode.commands.executeCommand("totonoeLog.showCollapsedView");
+    });
+  });
+});

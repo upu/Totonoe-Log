@@ -26,6 +26,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   Which parts get masked can be toggled independently via the
   `totonoeLog.copyMasked.maskTimestamp` and `totonoeLog.copyMasked.maskHost`
   settings (both default to `true`).
+- Add the "Totonoe Log: Show Collapsed View" command
+  (`totonoeLog.showCollapsedView`), which normalizes the active editor's log
+  and collapses runs of consecutive entries that repeat (ignoring timestamps,
+  and IPv4 addresses within the message) into a single line annotated with
+  the repeat count (e.g. `(×5)`) and the original line range. Runs shorter
+  than the `totonoeLog.collapse.threshold` setting (default `3`) are left
+  uncollapsed. To see every original line, open the regular Show Normalized
+  View alongside it.
 
 ## [0.1.0] - 2026-07-08
 
