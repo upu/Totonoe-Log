@@ -7,6 +7,9 @@ export { formatMaskedLogForCompare, maskLogTextForCopy } from "./maskForCompare"
 export type { CollapseOptions, CollapsedItem } from "./collapseRepeatedEntries";
 export { DEFAULT_COLLAPSE_THRESHOLD, collapseRepeatedEntries } from "./collapseRepeatedEntries";
 export { formatCollapsedLog } from "./formatCollapsedLog";
+export type { LogFileInput, MergedEntry } from "./mergeLogFiles";
+export { deriveLogKind, mergeLogFiles } from "./mergeLogFiles";
+export { formatMergedLog } from "./formatMergedLog";
 export { UNRECOGNIZED_SEVERITY_KEY, getDistinctSeverities, filterEntriesBySeverity } from "./filterBySeverity";
 export type { DateRange } from "./filterByDateRange";
 export { parseDateBoundary, filterEntriesByDateRange } from "./filterByDateRange";

@@ -7,6 +7,9 @@ import {
   maskLogTextForCopy,
   collapseRepeatedEntries,
   formatCollapsedLog,
+  deriveLogKind,
+  mergeLogFiles,
+  formatMergedLog,
   getDistinctSeverities,
   filterEntriesBySeverity,
   parseDateBoundary,
@@ -542,5 +545,136 @@ suite("normalize / formatCollapsedLog", () => {
 
   test("returns an empty string for no entries", () => {
     assert.strictEqual(formatCollapsedLog([], []), "");
+  });
+});
+
+suite("normalize / deriveLogKind", () => {
+  test("strips the extension and a trailing YYYYMMDD date suffix", () => {
+    assert.strictEqual(deriveLogKind("message_20240101.log"), "message");
+  });
+
+  test("strips a trailing hyphen-separated date suffix", () => {
+    assert.strictEqual(deriveLogKind("app-2024-01-02.txt"), "app");
+  });
+
+  test("strips a trailing date+time suffix", () => {
+    assert.strictEqual(deriveLogKind("server_20240101_1200.log"), "server");
+  });
+
+  test("falls back to the extension-stripped name when there is no date suffix", () => {
+    assert.strictEqual(deriveLogKind("readme.log"), "readme");
+  });
+
+  test("falls back to the original name when stripping the date would leave nothing", () => {
+    assert.strictEqual(deriveLogKind("20240101.log"), "20240101");
+  });
+
+  test("keeps a leading dot intact for dotfiles with no other extension", () => {
+    assert.strictEqual(deriveLogKind(".env"), ".env");
+  });
+});
+
+suite("normalize / mergeLogFiles", () => {
+  test("interleaves entries from multiple files in chronological order, regardless of input order", () => {
+    const merged = mergeLogFiles([
+      {
+        fileName: "b.log",
+        text: [
+          "2024-01-02T03:04:05Z INFO first",
+          "2024-01-02T03:04:06Z INFO second",
+        ].join("\n"),
+      },
+      { fileName: "a.log", text: "2024-01-02T03:04:07Z INFO third" },
+    ]);
+
+    assert.deepStrictEqual(
+      merged.map((m) => m.entry.message),
+      ["first", "second", "third"]
+    );
+    assert.deepStrictEqual(
+      merged.map((m) => m.fileName),
+      ["b.log", "b.log", "a.log"]
+    );
+  });
+
+  test("tags each entry with the kind derived from its source file name", () => {
+    const merged = mergeLogFiles([
+      { fileName: "message_20240101.log", text: "2024-01-02T03:04:05Z INFO hello" },
+    ]);
+
+    assert.strictEqual(merged[0].fileName, "message_20240101.log");
+    assert.strictEqual(merged[0].kind, "message");
+  });
+
+  test("merges files that use different timestamp formats into true chronological order", () => {
+    const merged = mergeLogFiles([
+      { fileName: "bracketed.log", text: "[2024-01-02 03:04:07,000] INFO bracketed-later" },
+      { fileName: "iso.log", text: "2024-01-02T03:04:05Z INFO iso-earlier" },
+    ]);
+
+    assert.deepStrictEqual(
+      merged.map((m) => m.entry.message),
+      ["iso-earlier", "bracketed-later"]
+    );
+  });
+
+  test("stable-sorts entries without a recognized timestamp to the end, preserving encounter order", () => {
+    const merged = mergeLogFiles([
+      { fileName: "a.log", text: ["banner A", "2024-01-02T03:04:05Z INFO a-real"].join("\n") },
+      { fileName: "b.log", text: ["banner B", "2024-01-02T03:04:06Z INFO b-real"].join("\n") },
+    ]);
+
+    assert.deepStrictEqual(
+      merged.map((m) => m.entry.message),
+      ["a-real", "b-real", "banner A", "banner B"]
+    );
+  });
+
+  test("returns an empty array for no files", () => {
+    assert.deepStrictEqual(mergeLogFiles([]), []);
+  });
+});
+
+suite("normalize / formatMergedLog", () => {
+  test("renders fileName/kind columns padded and aligned, alongside the unified timestamp/gutter", () => {
+    const merged = mergeLogFiles([
+      { fileName: "app.log", text: "2024-01-02T03:04:05Z INFO hello" },
+      { fileName: "database_20240101.log", text: "2024-01-02T03:04:04Z ERROR boom" },
+    ]);
+
+    const output = formatMergedLog(merged);
+
+    const fileNameWidth = "database_20240101.log".length;
+    const kindWidth = "database".length;
+    const expected = [
+      `${"database_20240101.log".padEnd(fileNameWidth)} | ${"database".padEnd(kindWidth)} | 1 | 2024-01-02T03:04:04.000Z ERROR boom`,
+      `${"app.log".padEnd(fileNameWidth)} | ${"app".padEnd(kindWidth)} | 1 | 2024-01-02T03:04:05.000Z INFO hello`,
+    ].join("\n");
+
+    assert.strictEqual(output, expected);
+  });
+
+  test("blanks the fileName/kind columns on continuation lines, keeping per-line numbering", () => {
+    const merged = mergeLogFiles([
+      {
+        fileName: "app.log",
+        text: ["2024-01-02T03:04:05Z ERROR boom", "  at Foo.bar"].join("\n"),
+      },
+    ]);
+
+    const output = formatMergedLog(merged);
+
+    const fileNameWidth = "app.log".length;
+    const kindWidth = "app".length;
+    const expected = [
+      `${"app.log".padEnd(fileNameWidth)} | ${"app".padEnd(kindWidth)} | 1 | 2024-01-02T03:04:05.000Z ERROR boom`,
+      `${" ".repeat(fileNameWidth)} | ${" ".repeat(kindWidth)} | 2 |   at Foo.bar`,
+    ].join("\n");
+
+    assert.strictEqual(output, expected);
+  });
+
+  test("returns an empty string for no entries", () => {
+    assert.strictEqual(formatMergedLog([]), "");
   });
 });

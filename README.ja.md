@@ -33,13 +33,13 @@ Normalize, merge, filter, collapse, and compare messy logs.
   ツールに貼り付けやすくする（`Totonoe Log: Copy Masked Text`）
 - 繰り返しパターンの折りたたみ（例: 「×5」）
   （`Totonoe Log: Show Collapsed View`）
+- 複数のログファイルを日時ベースでマージし、ファイルを横断した調査を可能に。
+  ファイル名・ファイル「種類」列付き（例: `message_20240101.log` → 種類
+  `message`）（`Totonoe Log: Show Merged View`）
 
 ## 実装予定の機能
 
 - 特定のノイズとなるログ行を非表示（無視）
-- 複数のログファイルを日時ベースでマージし、ファイルを横断した調査を可能に
-  - マージ時にファイル名・ファイル「種類」列を追加
-    （例: `message_20240101.log` → 種類 `message`）
 
 ## シリーズ構想
 
