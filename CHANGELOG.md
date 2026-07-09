@@ -10,6 +10,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- Add the "Totonoe Log: Show Normalized View Filtered by Date Range and
+  Severity" command
+  (`totonoeLog.showNormalizedViewFilteredByDateRangeAndSeverity`), which
+  combines the existing date-range and severity filters: it first asks which
+  severities to show, then prompts for an optional start and end date/time,
+  and opens a normalized view containing only the entries that match both
+  conditions. A notification reports how many lines were hidden by the
+  combined filter.
 - Add the "Totonoe Log: Compare Logs" command (`totonoeLog.compareLogs`),
   which lets you pick two log files and opens them side by side in VS Code's
   standard diff editor. Before diffing, timestamps are replaced with a fixed
