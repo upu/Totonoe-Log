@@ -4,6 +4,7 @@ import {
   createSyslogFormat,
   formatNormalizedLog,
   formatMaskedLogForCompare,
+  maskLogTextForCopy,
   getDistinctSeverities,
   filterEntriesBySeverity,
   parseDateBoundary,
@@ -337,5 +338,72 @@ suite("normalize / formatMaskedLogForCompare", () => {
 
   test("returns an empty string for no entries", () => {
     assert.strictEqual(formatMaskedLogForCompare([]), "");
+  });
+});
+
+suite("normalize / maskLogTextForCopy", () => {
+  test("replaces a recognized timestamp in place, keeping the surrounding raw text", () => {
+    const entries = parseLog("[2024-01-02 03:04:05,678] INFO Starting up");
+    assert.strictEqual(maskLogTextForCopy(entries), "<TIMESTAMP> INFO Starting up");
+  });
+
+  test("masks IPv4 addresses anywhere in the text, including unmatched banner lines", () => {
+    const text = [
+      "==== log start on 10.0.0.1 ====",
+      "2024-01-02T03:04:05Z INFO connect to 192.168.1.10 failed",
+    ].join("\n");
+
+    const output = maskLogTextForCopy(parseLog(text));
+
+    assert.strictEqual(
+      output,
+      ["==== log start on <HOST> ====", "<TIMESTAMP> INFO connect to <HOST> failed"].join("\n")
+    );
+  });
+
+  test("masks the RFC3164 hostname token in place, preserving surrounding whitespace", () => {
+    const entries = parseLog("Jan  2 03:04:05  web01 myapp: hello", {
+      timestampFormats: [createSyslogFormat({ assumedYear: 2024 })],
+    });
+
+    assert.strictEqual(maskLogTextForCopy(entries), "<TIMESTAMP>  <HOST> myapp: hello");
+  });
+
+  test("keeps the original timestamp text when maskTimestamp is false", () => {
+    const entries = parseLog("2024-01-02T03:04:05Z ERROR boom");
+    assert.strictEqual(
+      maskLogTextForCopy(entries, { maskTimestamp: false }),
+      "2024-01-02T03:04:05Z ERROR boom"
+    );
+  });
+
+  test("keeps IPv4 addresses and syslog hostnames unmasked when maskHost is false", () => {
+    const entries = parseLog("2024-01-02T03:04:05Z INFO connect to 192.168.1.10 failed");
+    assert.strictEqual(
+      maskLogTextForCopy(entries, { maskHost: false }),
+      "<TIMESTAMP> INFO connect to 192.168.1.10 failed"
+    );
+  });
+
+  test("preserves multi-line raw structure, masking IPv4 addresses in continuation lines", () => {
+    const text = [
+      "2024-01-02T03:04:05Z ERROR Unhandled exception",
+      "    at com.example.Foo.bar(10.0.0.5:42)",
+    ].join("\n");
+
+    const output = maskLogTextForCopy(parseLog(text));
+
+    assert.strictEqual(
+      output,
+      ["<TIMESTAMP> ERROR Unhandled exception", "    at com.example.Foo.bar(<HOST>:42)"].join("\n")
+    );
+  });
+
+  test("passes unrecognized lines through unless they contain an IPv4 address", () => {
+    assert.strictEqual(maskLogTextForCopy(parseLog("==== banner ====")), "==== banner ====");
+  });
+
+  test("returns an empty string for no entries", () => {
+    assert.strictEqual(maskLogTextForCopy([]), "");
   });
 });

@@ -37,7 +37,8 @@
     "onCommand:totonoeLog.showNormalizedView",
     "onCommand:totonoeLog.showNormalizedViewFilteredBySeverity",
     "onCommand:totonoeLog.showNormalizedViewFilteredByDateRange",
-    "onCommand:totonoeLog.compareLogs"
+    "onCommand:totonoeLog.compareLogs",
+    "onCommand:totonoeLog.copyMaskedText"
   ],
   "main": "./out/extension.js",
   "contributes": {
@@ -61,8 +62,27 @@
       {
         "command": "totonoeLog.compareLogs",
         "title": "Totonoe Log: Compare Logs"
+      },
+      {
+        "command": "totonoeLog.copyMaskedText",
+        "title": "Totonoe Log: Copy Masked Text"
       }
-    ]
+    ],
+    "configuration": {
+      "title": "Totonoe Log",
+      "properties": {
+        "totonoeLog.copyMasked.maskTimestamp": {
+          "type": "boolean",
+          "default": true,
+          "description": "Totonoe Log: Copy Masked Text 実行時にタイムスタンプをマスクする。"
+        },
+        "totonoeLog.copyMasked.maskHost": {
+          "type": "boolean",
+          "default": true,
+          "description": "Totonoe Log: Copy Masked Text 実行時にIPv4アドレスと、syslog形式として認識できた行のホスト名トークンをマスクする（任意の形式のホスト名全般ではない）。"
+        }
+      }
+    }
   },
   "scripts": {
     "vscode:prepublish": "npm run build",

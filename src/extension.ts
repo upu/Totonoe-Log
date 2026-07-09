@@ -11,6 +11,7 @@ import {
   CompareViewContentProvider,
   createCompareLogsCommand,
 } from "./compareView";
+import { copyMaskedLogText } from "./copyMasked";
 
 /**
  * `totonoeLog.showMergedView` のプレースホルダーコマンド。
@@ -55,7 +56,8 @@ export function activate(context: vscode.ExtensionContext): void {
     vscode.commands.registerCommand(
       "totonoeLog.compareLogs",
       createCompareLogsCommand(compareViewProvider)
-    )
+    ),
+    vscode.commands.registerCommand("totonoeLog.copyMaskedText", copyMaskedLogText)
   );
 }
 
