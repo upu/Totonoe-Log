@@ -27,6 +27,8 @@ for the current roadmap.
   (`Totonoe Log: Show Normalized View Filtered by Date Range`)
 - Filter by severity (error / warn / info / ...)
   (`Totonoe Log: Show Normalized View Filtered by Severity`)
+- Filter by date/time range and severity together
+  (`Totonoe Log: Show Normalized View Filtered by Date Range and Severity`)
 - Compare two logs that differ in dates/hosts, without those differences
   showing up as noise in the diff (`Totonoe Log: Compare Logs`)
 - Copy log text with timestamps/hosts masked, ready to paste into an

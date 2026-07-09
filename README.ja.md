@@ -27,6 +27,8 @@ Normalize, merge, filter, collapse, and compare messy logs.
   （`Totonoe Log: Show Normalized View Filtered by Date Range`）
 - セベリティ（error / warn / info など）での絞り込み
   （`Totonoe Log: Show Normalized View Filtered by Severity`）
+- 日付/時刻範囲とセベリティを組み合わせた絞り込み
+  （`Totonoe Log: Show Normalized View Filtered by Date Range and Severity`）
 - 日付やホストが異なる2つのログを、それらの違いを diff ノイズとして出さずに比較
   （`Totonoe Log: Compare Logs`）
 - タイムスタンプ/ホスト情報をマスクしたテキストをコピーし、外部の diff

@@ -33,6 +33,7 @@ export class NormalizedViewContentProvider extends VirtualDocumentContentProvide
 let normalizedViewCounter = 0;
 let severityFilteredViewCounter = 0;
 let dateRangeFilteredViewCounter = 0;
+let dateRangeAndSeverityFilteredViewCounter = 0;
 let collapsedViewCounter = 0;
 
 /**
@@ -98,6 +99,37 @@ export function createShowNormalizedViewCommand(
 const UNRECOGNIZED_SEVERITY_LABEL = "(no severity)";
 
 /**
+ * エントリ群に登場するセベリティをチェックボックス的なピッカーで尋ね、
+ * ユーザーが選んだセベリティ集合を返す。Esc 等でキャンセルした場合は、
+ * 呼び出し側に処理を中断させるため `undefined` を返す。
+ */
+async function promptSeveritySelection(
+  entries: readonly LogEntry[]
+): Promise<Set<string> | undefined> {
+  const distinctSeverities = getDistinctSeverities(entries);
+
+  const items: vscode.QuickPickItem[] = distinctSeverities.map((severity) => ({
+    label: severity === UNRECOGNIZED_SEVERITY_KEY ? UNRECOGNIZED_SEVERITY_LABEL : severity,
+    picked: true,
+  }));
+
+  const selectedItems = await vscode.window.showQuickPick(items, {
+    canPickMany: true,
+    placeHolder: "表示するセベリティを選択してください",
+  });
+
+  if (selectedItems === undefined) {
+    return undefined;
+  }
+
+  return new Set(
+    selectedItems.map((item) =>
+      item.label === UNRECOGNIZED_SEVERITY_LABEL ? UNRECOGNIZED_SEVERITY_KEY : item.label
+    )
+  );
+}
+
+/**
  * アクティブなエディタの内容を正規化し、ユーザーがチェックボックス的に選択した
  * セベリティのエントリだけを読み取り専用の仮想ドキュメントとして開くコマンド。
  */
@@ -115,28 +147,13 @@ export function createShowNormalizedViewFilteredBySeverityCommand(
 
     const sourceDocument = activeEditor.document;
     const entries = parseLog(sourceDocument.getText());
-    const distinctSeverities = getDistinctSeverities(entries);
 
-    const items: vscode.QuickPickItem[] = distinctSeverities.map((severity) => ({
-      label: severity === UNRECOGNIZED_SEVERITY_KEY ? UNRECOGNIZED_SEVERITY_LABEL : severity,
-      picked: true,
-    }));
-
-    const selectedItems = await vscode.window.showQuickPick(items, {
-      canPickMany: true,
-      placeHolder: "表示するセベリティを選択してください",
-    });
-
+    const selectedSeverities = await promptSeveritySelection(entries);
     // ユーザーがピッカーを Esc 等でキャンセルした場合は何もしない。
-    if (selectedItems === undefined) {
+    if (selectedSeverities === undefined) {
       return;
     }
 
-    const selectedSeverities = new Set(
-      selectedItems.map((item) =>
-        item.label === UNRECOGNIZED_SEVERITY_LABEL ? UNRECOGNIZED_SEVERITY_KEY : item.label
-      )
-    );
     const filteredEntries = filterEntriesBySeverity(entries, selectedSeverities);
     const content = formatNormalizedLog(filteredEntries);
 
@@ -237,6 +254,68 @@ export function createShowNormalizedViewFilteredByDateRangeCommand(
     const hiddenLineCount = countLines(entries) - countLines(filteredEntries);
     vscode.window.showInformationMessage(
       `Totonoe Log: 指定範囲外の ${hiddenLineCount} 行を非表示にしました（${countLines(filteredEntries)}/${countLines(entries)} 行を表示）。`
+    );
+  };
+}
+
+/**
+ * アクティブなエディタの内容を正規化し、ユーザーが選択したセベリティと指定した
+ * 日時範囲の両方の条件を満たすエントリだけを読み取り専用の仮想ドキュメントとして
+ * 開くコマンド。セベリティ絞り込みと日付範囲絞り込みを個別に持つ既存コマンドを
+ * 組み合わせて同時に適用したい場合に使う。範囲外・対象外として非表示にした行数は、
+ * 開いた直後に通知として表示する。
+ */
+export function createShowNormalizedViewFilteredByDateRangeAndSeverityCommand(
+  provider: NormalizedViewContentProvider
+): () => Promise<void> {
+  return async function showNormalizedViewFilteredByDateRangeAndSeverity(): Promise<void> {
+    const activeEditor = vscode.window.activeTextEditor;
+    if (!activeEditor) {
+      vscode.window.showWarningMessage(
+        "Totonoe Log: 絞り込むログファイルが開かれていません。"
+      );
+      return;
+    }
+
+    const sourceDocument = activeEditor.document;
+    const entries = parseLog(sourceDocument.getText());
+
+    const selectedSeverities = await promptSeveritySelection(entries);
+    // ユーザーがピッカーを Esc 等でキャンセルした場合は何もしない。
+    if (selectedSeverities === undefined) {
+      return;
+    }
+
+    const startMs = await promptDateBoundary("開始日時");
+    // null はキャンセル、または不正な入力による中断を表す。
+    if (startMs === null) {
+      return;
+    }
+
+    const endMs = await promptDateBoundary("終了日時");
+    if (endMs === null) {
+      return;
+    }
+
+    // 独立した2つの絞り込み関数を順に適用するだけで、両条件の積（AND）が得られる。
+    const filteredEntries = filterEntriesByDateRange(
+      filterEntriesBySeverity(entries, selectedSeverities),
+      { startMs, endMs }
+    );
+    const content = formatNormalizedLog(filteredEntries);
+
+    dateRangeAndSeverityFilteredViewCounter += 1;
+    await openVirtualNormalizedDocument(
+      provider,
+      sourceDocument,
+      content,
+      "date-range-severity-filtered",
+      dateRangeAndSeverityFilteredViewCounter
+    );
+
+    const hiddenLineCount = countLines(entries) - countLines(filteredEntries);
+    vscode.window.showInformationMessage(
+      `Totonoe Log: 条件に合わない ${hiddenLineCount} 行を非表示にしました（${countLines(filteredEntries)}/${countLines(entries)} 行を表示）。`
     );
   };
 }

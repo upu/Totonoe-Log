@@ -10,6 +10,12 @@
 
 ### Added
 
+- 「Totonoe Log: Show Normalized View Filtered by Date Range and Severity」
+  コマンド（`totonoeLog.showNormalizedViewFilteredByDateRangeAndSeverity`）を
+  追加。既存の日付範囲絞り込みとセベリティ絞り込みを組み合わせ、まず表示する
+  セベリティを選び、続いて開始・終了日時（どちらも省略可）を入力すると、
+  両方の条件を満たすエントリだけを含む正規化ビューを開く。絞り込みで非表示に
+  した行数は通知で表示する。
 - 「Totonoe Log: Compare Logs」コマンド（`totonoeLog.compareLogs`）を追加。
   2つのログファイルを選択すると、VSCode標準のdiffエディタで並べて比較表示
   する。比較前にタイムスタンプは固定のプレースホルダーに置き換え、IPv4
