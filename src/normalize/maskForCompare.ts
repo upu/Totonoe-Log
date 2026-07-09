@@ -8,7 +8,10 @@ const TIMESTAMP_PLACEHOLDER = "<TIMESTAMP>";
 /** マスクしたホスト名/IPアドレスの表示に使うプレースホルダー。 */
 const HOST_PLACEHOLDER = "<HOST>";
 
-const IPV4_REGEX = /\b(?:\d{1,3}\.){3}\d{1,3}\b/g;
+// 各オクテットを 0-255 に限定することで、`999.999.999.999` のような
+// IPv4として不正な4分割の数値トークン（バージョン表記等）を誤マスクしない。
+const IPV4_OCTET = "(?:25[0-5]|2[0-4][0-9]|1[0-9]{2}|[1-9]?[0-9])";
+const IPV4_REGEX = new RegExp(`\\b${IPV4_OCTET}(?:\\.${IPV4_OCTET}){3}\\b`, "g");
 
 /**
  * メッセージ中のIPv4アドレスをプレースホルダーに置き換える。

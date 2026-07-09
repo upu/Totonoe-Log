@@ -19,18 +19,24 @@ investigate the issue instead of fighting the format.
 GitHub issue / PR at a time. See the [issue tracker](https://github.com/upu/Totonoe-Log/issues)
 for the current roadmap.
 
-## Planned features
+## Available now
 
 - Normalize diverse log formats into a common structure
+  (`Totonoe Log: Show Normalized View`)
 - Filter by date/time range
+  (`Totonoe Log: Show Normalized View Filtered by Date Range`)
 - Filter by severity (error / warn / info / ...)
+  (`Totonoe Log: Show Normalized View Filtered by Severity`)
+- Compare two logs that differ in dates/hosts, without those differences
+  showing up as noise in the diff (`Totonoe Log: Compare Logs`)
+
+## Planned features
+
 - Hide (ignore) specific noisy log lines
 - Merge multiple log files by timestamp for cross-file investigation
   - Add source file name / file "kind" columns when merging
     (e.g. `message_20240101.log` → kind `message`)
 - Collapse repeated patterns (e.g. "×5")
-- Compare two logs that differ in dates/hosts, without those differences
-  showing up as noise in the diff
 - Copy log text with dates/hosts masked or stripped, ready to paste into
   an external diff tool
 

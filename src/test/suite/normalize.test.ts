@@ -309,6 +309,13 @@ suite("normalize / formatMaskedLogForCompare", () => {
     assert.strictEqual(output, "1 | ==== log start on <HOST> ====");
   });
 
+  test("does not mask a dotted 4-number token whose octets are out of IPv4 range", () => {
+    const output = formatMaskedLogForCompare(
+      parseLog("2024-01-02T03:04:05Z INFO build 999.999.999.999 deployed")
+    );
+    assert.strictEqual(output, "1 | <TIMESTAMP> INFO build 999.999.999.999 deployed");
+  });
+
   test("keeps original line numbers aligned across multi-line entries", () => {
     const text = [
       "2024-01-02T03:04:05Z ERROR Unhandled exception",
