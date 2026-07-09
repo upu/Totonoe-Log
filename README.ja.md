@@ -19,17 +19,24 @@ Normalize, merge, filter, collapse, and compare messy logs.
 順次実装していきます。現在のロードマップは
 [issue 一覧](https://github.com/upu/Totonoe-Log/issues) を参照してください。
 
-## 実装予定の機能
+## 実装済みの機能
 
 - 多様なログ形式を共通の構造に正規化
+  （`Totonoe Log: Show Normalized View`）
 - 日付/時刻範囲での絞り込み
+  （`Totonoe Log: Show Normalized View Filtered by Date Range`）
 - セベリティ（error / warn / info など）での絞り込み
+  （`Totonoe Log: Show Normalized View Filtered by Severity`）
+- 日付やホストが異なる2つのログを、それらの違いを diff ノイズとして出さずに比較
+  （`Totonoe Log: Compare Logs`）
+
+## 実装予定の機能
+
 - 特定のノイズとなるログ行を非表示（無視）
 - 複数のログファイルを日時ベースでマージし、ファイルを横断した調査を可能に
   - マージ時にファイル名・ファイル「種類」列を追加
     （例: `message_20240101.log` → 種類 `message`）
 - 繰り返しパターンの折りたたみ（例: 「×5」）
-- 日付やホストが異なる2つのログを、それらの違いを diff ノイズとして出さずに比較
 - 日付やホスト情報をマスク・除去したテキストをコピーし、外部の diff ツールに
   貼り付けやすくする
 

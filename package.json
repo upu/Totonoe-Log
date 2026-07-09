@@ -36,7 +36,8 @@
     "onCommand:totonoeLog.showMergedView",
     "onCommand:totonoeLog.showNormalizedView",
     "onCommand:totonoeLog.showNormalizedViewFilteredBySeverity",
-    "onCommand:totonoeLog.showNormalizedViewFilteredByDateRange"
+    "onCommand:totonoeLog.showNormalizedViewFilteredByDateRange",
+    "onCommand:totonoeLog.compareLogs"
   ],
   "main": "./out/extension.js",
   "contributes": {
@@ -56,6 +57,10 @@
       {
         "command": "totonoeLog.showNormalizedViewFilteredByDateRange",
         "title": "Totonoe Log: Show Normalized View Filtered by Date Range"
+      },
+      {
+        "command": "totonoeLog.compareLogs",
+        "title": "Totonoe Log: Compare Logs"
       }
     ]
   },

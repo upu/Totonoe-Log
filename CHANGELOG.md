@@ -8,6 +8,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- Add the "Totonoe Log: Compare Logs" command (`totonoeLog.compareLogs`),
+  which lets you pick two log files and opens them side by side in VS Code's
+  standard diff editor. Before diffing, timestamps are replaced with a fixed
+  placeholder and IPv4 addresses (as well as the hostname field of
+  syslog-style entries) are masked, so that differences in when or which host
+  produced a log line don't show up as diff noise, letting the meaningful
+  differences stand out.
+
 ## [0.1.0] - 2026-07-08
 
 - Add the log normalization engine (`src/normalize`): parses raw log text

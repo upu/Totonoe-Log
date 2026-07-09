@@ -350,3 +350,124 @@ suite("Totonoe Log normalized view filtered by date range", () => {
     });
   });
 });
+
+suite("Totonoe Log compare view", () => {
+  test("registers the compareLogs command", async () => {
+    const extension = vscode.extensions.getExtension("upu.totonoe-log");
+    await extension!.activate();
+
+    const commands = await vscode.commands.getCommands(true);
+    assert.ok(
+      commands.includes("totonoeLog.compareLogs"),
+      "totonoeLog.compareLogs command should be registered"
+    );
+  });
+
+  test("opens a diff between masked versions of the two selected files", async () => {
+    const extension = vscode.extensions.getExtension("upu.totonoe-log");
+    await extension!.activate();
+
+    const fs = await import("node:fs/promises");
+    const os = await import("node:os");
+    const path = await import("node:path");
+
+    const tempDir = await fs.mkdtemp(path.join(os.tmpdir(), "totonoe-log-"));
+    try {
+      const firstPath = path.join(tempDir, "left.log");
+      const secondPath = path.join(tempDir, "right.log");
+      await fs.writeFile(firstPath, "2024-01-02T03:04:05Z ERROR connect to 192.168.1.10 failed");
+      await fs.writeFile(secondPath, "2024-01-02T09:04:05Z ERROR connect to 10.0.0.1 failed");
+
+      const originalShowOpenDialog = vscode.window.showOpenDialog;
+      let callCount = 0;
+      (vscode.window as any).showOpenDialog = async () => {
+        callCount += 1;
+        return [vscode.Uri.file(callCount === 1 ? firstPath : secondPath)];
+      };
+
+      try {
+        await vscode.commands.executeCommand("totonoeLog.compareLogs");
+      } finally {
+        (vscode.window as any).showOpenDialog = originalShowOpenDialog;
+      }
+
+      const activeEditor = vscode.window.activeTextEditor;
+      assert.ok(activeEditor, "a diff editor should be shown");
+      assert.strictEqual(activeEditor!.document.uri.scheme, "totonoe-log-compare");
+      assert.strictEqual(
+        activeEditor!.document.getText(),
+        "1 | <TIMESTAMP> ERROR connect to <HOST> failed"
+      );
+    } finally {
+      await vscode.commands.executeCommand("workbench.action.closeAllEditors");
+      await fs.rm(tempDir, { recursive: true, force: true });
+    }
+  });
+
+  test("does nothing when the first file picker is cancelled", async () => {
+    const extension = vscode.extensions.getExtension("upu.totonoe-log");
+    await extension!.activate();
+
+    const source = await vscode.workspace.openTextDocument({
+      content: "2024-01-02T03:04:05Z INFO starting",
+      language: "log",
+    });
+    await vscode.window.showTextDocument(source);
+    await vscode.commands.executeCommand("workbench.action.closeOtherEditors");
+
+    const originalShowOpenDialog = vscode.window.showOpenDialog;
+    (vscode.window as any).showOpenDialog = async () => undefined;
+
+    try {
+      await vscode.commands.executeCommand("totonoeLog.compareLogs");
+    } finally {
+      (vscode.window as any).showOpenDialog = originalShowOpenDialog;
+    }
+
+    const activeEditor = vscode.window.activeTextEditor;
+    assert.ok(activeEditor, "the original editor should remain active");
+    assert.notStrictEqual(activeEditor!.document.uri.scheme, "totonoe-log-compare");
+  });
+
+  test("does nothing when the second file picker is cancelled", async () => {
+    const extension = vscode.extensions.getExtension("upu.totonoe-log");
+    await extension!.activate();
+
+    const fs = await import("node:fs/promises");
+    const os = await import("node:os");
+    const path = await import("node:path");
+
+    const tempDir = await fs.mkdtemp(path.join(os.tmpdir(), "totonoe-log-"));
+    try {
+      const firstPath = path.join(tempDir, "left.log");
+      await fs.writeFile(firstPath, "2024-01-02T03:04:05Z INFO starting");
+
+      const source = await vscode.workspace.openTextDocument({
+        content: "2024-01-02T03:04:05Z INFO starting",
+        language: "log",
+      });
+      await vscode.window.showTextDocument(source);
+      await vscode.commands.executeCommand("workbench.action.closeOtherEditors");
+
+      const originalShowOpenDialog = vscode.window.showOpenDialog;
+      let callCount = 0;
+      (vscode.window as any).showOpenDialog = async () => {
+        callCount += 1;
+        return callCount === 1 ? [vscode.Uri.file(firstPath)] : undefined;
+      };
+
+      try {
+        await vscode.commands.executeCommand("totonoeLog.compareLogs");
+      } finally {
+        (vscode.window as any).showOpenDialog = originalShowOpenDialog;
+      }
+
+      const activeEditor = vscode.window.activeTextEditor;
+      assert.ok(activeEditor, "the original editor should remain active");
+      assert.notStrictEqual(activeEditor!.document.uri.scheme, "totonoe-log-compare");
+    } finally {
+      await vscode.commands.executeCommand("workbench.action.closeAllEditors");
+      await fs.rm(tempDir, { recursive: true, force: true });
+    }
+  });
+});

@@ -6,6 +6,11 @@ import {
   createShowNormalizedViewFilteredBySeverityCommand,
   createShowNormalizedViewFilteredByDateRangeCommand,
 } from "./normalizedView";
+import {
+  COMPARE_VIEW_SCHEME,
+  CompareViewContentProvider,
+  createCompareLogsCommand,
+} from "./compareView";
 
 /**
  * `totonoeLog.showMergedView` のプレースホルダーコマンド。
@@ -21,6 +26,7 @@ async function showMergedView(): Promise<void> {
 
 export function activate(context: vscode.ExtensionContext): void {
   const normalizedViewProvider = new NormalizedViewContentProvider();
+  const compareViewProvider = new CompareViewContentProvider();
 
   context.subscriptions.push(
     vscode.commands.registerCommand("totonoeLog.showMergedView", showMergedView),
@@ -40,6 +46,15 @@ export function activate(context: vscode.ExtensionContext): void {
     vscode.commands.registerCommand(
       "totonoeLog.showNormalizedViewFilteredByDateRange",
       createShowNormalizedViewFilteredByDateRangeCommand(normalizedViewProvider)
+    ),
+    vscode.workspace.registerTextDocumentContentProvider(
+      COMPARE_VIEW_SCHEME,
+      compareViewProvider
+    ),
+    compareViewProvider,
+    vscode.commands.registerCommand(
+      "totonoeLog.compareLogs",
+      createCompareLogsCommand(compareViewProvider)
     )
   );
 }
