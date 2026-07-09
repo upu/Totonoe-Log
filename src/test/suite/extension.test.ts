@@ -413,7 +413,10 @@ suite("Totonoe Log normalized view filtered by date range and severity", () => {
       activeEditor!.document.getText(),
       "3 | 2024-01-02T03:04:06.000Z ERROR in range and matching"
     );
-    assert.ok(infoMessage?.includes("3"), "the hidden line count should be reported");
+    assert.ok(
+      infoMessage?.includes("条件に合わない 3 行"),
+      "the hidden line count should be reported"
+    );
   });
 
   test("does nothing when the severity picker is dismissed", async () => {
