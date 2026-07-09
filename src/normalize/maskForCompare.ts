@@ -60,3 +60,50 @@ export function formatMaskedLogForCompare(entries: readonly LogEntry[]): string 
 
   return outputLines.join("\n");
 }
+
+/** {@link maskLogTextForCopy} でマスクする対象を個別に切り替えるオプション。 */
+export interface MaskForCopyOptions {
+  /** タイムスタンプをマスクするかどうか。省略時は true。 */
+  readonly maskTimestamp?: boolean;
+  /** IPv4アドレス・syslogホスト名をマスクするかどうか。省略時は true。 */
+  readonly maskHost?: boolean;
+}
+
+/**
+ * {@link parseLog} が返す {@link LogEntry} の配列を、外部のdiffツールに貼り
+ * 付けやすいマスク済みテキストへ整形する。{@link formatMaskedLogForCompare}
+ * とは異なり、タイムスタンプ・severityをISO形式などに書き換えたり行番号
+ * ガターを付けたりせず、元の生テキストのフォーマットをそのまま保ちながら
+ * 該当箇所だけをプレースホルダーに置き換える（コピー後にそのまま元のログ
+ * と見比べられるようにするため）。
+ *
+ * マスク対象（タイムスタンプ / ホスト名・IPアドレス）はそれぞれ独立に
+ * 無効化できる。
+ */
+export function maskLogTextForCopy(
+  entries: readonly LogEntry[],
+  options: MaskForCopyOptions = {}
+): string {
+  const maskTimestamp = options.maskTimestamp ?? true;
+  const maskHost = options.maskHost ?? true;
+  const outputLines: string[] = [];
+
+  for (const entry of entries) {
+    const lines = [...entry.lines];
+
+    if (entry.matched && entry.rawTimestamp !== undefined) {
+      const afterTimestamp = lines[0].slice(entry.rawTimestamp.length);
+      const maskedAfterTimestamp =
+        maskHost && entry.timestampFormat === "syslog"
+          ? afterTimestamp.replace(/^(\s*)(\S+)/, `$1${HOST_PLACEHOLDER}`)
+          : afterTimestamp;
+      lines[0] = (maskTimestamp ? TIMESTAMP_PLACEHOLDER : entry.rawTimestamp) + maskedAfterTimestamp;
+    }
+
+    for (const line of lines) {
+      outputLines.push(maskHost ? maskIpv4Addresses(line) : line);
+    }
+  }
+
+  return outputLines.join("\n");
+}

@@ -471,3 +471,90 @@ suite("Totonoe Log compare view", () => {
     }
   });
 });
+
+suite("Totonoe Log copy masked text", () => {
+  test("registers the copyMaskedText command", async () => {
+    const extension = vscode.extensions.getExtension("upu.totonoe-log");
+    await extension!.activate();
+
+    const commands = await vscode.commands.getCommands(true);
+    assert.ok(
+      commands.includes("totonoeLog.copyMaskedText"),
+      "totonoeLog.copyMaskedText command should be registered"
+    );
+  });
+
+  test("copies masked text of the whole document when there is no selection", async () => {
+    const extension = vscode.extensions.getExtension("upu.totonoe-log");
+    await extension!.activate();
+
+    const source = await vscode.workspace.openTextDocument({
+      content: "2024-01-02T03:04:05Z INFO connect to 192.168.1.10 failed",
+      language: "log",
+    });
+    const editor = await vscode.window.showTextDocument(source);
+    editor.selection = new vscode.Selection(0, 0, 0, 0);
+
+    await vscode.commands.executeCommand("totonoeLog.copyMaskedText");
+
+    const clipboardText = await vscode.env.clipboard.readText();
+    assert.strictEqual(clipboardText, "<TIMESTAMP> INFO connect to <HOST> failed");
+  });
+
+  test("copies masked text of only the selected range when there is a selection", async () => {
+    const extension = vscode.extensions.getExtension("upu.totonoe-log");
+    await extension!.activate();
+
+    const source = await vscode.workspace.openTextDocument({
+      content: [
+        "2024-01-02T03:04:05Z INFO first line",
+        "2024-01-02T03:04:06Z INFO second line 10.0.0.1",
+      ].join("\n"),
+      language: "log",
+    });
+    const editor = await vscode.window.showTextDocument(source);
+    const secondLineRange = source.lineAt(1).range;
+    editor.selection = new vscode.Selection(secondLineRange.start, secondLineRange.end);
+
+    await vscode.commands.executeCommand("totonoeLog.copyMaskedText");
+
+    const clipboardText = await vscode.env.clipboard.readText();
+    assert.strictEqual(clipboardText, "<TIMESTAMP> INFO second line <HOST>");
+  });
+
+  test("shows a warning when there is no active editor to copy from", async () => {
+    const extension = vscode.extensions.getExtension("upu.totonoe-log");
+    await extension!.activate();
+
+    await vscode.commands.executeCommand("workbench.action.closeAllEditors");
+
+    await assert.doesNotReject(async () => {
+      await vscode.commands.executeCommand("totonoeLog.copyMaskedText");
+    });
+  });
+
+  test("does not mask hosts when totonoeLog.copyMasked.maskHost is disabled", async function () {
+    this.timeout(10000);
+    const extension = vscode.extensions.getExtension("upu.totonoe-log");
+    await extension!.activate();
+
+    const config = vscode.workspace.getConfiguration("totonoeLog.copyMasked");
+    await config.update("maskHost", false, vscode.ConfigurationTarget.Global);
+
+    try {
+      const source = await vscode.workspace.openTextDocument({
+        content: "2024-01-02T03:04:05Z INFO connect to 192.168.1.10 failed",
+        language: "log",
+      });
+      const editor = await vscode.window.showTextDocument(source);
+      editor.selection = new vscode.Selection(0, 0, 0, 0);
+
+      await vscode.commands.executeCommand("totonoeLog.copyMaskedText");
+
+      const clipboardText = await vscode.env.clipboard.readText();
+      assert.strictEqual(clipboardText, "<TIMESTAMP> INFO connect to 192.168.1.10 failed");
+    } finally {
+      await config.update("maskHost", undefined, vscode.ConfigurationTarget.Global);
+    }
+  });
+});

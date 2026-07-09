@@ -16,6 +16,14 @@
   アドレス（およびsyslog形式エントリのホスト名部分）もマスクするため、
   発生時刻やホストの違いがdiffのノイズとして現れず、本質的な差分だけが
   見えるようにする。
+- 「Totonoe Log: Copy Masked Text」コマンド（`totonoeLog.copyMaskedText`）を
+  追加。アクティブなエディタの選択範囲（未選択時は文書全体）を対象に、
+  タイムスタンプとホスト名/IPv4アドレスをマスクしたテキストをクリップ
+  ボードへコピーし、外部のdiffツールに貼り付けやすくする。Compare Logs
+  ビューとは異なり、マスクした箇所以外は元のテキストの見た目をそのまま
+  保つ。マスク対象は `totonoeLog.copyMasked.maskTimestamp` /
+  `totonoeLog.copyMasked.maskHost` 設定（いずれも既定値 `true`）で個別に
+  無効化できる。
 
 ## [0.1.0] - 2026-07-08
 

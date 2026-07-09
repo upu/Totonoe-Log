@@ -17,6 +17,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   syslog-style entries) are masked, so that differences in when or which host
   produced a log line don't show up as diff noise, letting the meaningful
   differences stand out.
+- Add the "Totonoe Log: Copy Masked Text" command (`totonoeLog.copyMaskedText`),
+  which copies the active editor's selection (or the whole document when
+  nothing is selected) to the clipboard with timestamps and hostnames/IPv4
+  addresses masked, ready to paste into an external diff tool. Unlike the
+  Compare Logs view, the original text formatting is preserved as-is aside
+  from the masked spans. Which parts get masked can be toggled independently
+  via the `totonoeLog.copyMasked.maskTimestamp` and
+  `totonoeLog.copyMasked.maskHost` settings (both default to `true`).
 
 ## [0.1.0] - 2026-07-08
 
