@@ -14,6 +14,7 @@ import {
   filterEntriesBySeverity,
   parseDateBoundary,
   filterEntriesByDateRange,
+  filterEntriesByIgnorePattern,
 } from "../../normalize";
 
 suite("normalize / parseLog", () => {
@@ -270,6 +271,57 @@ suite("normalize / filterEntriesByDateRange", () => {
 
     assert.strictEqual(filtered.length, 1);
     assert.strictEqual(filtered[0].message, "hello");
+  });
+});
+
+suite("normalize / filterEntriesByIgnorePattern", () => {
+  test("excludes entries whose raw text matches the pattern (plain substring)", () => {
+    const text = [
+      "2024-01-02T03:04:05Z INFO heartbeat ok",
+      "2024-01-02T03:04:06Z ERROR boom",
+    ].join("\n");
+    const entries = parseLog(text);
+
+    const filtered = filterEntriesByIgnorePattern(entries, /heartbeat/i);
+
+    assert.strictEqual(filtered.length, 1);
+    assert.strictEqual(filtered[0].message, "boom");
+  });
+
+  test("excludes entries matching a regular expression pattern", () => {
+    const text = [
+      "2024-01-02T03:04:05Z DEBUG verbose trace",
+      "2024-01-02T03:04:06Z ERROR boom",
+    ].join("\n");
+    const entries = parseLog(text);
+
+    const filtered = filterEntriesByIgnorePattern(entries, /^.*DEBUG.*$/im);
+
+    assert.strictEqual(filtered.length, 1);
+    assert.strictEqual(filtered[0].message, "boom");
+  });
+
+  test("excludes a multi-line entry (e.g. stack trace) if any of its lines match", () => {
+    const text = [
+      "2024-01-02T03:04:05Z ERROR boom",
+      "    at com.example.Foo.bar(Foo.java:42)",
+      "2024-01-02T03:04:06Z INFO keep",
+    ].join("\n");
+    const entries = parseLog(text);
+
+    const filtered = filterEntriesByIgnorePattern(entries, /com\.example/);
+
+    assert.strictEqual(filtered.length, 1);
+    assert.strictEqual(filtered[0].message, "keep");
+  });
+
+  test("keeps every entry when nothing matches", () => {
+    const text = "2024-01-02T03:04:05Z INFO hello";
+    const entries = parseLog(text);
+
+    const filtered = filterEntriesByIgnorePattern(entries, /nope/);
+
+    assert.strictEqual(filtered.length, 1);
   });
 });
 

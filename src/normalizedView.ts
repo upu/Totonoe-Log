@@ -7,6 +7,7 @@ import {
   UNRECOGNIZED_SEVERITY_KEY,
   parseDateBoundary,
   filterEntriesByDateRange,
+  filterEntriesByIgnorePattern,
   collapseRepeatedEntries,
   formatCollapsedLog,
   DEFAULT_COLLAPSE_THRESHOLD,
@@ -34,6 +35,7 @@ let normalizedViewCounter = 0;
 let severityFilteredViewCounter = 0;
 let dateRangeFilteredViewCounter = 0;
 let dateRangeAndSeverityFilteredViewCounter = 0;
+let ignorePatternFilteredViewCounter = 0;
 let collapsedViewCounter = 0;
 
 /**
@@ -316,6 +318,78 @@ export function createShowNormalizedViewFilteredByDateRangeAndSeverityCommand(
     const hiddenLineCount = countLines(entries) - countLines(filteredEntries);
     vscode.window.showInformationMessage(
       `Totonoe Log: 条件に合わない ${hiddenLineCount} 行を非表示にしました（${countLines(filteredEntries)}/${countLines(entries)} 行を表示）。`
+    );
+  };
+}
+
+/**
+ * 非表示にする行のパターン（文字列または正規表現）を入力ボックスで尋ね、
+ * コンパイル済みの正規表現を返す。プレーンな文字列を入力した場合は、
+ * それを含む行にマッチする（部分一致）。Esc 等でのキャンセル、入力が空、
+ * および正規表現として解釈できない不正な入力の場合は、どれも呼び出し側に
+ * 処理を中断させるため `undefined` を返す。
+ */
+async function promptIgnorePattern(): Promise<RegExp | undefined> {
+  const input = await vscode.window.showInputBox({
+    prompt: "非表示にする行のパターン（文字列または正規表現）",
+    placeHolder: "例: heartbeat または ^DEBUG",
+  });
+
+  if (input === undefined || input.trim() === "") {
+    return undefined;
+  }
+
+  try {
+    return new RegExp(input, "im");
+  } catch {
+    vscode.window.showWarningMessage(
+      `Totonoe Log: 正規表現として解釈できませんでした: "${input}"`
+    );
+    return undefined;
+  }
+}
+
+/**
+ * アクティブなエディタの内容を正規化し、ユーザーが入力したパターン
+ * （文字列または正規表現）にマッチするエントリを非表示にした読み取り専用の
+ * 仮想ドキュメントとして開くコマンド。非表示にした行数は、開いた直後に
+ * 通知として表示する。
+ */
+export function createShowNormalizedViewFilteredByIgnorePatternCommand(
+  provider: NormalizedViewContentProvider
+): () => Promise<void> {
+  return async function showNormalizedViewFilteredByIgnorePattern(): Promise<void> {
+    const activeEditor = vscode.window.activeTextEditor;
+    if (!activeEditor) {
+      vscode.window.showWarningMessage(
+        "Totonoe Log: 絞り込むログファイルが開かれていません。"
+      );
+      return;
+    }
+
+    const pattern = await promptIgnorePattern();
+    // ユーザーがキャンセルした場合、または不正な入力による中断の場合は何もしない。
+    if (pattern === undefined) {
+      return;
+    }
+
+    const sourceDocument = activeEditor.document;
+    const entries = parseLog(sourceDocument.getText());
+    const filteredEntries = filterEntriesByIgnorePattern(entries, pattern);
+    const content = formatNormalizedLog(filteredEntries);
+
+    ignorePatternFilteredViewCounter += 1;
+    await openVirtualNormalizedDocument(
+      provider,
+      sourceDocument,
+      content,
+      "ignore-pattern-filtered",
+      ignorePatternFilteredViewCounter
+    );
+
+    const hiddenLineCount = countLines(entries) - countLines(filteredEntries);
+    vscode.window.showInformationMessage(
+      `Totonoe Log: パターンに一致する ${hiddenLineCount} 行を非表示にしました（${countLines(filteredEntries)}/${countLines(entries)} 行を表示）。`
     );
   };
 }

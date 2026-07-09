@@ -38,10 +38,9 @@ Normalize, merge, filter, collapse, and compare messy logs.
 - 複数のログファイルを日時ベースでマージし、ファイルを横断した調査を可能に。
   ファイル名・ファイル「種類」列付き（例: `message_20240101.log` → 種類
   `message`）（`Totonoe Log: Show Merged View`）
-
-## 実装予定の機能
-
-- 特定のノイズとなるログ行を非表示（無視）
+- パターン（プレーンな文字列または正規表現）にマッチするエントリを非表示にし、
+  ノイズとなる行を調査の邪魔にならないようにする
+  （`Totonoe Log: Show Normalized View Filtered by Ignore Pattern`）
 
 ## シリーズ構想
 
