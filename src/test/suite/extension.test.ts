@@ -2,7 +2,7 @@ import * as assert from "node:assert";
 import * as vscode from "vscode";
 
 suite("Totonoe Log extension", () => {
-  test("activates and registers the placeholder command", async () => {
+  test("activates and registers the showMergedView command", async () => {
     const extension = vscode.extensions.getExtension("upu.totonoe-log");
     assert.ok(extension, "extension should be discoverable by id");
 
@@ -641,5 +641,78 @@ suite("Totonoe Log collapsed view", () => {
     await assert.doesNotReject(async () => {
       await vscode.commands.executeCommand("totonoeLog.showCollapsedView");
     });
+  });
+});
+
+suite("Totonoe Log merged view", () => {
+  test("merges the selected files into a single chronologically-ordered view", async () => {
+    const extension = vscode.extensions.getExtension("upu.totonoe-log");
+    await extension!.activate();
+
+    const fs = await import("node:fs/promises");
+    const os = await import("node:os");
+    const path = await import("node:path");
+
+    const tempDir = await fs.mkdtemp(path.join(os.tmpdir(), "totonoe-log-"));
+    try {
+      const appLogPath = path.join(tempDir, "app.log");
+      const dbLogPath = path.join(tempDir, "database_20240101.log");
+      await fs.writeFile(appLogPath, "2024-01-02T03:04:05Z INFO hello");
+      await fs.writeFile(dbLogPath, "2024-01-02T03:04:04Z ERROR boom");
+
+      const originalShowOpenDialog = vscode.window.showOpenDialog;
+      (vscode.window as any).showOpenDialog = async () => [
+        vscode.Uri.file(appLogPath),
+        vscode.Uri.file(dbLogPath),
+      ];
+
+      try {
+        await vscode.commands.executeCommand("totonoeLog.showMergedView");
+      } finally {
+        (vscode.window as any).showOpenDialog = originalShowOpenDialog;
+      }
+
+      const activeEditor = vscode.window.activeTextEditor;
+      assert.ok(activeEditor, "a merged view editor should be shown");
+      assert.strictEqual(activeEditor!.document.uri.scheme, "totonoe-log-merged");
+
+      const fileNameWidth = "database_20240101.log".length;
+      const kindWidth = "database".length;
+      assert.strictEqual(
+        activeEditor!.document.getText(),
+        [
+          `${"database_20240101.log".padEnd(fileNameWidth)} | ${"database".padEnd(kindWidth)} | 1 | 2024-01-02T03:04:04.000Z ERROR boom`,
+          `${"app.log".padEnd(fileNameWidth)} | ${"app".padEnd(kindWidth)} | 1 | 2024-01-02T03:04:05.000Z INFO hello`,
+        ].join("\n")
+      );
+    } finally {
+      await vscode.commands.executeCommand("workbench.action.closeAllEditors");
+      await fs.rm(tempDir, { recursive: true, force: true });
+    }
+  });
+
+  test("does nothing when the file picker is cancelled", async () => {
+    const extension = vscode.extensions.getExtension("upu.totonoe-log");
+    await extension!.activate();
+
+    const source = await vscode.workspace.openTextDocument({
+      content: "2024-01-02T03:04:05Z INFO starting",
+      language: "log",
+    });
+    await vscode.window.showTextDocument(source);
+    await vscode.commands.executeCommand("workbench.action.closeOtherEditors");
+
+    const originalShowOpenDialog = vscode.window.showOpenDialog;
+    (vscode.window as any).showOpenDialog = async () => undefined;
+
+    try {
+      await vscode.commands.executeCommand("totonoeLog.showMergedView");
+    } finally {
+      (vscode.window as any).showOpenDialog = originalShowOpenDialog;
+    }
+
+    const activeEditor = vscode.window.activeTextEditor;
+    assert.ok(activeEditor, "the original editor should remain active");
+    assert.notStrictEqual(activeEditor!.document.uri.scheme, "totonoe-log-merged");
   });
 });

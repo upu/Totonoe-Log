@@ -34,6 +34,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   than the `totonoeLog.collapse.threshold` setting (default `3`) are left
   uncollapsed. To see every original line, open the regular Show Normalized
   View alongside it.
+- Implement the "Totonoe Log: Show Merged View" command
+  (`totonoeLog.showMergedView`), which lets you pick multiple log files and
+  opens a single read-only view with their entries interleaved in
+  chronological order, even when each file uses a different timestamp
+  format. Each line is prefixed with the source file name and a "kind"
+  column derived from the file name with its date portion stripped (e.g.
+  `message_20240101.log` → `message`), so you can tell at a glance where a
+  line came from while investigating across files.
 
 ## [0.1.0] - 2026-07-08
 

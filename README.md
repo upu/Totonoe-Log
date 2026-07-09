@@ -33,13 +33,13 @@ for the current roadmap.
   external diff tool (`Totonoe Log: Copy Masked Text`)
 - Collapse repeated patterns (e.g. "×5")
   (`Totonoe Log: Show Collapsed View`)
+- Merge multiple log files by timestamp for cross-file investigation, with
+  source file name / file "kind" columns (e.g. `message_20240101.log` →
+  kind `message`) (`Totonoe Log: Show Merged View`)
 
 ## Planned features
 
 - Hide (ignore) specific noisy log lines
-- Merge multiple log files by timestamp for cross-file investigation
-  - Add source file name / file "kind" columns when merging
-    (e.g. `message_20240101.log` → kind `message`)
 
 ## Series
 
