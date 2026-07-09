@@ -392,7 +392,7 @@ export function createShowNormalizedViewFilteredByIgnorePatternCommand(
 
     const hiddenLineCount = countLines(entries) - countLines(filteredEntries);
     vscode.window.showInformationMessage(
-      `Totonoe Log: パターンに一致する ${hiddenLineCount} 行を非表示にしました（${countLines(filteredEntries)}/${countLines(entries)} 行を表示）。`
+      `Totonoe Log: パターンに一致したエントリの ${hiddenLineCount} 行を非表示にしました（${countLines(filteredEntries)}/${countLines(entries)} 行を表示）。`
     );
   };
 }

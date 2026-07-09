@@ -542,7 +542,54 @@ suite("Totonoe Log normalized view filtered by ignore pattern", () => {
       activeEditor!.document.getText(),
       "2 | 2024-01-02T03:04:06.000Z ERROR boom"
     );
-    assert.ok(infoMessage?.includes("パターンに一致する 1 行"), "the hidden line count should be reported");
+    assert.ok(infoMessage?.includes("パターンに一致したエントリの 1 行"), "the hidden line count should be reported");
+  });
+
+  test("counts every physical line of a hidden multi-line entry, including non-matching continuation lines", async () => {
+    const extension = vscode.extensions.getExtension("upu.totonoe-log");
+    await extension!.activate();
+
+    const source = await vscode.workspace.openTextDocument({
+      content: [
+        "2024-01-02T03:04:05Z ERROR boom",
+        "    at com.example.Foo.bar(Foo.java:42)",
+        "2024-01-02T03:04:06Z INFO keep",
+      ].join("\n"),
+      language: "log",
+    });
+    await vscode.window.showTextDocument(source);
+
+    const originalShowInputBox = vscode.window.showInputBox;
+    (vscode.window as any).showInputBox = async () => "boom";
+
+    const originalShowInformationMessage = vscode.window.showInformationMessage;
+    let infoMessage: string | undefined;
+    (vscode.window as any).showInformationMessage = async (message: string) => {
+      infoMessage = message;
+      return undefined;
+    };
+
+    try {
+      await vscode.commands.executeCommand(
+        "totonoeLog.showNormalizedViewFilteredByIgnorePattern"
+      );
+    } finally {
+      (vscode.window as any).showInputBox = originalShowInputBox;
+      (vscode.window as any).showInformationMessage = originalShowInformationMessage;
+    }
+
+    const activeEditor = vscode.window.activeTextEditor;
+    assert.ok(activeEditor, "a filtered normalized view editor should be shown");
+    assert.strictEqual(
+      activeEditor!.document.getText(),
+      "3 | 2024-01-02T03:04:06.000Z INFO keep"
+    );
+    // マッチしたエントリは2物理行分（ERROR行＋スタックトレースの継続行）
+    // にまたがっており、"boom" を含むのは先頭行だけである点に注意。
+    assert.ok(
+      infoMessage?.includes("パターンに一致したエントリの 2 行"),
+      "the hidden line count should include the entry's continuation lines"
+    );
   });
 
   test("supports a regular expression pattern", async () => {

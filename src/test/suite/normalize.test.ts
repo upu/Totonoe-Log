@@ -325,8 +325,8 @@ suite("normalize / filterEntriesByIgnorePattern", () => {
   });
 
   test("matches every entry independently even when the pattern has a global flag", () => {
-    // RegExp#test with a "g" flag advances lastIndex on each call, so without
-    // resetting it, a match on one entry can suppress detection on the next.
+    // g フラグ付きの RegExp#test は呼び出しのたびに lastIndex を進めるため、
+    // リセットしないと1件目のマッチが2件目以降の判定を狂わせてしまう。
     const text = [
       "2024-01-02T03:04:05Z INFO heartbeat one",
       "2024-01-02T03:04:06Z ERROR boom",
