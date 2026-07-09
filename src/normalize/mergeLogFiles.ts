@@ -40,6 +40,27 @@ export interface MergedEntry {
 }
 
 /**
+ * タイムスタンプ昇順の比較関数。未認識（`undefined`）のタイムスタンプは
+ * 常に末尾へ回す。両方 `undefined` の場合は `0` を返し、`Array.prototype.sort`
+ * の安定性に順序を委ねる（`Infinity - Infinity` のような算術に頼ると `NaN`
+ * を返しうり意図が読み取りづらいため、分岐で明示する）。
+ */
+function compareByTimestamp(a: MergedEntry, b: MergedEntry): number {
+  const aMs = a.entry.timestampMs;
+  const bMs = b.entry.timestampMs;
+  if (aMs === undefined && bMs === undefined) {
+    return 0;
+  }
+  if (aMs === undefined) {
+    return 1;
+  }
+  if (bMs === undefined) {
+    return -1;
+  }
+  return aMs - bMs;
+}
+
+/**
  * 複数のログファイルを {@link parseLog} で正規化し、タイムスタンプを基準に
  * 時系列順へマージする。フォーマットが異なるファイル同士でも、共通の
  * {@link LogEntry.timestampMs} で比較するため正しく並ぶ（正規化エンジンに
@@ -59,7 +80,7 @@ export function mergeLogFiles(files: readonly LogFileInput[]): MergedEntry[] {
     }
   }
 
-  merged.sort((a, b) => (a.entry.timestampMs ?? Infinity) - (b.entry.timestampMs ?? Infinity));
+  merged.sort(compareByTimestamp);
 
   return merged;
 }
