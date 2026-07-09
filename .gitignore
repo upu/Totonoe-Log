@@ -5,3 +5,4 @@ out-tsc/
 *.vsix
 dist/
 release-notes.md
+.claude/settings.local.json
