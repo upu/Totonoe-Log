@@ -101,6 +101,7 @@
     "watch": "node scripts/esbuild.js --watch",
     "compile": "tsc -p ./",
     "check-types": "tsc --noEmit",
+    "lint": "eslint src scripts eslint.config.mjs",
     "test": "vscode-test",
     "check:package": "node scripts/check-package-contents.js",
     "package": "node -e \"require('fs').mkdirSync('dist',{recursive:true})\" && vsce package --out dist/totonoe-log.vsix",
@@ -108,6 +109,7 @@
     "package:install": "npm run package && npm run install:vsix"
   },
   "devDependencies": {
+    "@eslint/js": "^10.0.1",
     "@types/mocha": "^10.0.10",
     "@types/node": "^20.0.0",
     "@types/vscode": "^1.85.0",
@@ -115,6 +117,9 @@
     "@vscode/test-electron": "^2.5.2",
     "@vscode/vsce": "^3.9.1",
     "esbuild": "^0.28.1",
-    "typescript": "^5.3.0"
+    "eslint": "^10.7.0",
+    "globals": "^17.7.0",
+    "typescript": "^5.3.0",
+    "typescript-eslint": "^8.63.0"
   }
 }
