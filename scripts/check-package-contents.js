@@ -4,7 +4,7 @@
 // the same change.
 const { execSync } = require("node:child_process");
 
-const EXPECTED = ["CHANGELOG.md", "LICENSE", "README.md", "out/extension.js", "package.json"];
+const EXPECTED = ["CHANGELOG.md", "LICENSE", "README.md", "media/icon.png", "out/extension.js", "package.json"];
 
 function listPackagedFiles() {
   const output = execSync("npx --no-install vsce ls", { encoding: "utf8" });
