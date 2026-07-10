@@ -8,6 +8,8 @@
 
 ## [Unreleased]
 
+## [0.2.0] - 2026-07-10
+
 ### Added
 
 - 「Totonoe Log: Show Normalized View Filtered by Ignore Pattern」コマンド
@@ -92,5 +94,6 @@
   ドットファイルの場合に名前全体が消えてしまい、`/.normalized-1.log`
   のようなパスになっていた問題を修正。先頭のドットは保持されるようにした。
 
-[Unreleased]: https://github.com/upu/Totonoe-Log/compare/v0.1.0...HEAD
+[Unreleased]: https://github.com/upu/Totonoe-Log/compare/v0.2.0...HEAD
+[0.2.0]: https://github.com/upu/Totonoe-Log/releases/tag/v0.2.0
 [0.1.0]: https://github.com/upu/Totonoe-Log/releases/tag/v0.1.0
