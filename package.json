@@ -32,17 +32,6 @@
   "categories": [
     "Other"
   ],
-  "activationEvents": [
-    "onCommand:totonoeLog.showMergedView",
-    "onCommand:totonoeLog.showNormalizedView",
-    "onCommand:totonoeLog.showNormalizedViewFilteredBySeverity",
-    "onCommand:totonoeLog.showNormalizedViewFilteredByDateRange",
-    "onCommand:totonoeLog.showNormalizedViewFilteredByDateRangeAndSeverity",
-    "onCommand:totonoeLog.showNormalizedViewFilteredByIgnorePattern",
-    "onCommand:totonoeLog.compareLogs",
-    "onCommand:totonoeLog.copyMaskedText",
-    "onCommand:totonoeLog.showCollapsedView"
-  ],
   "main": "./out/extension.js",
   "contributes": {
     "commands": [
