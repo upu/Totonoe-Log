@@ -8,6 +8,13 @@
 
 ## [Unreleased]
 
+## [0.2.1] - 2026-07-11
+
+### Added
+
+- 拡張機能のアイコンを追加し、Marketplace や VS Code の拡張機能ビューに
+  表示されるようにした。
+
 ## [0.2.0] - 2026-07-10
 
 ### Added
@@ -94,6 +101,7 @@
   ドットファイルの場合に名前全体が消えてしまい、`/.normalized-1.log`
   のようなパスになっていた問題を修正。先頭のドットは保持されるようにした。
 
-[Unreleased]: https://github.com/upu/Totonoe-Log/compare/v0.2.0...HEAD
+[Unreleased]: https://github.com/upu/Totonoe-Log/compare/v0.2.1...HEAD
+[0.2.1]: https://github.com/upu/Totonoe-Log/releases/tag/v0.2.1
 [0.2.0]: https://github.com/upu/Totonoe-Log/releases/tag/v0.2.0
 [0.1.0]: https://github.com/upu/Totonoe-Log/releases/tag/v0.1.0
