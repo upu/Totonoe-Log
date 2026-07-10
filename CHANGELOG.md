@@ -8,6 +8,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.2.0] - 2026-07-10
+
 ### Added
 
 - Add the "Totonoe Log: Show Normalized View Filtered by Ignore Pattern"
@@ -100,5 +102,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   entire base name for dotfiles with no other extension (e.g. `.env`),
   producing a path like `/.normalized-1.log`. Leading dots are now preserved.
 
-[Unreleased]: https://github.com/upu/Totonoe-Log/compare/v0.1.0...HEAD
+[Unreleased]: https://github.com/upu/Totonoe-Log/compare/v0.2.0...HEAD
+[0.2.0]: https://github.com/upu/Totonoe-Log/releases/tag/v0.2.0
 [0.1.0]: https://github.com/upu/Totonoe-Log/releases/tag/v0.1.0
