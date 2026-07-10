@@ -4,6 +4,7 @@
   "description": "Normalize, merge, filter, collapse, and compare messy logs.",
   "version": "0.2.0",
   "publisher": "upu",
+  "icon": "media/icon.png",
   "license": "MIT",
   "repository": {
     "type": "git",
