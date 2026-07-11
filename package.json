@@ -41,6 +41,10 @@
         "title": "Totonoe Log: Show Merged View"
       },
       {
+        "command": "totonoeLog.showMergedViewFiltered",
+        "title": "Totonoe Log: Show Merged View Filtered"
+      },
+      {
         "command": "totonoeLog.mergeSelectedFiles",
         "title": "Totonoe Log: Merge Selected Files"
       },

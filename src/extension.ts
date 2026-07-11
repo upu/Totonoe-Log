@@ -20,6 +20,7 @@ import {
   MERGED_VIEW_SCHEME,
   MergedViewContentProvider,
   createShowMergedViewCommand,
+  createShowMergedViewFilteredCommand,
   createMergeSelectedFilesCommand,
 } from "./mergedView";
 
@@ -37,6 +38,10 @@ export function activate(context: vscode.ExtensionContext): void {
     vscode.commands.registerCommand(
       "totonoeLog.showMergedView",
       createShowMergedViewCommand(mergedViewProvider)
+    ),
+    vscode.commands.registerCommand(
+      "totonoeLog.showMergedViewFiltered",
+      createShowMergedViewFilteredCommand(mergedViewProvider)
     ),
     vscode.commands.registerCommand(
       "totonoeLog.mergeSelectedFiles",

@@ -44,6 +44,10 @@ Normalize, merge, filter, collapse, and compare messy logs.
   `message`）（`Totonoe Log: Show Merged View`）。エクスプローラで2つ以上の
   ファイルを選択し、右クリックのコンテキストメニューから直接マージすることも
   できる（`Totonoe Log: Merge Selected Files`）
+- マージビューも絞り込み可能。マージ対象のファイルを選んでから、
+  `Show Normalized View Filtered` と同じ複数選択フローでセベリティ・
+  日付/時刻範囲・無視パターンを組み合わせて絞り込める
+  （`Totonoe Log: Show Merged View Filtered`）
 - パターン（常に正規表現として解釈される。メタ文字を含まない文字列は
   部分一致の検索として動作）にマッチするエントリを非表示にし、ノイズと
   なる行を調査の邪魔にならないようにする

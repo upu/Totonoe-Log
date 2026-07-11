@@ -1378,6 +1378,311 @@ suite("Totonoe Log merged view", () => {
   });
 });
 
+suite("Totonoe Log merged view filtered (combined)", () => {
+  /**
+   * "セベリティ" / "日付範囲" / "無視パターン" の条件選択ピッカーを、指定した
+   * 種類だけ選んで確定するようにモックする。正規化ビューの統合絞り込みテスト
+   * が使う `installQuickPickMock` と同じ役割だが、こちらは
+   * `showMergedViewFiltered` 用に別定義する（テストファイル内で重複がある点は
+   * 承知のうえ、対象コマンドが違うテストスイート間で暗黙の結合を作らないよう
+   * 意図的に分けている）。
+   */
+  function installFilterKindQuickPickMock(kindsToSelect: readonly string[]): () => void {
+    const original = vscode.window.showQuickPick;
+    (vscode.window as any).showQuickPick = async (items: vscode.QuickPickItem[]) => {
+      const isKindPicker = items.some((item) =>
+        ["セベリティ", "日付範囲", "無視パターン"].includes(item.label)
+      );
+      if (isKindPicker) {
+        return items.filter((item) => kindsToSelect.includes(item.label));
+      }
+      // セベリティ選択ピッカー: ERROR のみ選択する。
+      return items.filter((item) => item.label === "ERROR");
+    };
+    return () => {
+      (vscode.window as any).showQuickPick = original;
+    };
+  }
+
+  async function withTempLogFiles<T>(
+    files: Record<string, string>,
+    run: (paths: Record<string, string>) => Promise<T>
+  ): Promise<T> {
+    const fs = await import("node:fs/promises");
+    const os = await import("node:os");
+    const path = await import("node:path");
+
+    const tempDir = await fs.mkdtemp(path.join(os.tmpdir(), "totonoe-log-"));
+    try {
+      const paths: Record<string, string> = {};
+      for (const [fileName, content] of Object.entries(files)) {
+        const filePath = path.join(tempDir, fileName);
+        await fs.writeFile(filePath, content);
+        paths[fileName] = filePath;
+      }
+      return await run(paths);
+    } finally {
+      // Windows ではエディタが開いたままだと一時ファイルが削除できないため、
+      // 削除前に必ず閉じる（"Totonoe Log merged view" 内の既存テストと同じ手順）。
+      await vscode.commands.executeCommand("workbench.action.closeAllEditors");
+      await fs.rm(tempDir, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 });
+    }
+  }
+
+  test("registers the showMergedViewFiltered command", async () => {
+    const extension = vscode.extensions.getExtension("upu.totonoe-log");
+    await extension!.activate();
+
+    const commands = await vscode.commands.getCommands(true);
+    assert.ok(
+      commands.includes("totonoeLog.showMergedViewFiltered"),
+      "totonoeLog.showMergedViewFiltered command should be registered"
+    );
+  });
+
+  test("merges the selected files and applies only the criteria selected in the kind picker, keeping fileName/kind columns", async () => {
+    const extension = vscode.extensions.getExtension("upu.totonoe-log");
+    await extension!.activate();
+
+    await withTempLogFiles(
+      {
+        "app.log": "2024-01-02T03:04:05Z INFO starting",
+        "database_20240101.log": [
+          "2024-01-02T03:04:06Z ERROR boom",
+          "2024-01-02T03:04:07Z ERROR heartbeat noise",
+        ].join("\n"),
+      },
+      async (paths) => {
+        const originalShowOpenDialog = vscode.window.showOpenDialog;
+        (vscode.window as any).showOpenDialog = async () => [
+          vscode.Uri.file(paths["app.log"]),
+          vscode.Uri.file(paths["database_20240101.log"]),
+        ];
+
+        const restoreQuickPick = installFilterKindQuickPickMock(["セベリティ", "無視パターン"]);
+        const originalShowInputBox = vscode.window.showInputBox;
+        (vscode.window as any).showInputBox = async () => "heartbeat";
+
+        const originalShowInformationMessage = vscode.window.showInformationMessage;
+        let infoMessage: string | undefined;
+        (vscode.window as any).showInformationMessage = async (message: string) => {
+          infoMessage = message;
+          return undefined;
+        };
+
+        try {
+          await vscode.commands.executeCommand("totonoeLog.showMergedViewFiltered");
+        } finally {
+          (vscode.window as any).showOpenDialog = originalShowOpenDialog;
+          restoreQuickPick();
+          (vscode.window as any).showInputBox = originalShowInputBox;
+          (vscode.window as any).showInformationMessage = originalShowInformationMessage;
+        }
+
+        const activeEditor = vscode.window.activeTextEditor;
+        assert.ok(activeEditor, "a filtered merged view editor should be shown");
+        assert.strictEqual(activeEditor!.document.uri.scheme, "totonoe-log-merged");
+
+        const fileNameWidth = "database_20240101.log".length;
+        const kindWidth = "database".length;
+        assert.strictEqual(
+          activeEditor!.document.getText(),
+          `${"database_20240101.log".padEnd(fileNameWidth)} | ${"database".padEnd(kindWidth)} | 1 | 2024-01-02T03:04:06.000Z ERROR boom`
+        );
+        assert.ok(
+          infoMessage?.includes("条件に合わない 2 行"),
+          "the hidden line count should be reported"
+        );
+      }
+    );
+  });
+
+  test("opens an unfiltered merged view when no kind is selected (but the picker is not dismissed)", async () => {
+    const extension = vscode.extensions.getExtension("upu.totonoe-log");
+    await extension!.activate();
+
+    await withTempLogFiles(
+      {
+        "app.log": "2024-01-02T03:04:05Z INFO starting",
+        "db.log": "2024-01-02T03:04:06Z ERROR boom",
+      },
+      async (paths) => {
+        const originalShowOpenDialog = vscode.window.showOpenDialog;
+        (vscode.window as any).showOpenDialog = async () => [
+          vscode.Uri.file(paths["app.log"]),
+          vscode.Uri.file(paths["db.log"]),
+        ];
+
+        const originalShowQuickPick = vscode.window.showQuickPick;
+        (vscode.window as any).showQuickPick = async () => [];
+
+        try {
+          await vscode.commands.executeCommand("totonoeLog.showMergedViewFiltered");
+        } finally {
+          (vscode.window as any).showOpenDialog = originalShowOpenDialog;
+          (vscode.window as any).showQuickPick = originalShowQuickPick;
+        }
+
+        const activeEditor = vscode.window.activeTextEditor;
+        assert.ok(activeEditor, "a merged view editor should be shown");
+        assert.strictEqual(activeEditor!.document.uri.scheme, "totonoe-log-merged");
+
+        const fileNameWidth = "app.log".length;
+        const kindWidth = "app".length;
+        assert.strictEqual(
+          activeEditor!.document.getText(),
+          [
+            `${"app.log".padEnd(fileNameWidth)} | ${"app".padEnd(kindWidth)} | 1 | 2024-01-02T03:04:05.000Z INFO starting`,
+            `${"db.log".padEnd(fileNameWidth)} | ${"db".padEnd(kindWidth)} | 1 | 2024-01-02T03:04:06.000Z ERROR boom`,
+          ].join("\n")
+        );
+      }
+    );
+
+    await vscode.commands.executeCommand("workbench.action.closeAllEditors");
+  });
+
+  test("does nothing when the file picker is cancelled", async () => {
+    const extension = vscode.extensions.getExtension("upu.totonoe-log");
+    await extension!.activate();
+
+    const source = await vscode.workspace.openTextDocument({
+      content: "2024-01-02T03:04:05Z INFO starting",
+      language: "log",
+    });
+    await vscode.window.showTextDocument(source);
+    await vscode.commands.executeCommand("workbench.action.closeOtherEditors");
+
+    const originalShowOpenDialog = vscode.window.showOpenDialog;
+    (vscode.window as any).showOpenDialog = async () => undefined;
+
+    try {
+      await vscode.commands.executeCommand("totonoeLog.showMergedViewFiltered");
+    } finally {
+      (vscode.window as any).showOpenDialog = originalShowOpenDialog;
+    }
+
+    const activeEditor = vscode.window.activeTextEditor;
+    assert.ok(activeEditor, "the original editor should remain active");
+    assert.notStrictEqual(activeEditor!.document.uri.scheme, "totonoe-log-merged");
+  });
+
+  test("does nothing when the kind picker is dismissed", async () => {
+    const extension = vscode.extensions.getExtension("upu.totonoe-log");
+    await extension!.activate();
+
+    await withTempLogFiles(
+      { "app.log": "2024-01-02T03:04:05Z INFO starting" },
+      async (paths) => {
+        const originalShowOpenDialog = vscode.window.showOpenDialog;
+        (vscode.window as any).showOpenDialog = async () => [vscode.Uri.file(paths["app.log"])];
+
+        const originalShowQuickPick = vscode.window.showQuickPick;
+        (vscode.window as any).showQuickPick = async () => undefined;
+
+        try {
+          await vscode.commands.executeCommand("totonoeLog.showMergedViewFiltered");
+        } finally {
+          (vscode.window as any).showOpenDialog = originalShowOpenDialog;
+          (vscode.window as any).showQuickPick = originalShowQuickPick;
+        }
+
+        const activeEditor = vscode.window.activeTextEditor;
+        assert.ok(!activeEditor || activeEditor.document.uri.scheme !== "totonoe-log-merged");
+      }
+    );
+  });
+
+  test("does nothing when the severity picker is dismissed after selecting the severity kind", async () => {
+    const extension = vscode.extensions.getExtension("upu.totonoe-log");
+    await extension!.activate();
+
+    await withTempLogFiles(
+      { "app.log": "2024-01-02T03:04:05Z INFO starting" },
+      async (paths) => {
+        const originalShowOpenDialog = vscode.window.showOpenDialog;
+        (vscode.window as any).showOpenDialog = async () => [vscode.Uri.file(paths["app.log"])];
+
+        const originalShowQuickPick = vscode.window.showQuickPick;
+        let callCount = 0;
+        (vscode.window as any).showQuickPick = async (items: vscode.QuickPickItem[]) => {
+          callCount += 1;
+          if (callCount === 1) {
+            return items.filter((item) => item.label === "セベリティ");
+          }
+          return undefined;
+        };
+
+        try {
+          await vscode.commands.executeCommand("totonoeLog.showMergedViewFiltered");
+        } finally {
+          (vscode.window as any).showOpenDialog = originalShowOpenDialog;
+          (vscode.window as any).showQuickPick = originalShowQuickPick;
+        }
+
+        const activeEditor = vscode.window.activeTextEditor;
+        assert.ok(!activeEditor || activeEditor.document.uri.scheme !== "totonoe-log-merged");
+      }
+    );
+  });
+
+  test("does nothing when a date prompt is dismissed after selecting the date range kind", async () => {
+    const extension = vscode.extensions.getExtension("upu.totonoe-log");
+    await extension!.activate();
+
+    await withTempLogFiles(
+      { "app.log": "2024-01-02T03:04:05Z INFO starting" },
+      async (paths) => {
+        const originalShowOpenDialog = vscode.window.showOpenDialog;
+        (vscode.window as any).showOpenDialog = async () => [vscode.Uri.file(paths["app.log"])];
+
+        const restoreQuickPick = installFilterKindQuickPickMock(["日付範囲"]);
+        const originalShowInputBox = vscode.window.showInputBox;
+        (vscode.window as any).showInputBox = async () => undefined;
+
+        try {
+          await vscode.commands.executeCommand("totonoeLog.showMergedViewFiltered");
+        } finally {
+          (vscode.window as any).showOpenDialog = originalShowOpenDialog;
+          restoreQuickPick();
+          (vscode.window as any).showInputBox = originalShowInputBox;
+        }
+
+        const activeEditor = vscode.window.activeTextEditor;
+        assert.ok(!activeEditor || activeEditor.document.uri.scheme !== "totonoe-log-merged");
+      }
+    );
+  });
+
+  test("does nothing when the ignore pattern prompt is dismissed after selecting the ignore pattern kind", async () => {
+    const extension = vscode.extensions.getExtension("upu.totonoe-log");
+    await extension!.activate();
+
+    await withTempLogFiles(
+      { "app.log": "2024-01-02T03:04:05Z INFO starting" },
+      async (paths) => {
+        const originalShowOpenDialog = vscode.window.showOpenDialog;
+        (vscode.window as any).showOpenDialog = async () => [vscode.Uri.file(paths["app.log"])];
+
+        const restoreQuickPick = installFilterKindQuickPickMock(["無視パターン"]);
+        const originalShowInputBox = vscode.window.showInputBox;
+        (vscode.window as any).showInputBox = async () => undefined;
+
+        try {
+          await vscode.commands.executeCommand("totonoeLog.showMergedViewFiltered");
+        } finally {
+          (vscode.window as any).showOpenDialog = originalShowOpenDialog;
+          restoreQuickPick();
+          (vscode.window as any).showInputBox = originalShowInputBox;
+        }
+
+        const activeEditor = vscode.window.activeTextEditor;
+        assert.ok(!activeEditor || activeEditor.document.uri.scheme !== "totonoe-log-merged");
+      }
+    );
+  });
+});
+
 suite("Totonoe Log merge selected files (explorer context menu)", () => {
   test("registers the mergeSelectedFiles command", async () => {
     const extension = vscode.extensions.getExtension("upu.totonoe-log");

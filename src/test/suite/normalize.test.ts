@@ -16,6 +16,7 @@ import {
   filterEntriesByDateRange,
   filterEntriesByIgnorePattern,
   filterEntriesByCriteria,
+  filterMergedEntriesByCriteria,
 } from "../../normalize";
 
 suite("normalize / parseLog", () => {
@@ -1134,5 +1135,118 @@ suite("normalize / formatMergedLog", () => {
 
   test("returns an empty string for no entries", () => {
     assert.strictEqual(formatMergedLog([]), "");
+  });
+});
+
+suite("normalize / filterMergedEntriesByCriteria", () => {
+  /** テストの意図（絞り込み結果の検証）を明確にするための、成功時のみ通すヘルパー。 */
+  async function filterOk(
+    mergedEntries: Parameters<typeof filterMergedEntriesByCriteria>[0],
+    criteria: Parameters<typeof filterMergedEntriesByCriteria>[1]
+  ) {
+    const result = await filterMergedEntriesByCriteria(mergedEntries, criteria);
+    assert.strictEqual(result.ok, true);
+    if (!result.ok) {
+      throw new Error("unreachable");
+    }
+    return result.entries;
+  }
+
+  const sampleMerged = mergeLogFiles([
+    { fileName: "app.log", text: "2024-01-02T03:04:05Z INFO in range but wrong severity" },
+    {
+      fileName: "database_20240101.log",
+      text: [
+        "2024-01-01T00:00:00Z ERROR before range",
+        "2024-01-02T03:04:06Z ERROR in range and matching",
+        "2024-01-02T03:04:07Z ERROR heartbeat noise",
+        "2024-01-03T00:00:00Z ERROR after range",
+      ].join("\n"),
+    },
+  ]);
+
+  test("returns every merged entry unchanged when no criteria are specified", async () => {
+    const filtered = await filterOk(sampleMerged, {});
+
+    assert.strictEqual(filtered.length, sampleMerged.length);
+  });
+
+  test("keeps fileName/kind alongside the entry after filtering by severity", async () => {
+    const filtered = await filterOk(sampleMerged, { severities: new Set(["INFO"]) });
+
+    assert.strictEqual(filtered.length, 1);
+    assert.strictEqual(filtered[0].entry.message, "in range but wrong severity");
+    assert.strictEqual(filtered[0].fileName, "app.log");
+    assert.strictEqual(filtered[0].kind, "app");
+  });
+
+  test("applies only the date range filter when only a date range is specified", async () => {
+    const filtered = await filterOk(sampleMerged, {
+      dateRange: {
+        startMs: Date.UTC(2024, 0, 2, 0, 0, 0),
+        endMs: Date.UTC(2024, 0, 2, 23, 59, 59),
+      },
+    });
+
+    assert.strictEqual(filtered.length, 3);
+  });
+
+  test("applies only the ignore pattern filter when only a pattern is specified", async () => {
+    const filtered = await filterOk(sampleMerged, { ignorePattern: /heartbeat/ });
+
+    assert.strictEqual(filtered.length, sampleMerged.length - 1);
+    assert.ok(!filtered.some((merged) => merged.entry.message.includes("heartbeat")));
+  });
+
+  test("combines all three criteria with AND semantics, preserving fileName/kind", async () => {
+    const filtered = await filterOk(sampleMerged, {
+      severities: new Set(["ERROR"]),
+      dateRange: {
+        startMs: Date.UTC(2024, 0, 2, 0, 0, 0),
+        endMs: Date.UTC(2024, 0, 2, 23, 59, 59),
+      },
+      ignorePattern: /heartbeat/,
+    });
+
+    assert.strictEqual(filtered.length, 1);
+    assert.strictEqual(filtered[0].entry.message, "in range and matching");
+    assert.strictEqual(filtered[0].fileName, "database_20240101.log");
+    assert.strictEqual(filtered[0].kind, "database");
+  });
+
+  test("preserves the merged chronological order after filtering", async () => {
+    const filtered = await filterOk(sampleMerged, { severities: new Set(["ERROR", "INFO"]) });
+
+    // sampleMerged はタイムスタンプ順に並べ替え済みのため、期待順もそれに揃える
+    // （ファイル投入順ではなく "before range" が先頭に来る）。
+    assert.deepStrictEqual(
+      filtered.map((merged) => merged.entry.message),
+      [
+        "before range",
+        "in range but wrong severity",
+        "in range and matching",
+        "heartbeat noise",
+        "after range",
+      ]
+    );
+  });
+
+  test("returns an empty array for no merged entries", async () => {
+    const filtered = await filterOk([], { severities: new Set(["ERROR"]) });
+
+    assert.deepStrictEqual(filtered, []);
+  });
+
+  test("propagates a timeout failure from the ignore pattern stage", async () => {
+    const result = await filterMergedEntriesByCriteria(
+      sampleMerged,
+      { ignorePattern: /heartbeat/ },
+      { ignorePatternTimeoutMs: 1 }
+    );
+
+    assert.strictEqual(result.ok, false);
+    if (!result.ok) {
+      assert.strictEqual(result.reason, "timeout");
+    }
   });
 });

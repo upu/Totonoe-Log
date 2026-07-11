@@ -44,6 +44,10 @@ for the current roadmap.
   kind `message`) (`Totonoe Log: Show Merged View`). You can also select two
   or more files in the Explorer and merge them directly from the right-click
   context menu (`Totonoe Log: Merge Selected Files`)
+- Filter the merged view too: pick the files to merge, then combine severity,
+  date/time range, and/or ignore pattern filters in the same multi-select
+  flow as `Show Normalized View Filtered`
+  (`Totonoe Log: Show Merged View Filtered`)
 - Hide entries matching a pattern, always compiled as a regular expression
   (plain text without special regex characters works as a literal substring
   search) to cut noisy lines out of the way
