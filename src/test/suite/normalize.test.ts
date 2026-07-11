@@ -434,18 +434,18 @@ suite("normalize / filterEntriesByIgnorePattern", () => {
   test("terminates and reports a timeout instead of hanging forever on catastrophic backtracking", async function () {
     this.timeout(5000);
 
+    // codeql[js/redos]
+    const catastrophicPattern = /(a+)+b/;
     // 破局的バックトラッキングの典型例（issue #59 に挙げられているものと
-    // 同じ）: `(a+)+b` に、末尾に "b" が無い長い "a" の並びを与えると、
+    // 同じ）: 上記の `(a+)+b` に、末尾に "b" が無い長い "a" の並びを与えると、
     // グループの分割方法の組み合わせ数が入力長に対して指数的に増加し、
-    // 同期的な RegExp#test は現実的な時間内に返らなくなる。
+    // 同期的な RegExp#test は現実的な時間内に返らなくなる（意図的な ReDoS
+    // テストフィクスチャであり、実運用コードで使うパターンではない。
+    // 直前の抑制コメントは CodeQL 公式のインライン抑制構文で、対象行の
+    // 直前にそれ単独で置く必要がある）。
     // アンカー（`^`/`$`）を付けないのは、entry.raw の先頭にはタイムスタンプ
     // 等の接頭辞が乗るため、`^` 始まりだと "a" 以外の文字で即座に不一致
     // 判定されてしまい、狙った箇所でバックトラックが起きなくなるため。
-    // 意図的な ReDoS テストフィクスチャ。実運用コードで直接使う正規表現では
-    // なく、#59 で追加したワーカースレッド + タイムアウトによる保護が実際に
-    // 効くことを検証するためだけに使う。
-    // codeql[js/redos]
-    const catastrophicPattern = /(a+)+b/;
     const text = `2024-01-02T03:04:05Z ERROR ${"a".repeat(40)}`;
     const entries = parseLog(text);
 
