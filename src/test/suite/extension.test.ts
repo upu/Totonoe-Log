@@ -161,7 +161,10 @@ suite("Totonoe Log normalized view filtered by severity", () => {
     );
   });
 
-  test("shows only entries matching the severities picked by the user", async () => {
+  test("shows only entries matching the severities picked by the user", async function () {
+    // 実物のドキュメントを開く操作を伴うため、CI環境の負荷次第で既定の
+    // 2000msを超えることがある（issue #72）。前例に合わせて個別に緩和する。
+    this.timeout(10000);
     const extension = vscode.extensions.getExtension("upu.totonoe-log");
     await extension!.activate();
 
@@ -193,7 +196,10 @@ suite("Totonoe Log normalized view filtered by severity", () => {
     );
   });
 
-  test("does nothing when the severity picker is dismissed", async () => {
+  test("does nothing when the severity picker is dismissed", async function () {
+    // 実物のドキュメントを開く操作を伴うため、CI環境の負荷次第で既定の
+    // 2000msを超えることがある（issue #72）。前例に合わせて個別に緩和する。
+    this.timeout(10000);
     const extension = vscode.extensions.getExtension("upu.totonoe-log");
     await extension!.activate();
 
