@@ -8,7 +8,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
-## [0.2.1] - 2026-07-11
+### Fixed
+
+- Fix year-less syslog timestamps (`MMM d HH:mm:ss`) being interpreted with
+  the wrong year when a log crosses a year boundary. Instead of always
+  assuming the current year, the parser now rolls the assumed year back by
+  one when that interpretation would land more than 24 hours in the future
+  (e.g. a "Dec 31" entry opened in January 2026 is now read as 2025), the
+  same heuristic used by common syslog implementations. This corrects the
+  timestamps shown in the normalized view, date-range filtering, and the
+  chronological order of the merged view for year-crossing logs. Explicitly
+  passing `assumedYear` still forces that year, as before.
 
 ### Added
 

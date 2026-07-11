@@ -92,18 +92,41 @@ export const BRACKETED_ISO_8601_FORMAT: TimestampFormat = {
 export interface SyslogFormatOptions {
   /**
    * 年を省略している従来の syslog タイムスタンプ（`MMM d HH:mm:ss`）に
-   * 補完する暦年。省略時は現在の年を使う。
+   * 補完する暦年。指定すると年推定ヒューリスティックを使わず常にこの年を使う。
+   * 省略時は {@link referenceTimeMs} を基準にログ行ごとに年を推定する
+   * （{@link createSyslogFormat} 参照）。
    */
   readonly assumedYear?: number;
+
+  /**
+   * 年推定の基準時刻（エポックミリ秒）。省略時は現在時刻（`Date.now()`）。
+   * 主にテストで推定結果を決定的にするために指定する。
+   */
+  readonly referenceTimeMs?: number;
 }
 
 /**
+ * 年推定で「未来のタイムスタンプ」とみなさない猶予。ログを書いたマシンの
+ * 時計がホストより少し進んでいるだけのケースを、1年前のログと誤認しない
+ * ための余裕（rsyslog 等の実装と同趣旨のクロックスキュー対策）。
+ */
+const FUTURE_TOLERANCE_MS = 24 * 60 * 60 * 1000;
+
+/**
  * 年を含まない従来の syslog タイムスタンプ。例: `Jan  1 00:00:00`。
- * フォーマット自体に年がないため、呼び出し側が補完する必要がある
- *（省略時は現在の年）。
+ * フォーマット自体に年がないため、年は次の規則で補完する:
+ *
+ * - `assumedYear` が指定されていれば常にその年を使う（従来どおり）。
+ * - 省略時は基準時刻（`referenceTimeMs`、既定は現在時刻）の UTC 年を仮定し、
+ *   その解釈が基準時刻より {@link FUTURE_TOLERANCE_MS} を超えて未来になる
+ *   場合は1年繰り下げる（例: 2026年1月に開いた「Dec 31」は2025年と推定）。
+ *   多くの syslog パーサが使う年またぎヒューリスティックと同じ方式。
+ *   基準年では存在しない日付（平年の Feb 29）も前年で解釈を試みる。
  */
 export function createSyslogFormat(options: SyslogFormatOptions = {}): TimestampFormat {
-  const assumedYear = options.assumedYear ?? new Date().getFullYear();
+  const referenceTimeMs = options.referenceTimeMs ?? Date.now();
+  // タイムスタンプは常に UTC として解釈するため、基準年も UTC で取る。
+  const referenceYear = new Date(referenceTimeMs).getUTCFullYear();
   return {
     name: "syslog",
     regex: /^(?<mon>[A-Za-z]{3})\s+(?<d>\d{1,2})\s(?<h>\d{2}):(?<mi>\d{2}):(?<s>\d{2})/,
@@ -113,14 +136,32 @@ export function createSyslogFormat(options: SyslogFormatOptions = {}): Timestamp
       if (month === undefined) {
         return undefined;
       }
-      return isoLikeGroupsToEpochMs({
-        y: String(assumedYear),
-        mo: String(month + 1).padStart(2, "0"),
-        d: groups.d,
-        h: groups.h,
-        mi: groups.mi,
-        s: groups.s,
-      });
+      const toEpochMs = (year: number): number | undefined =>
+        isoLikeGroupsToEpochMs({
+          y: String(year),
+          mo: String(month + 1).padStart(2, "0"),
+          d: groups.d,
+          h: groups.h,
+          mi: groups.mi,
+          s: groups.s,
+        });
+
+      if (options.assumedYear !== undefined) {
+        return toEpochMs(options.assumedYear);
+      }
+
+      const currentYearMs = toEpochMs(referenceYear);
+      if (currentYearMs === undefined) {
+        // 基準年では存在しない日付（平年の Feb 29 など）。前年なら存在する
+        // 可能性があるため試す（前年も不正なら undefined のまま）。
+        return toEpochMs(referenceYear - 1);
+      }
+      if (currentYearMs > referenceTimeMs + FUTURE_TOLERANCE_MS) {
+        // 前年でも不正な日付（閏年の Feb 29 を未来と判定した場合など）は、
+        // 未来ではあっても有効な基準年の解釈を残す。
+        return toEpochMs(referenceYear - 1) ?? currentYearMs;
+      }
+      return currentYearMs;
     },
   };
 }

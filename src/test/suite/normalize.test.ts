@@ -62,6 +62,53 @@ suite("normalize / parseLog", () => {
     assert.strictEqual(entry.message, "host myapp: something happened");
   });
 
+  test("rolls a default-year syslog timestamp back one year when it would be in the future", () => {
+    // 実行時点が2026年1月15日のとき「Dec 31」を2026年と解釈すると未来になるため、
+    // 2025年（前年）のログと推定する。
+    const [entry] = parseLog("Dec 31 23:59:59 host myapp: year rollover", {
+      timestampFormats: [createSyslogFormat({ referenceTimeMs: Date.UTC(2026, 0, 15) })],
+    });
+
+    assert.strictEqual(entry.matched, true);
+    assert.strictEqual(entry.timestampMs, Date.UTC(2025, 11, 31, 23, 59, 59));
+  });
+
+  test("keeps the reference year for a default-year syslog timestamp in the past", () => {
+    const [entry] = parseLog("Jan  2 03:04:05 host myapp: hello", {
+      timestampFormats: [createSyslogFormat({ referenceTimeMs: Date.UTC(2026, 0, 15) })],
+    });
+
+    assert.strictEqual(entry.timestampMs, Date.UTC(2026, 0, 2, 3, 4, 5));
+  });
+
+  test("keeps the reference year for a slightly-future timestamp within clock-skew tolerance", () => {
+    // ログを書いたマシンの時計が少し進んでいるだけのケースを、1年前と誤認しない。
+    const [entry] = parseLog("Jan 15 13:00:00 host myapp: skewed clock", {
+      timestampFormats: [createSyslogFormat({ referenceTimeMs: Date.UTC(2026, 0, 15, 12, 0, 0) })],
+    });
+
+    assert.strictEqual(entry.timestampMs, Date.UTC(2026, 0, 15, 13, 0, 0));
+  });
+
+  test("an explicit assumedYear bypasses the future-rollback heuristic", () => {
+    const [entry] = parseLog("Dec 31 23:59:59 host myapp: explicit year", {
+      timestampFormats: [
+        createSyslogFormat({ assumedYear: 2030, referenceTimeMs: Date.UTC(2026, 0, 15) }),
+      ],
+    });
+
+    assert.strictEqual(entry.timestampMs, Date.UTC(2030, 11, 31, 23, 59, 59));
+  });
+
+  test("resolves Feb 29 against the previous year when the reference year is not a leap year", () => {
+    const [entry] = parseLog("Feb 29 12:00:00 host myapp: leap day", {
+      timestampFormats: [createSyslogFormat({ referenceTimeMs: Date.UTC(2025, 0, 15) })],
+    });
+
+    assert.strictEqual(entry.matched, true);
+    assert.strictEqual(entry.timestampMs, Date.UTC(2024, 1, 29, 12, 0, 0));
+  });
+
   test("groups multi-line stack traces into the preceding entry", () => {
     const text = [
       "2024-01-02T03:04:05Z ERROR Unhandled exception",
@@ -261,6 +308,23 @@ suite("normalize / filterEntriesByDateRange", () => {
     const onlyEnd = filterEntriesByDateRange(entries, { endMs: Date.UTC(2024, 0, 3) });
     assert.strictEqual(onlyEnd.length, 1);
     assert.strictEqual(onlyEnd[0].message, "first");
+  });
+
+  test("filterEntriesByDateRange judges year-crossing syslog entries by their inferred years", () => {
+    // 2026年1月に開いた、年境界をまたぐ syslog ログ。「Dec 31」は2025年、
+    // 「Jan  1」は2026年と推定されるため、2026年以降の範囲指定で後者だけが残る。
+    const text = [
+      "Dec 31 23:00:00 host app: last year",
+      "Jan  1 01:00:00 host app: this year",
+    ].join("\n");
+    const entries = parseLog(text, {
+      timestampFormats: [createSyslogFormat({ referenceTimeMs: Date.UTC(2026, 0, 15) })],
+    });
+
+    const filtered = filterEntriesByDateRange(entries, { startMs: Date.UTC(2026, 0, 1) });
+
+    assert.strictEqual(filtered.length, 1);
+    assert.strictEqual(filtered[0].message, "host app: this year");
   });
 
   test("filterEntriesByDateRange excludes entries without a recognized timestamp", () => {
@@ -695,6 +759,25 @@ suite("normalize / mergeLogFiles", () => {
     assert.deepStrictEqual(
       merged.map((m) => m.entry.message),
       ["a-real", "b-real", "banner A", "banner B"]
+    );
+  });
+
+  test("merges year-crossing syslog files into true chronological order", () => {
+    // 2026年1月に、12月分と1月分の syslog ファイルをマージするケース。
+    // 年推定により「Dec 31」（2025年）が「Jan  1」（2026年）より前に並ぶ。
+    const merged = mergeLogFiles(
+      [
+        { fileName: "jan.log", text: "Jan  1 00:30:00 host app: january" },
+        { fileName: "dec.log", text: "Dec 31 23:30:00 host app: december" },
+      ],
+      {
+        timestampFormats: [createSyslogFormat({ referenceTimeMs: Date.UTC(2026, 0, 15) })],
+      }
+    );
+
+    assert.deepStrictEqual(
+      merged.map((m) => m.entry.message),
+      ["host app: december", "host app: january"]
     );
   });
 
