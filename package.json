@@ -84,7 +84,7 @@
         "totonoeLog.copyMasked.maskHost": {
           "type": "boolean",
           "default": true,
-          "description": "Totonoe Log: Copy Masked Text 実行時にIPv4アドレスと、syslog形式として認識できた行のホスト名トークンをマスクする（任意の形式のホスト名全般ではない）。"
+          "description": "Totonoe Log: Copy Masked Text 実行時にIPv4/IPv6アドレスと、syslog形式として認識できた行のホスト名トークンをマスクする（任意の形式のホスト名全般ではない）。"
         },
         "totonoeLog.collapse.threshold": {
           "type": "number",

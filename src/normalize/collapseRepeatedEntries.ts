@@ -1,5 +1,5 @@
 import type { LogEntry } from "./types";
-import { maskIpv4Addresses } from "./maskForCompare";
+import { maskHostAddresses } from "./maskForCompare";
 
 /** 折りたたみ判定のしきい値の既定値。この回数以上連続で繰り返されたら折りたたむ。 */
 export const DEFAULT_COLLAPSE_THRESHOLD = 3;
@@ -25,14 +25,14 @@ export type CollapsedItem =
 
 /**
  * 繰り返し検出の一致判定に使うキーを作る。タイムスタンプは {@link LogEntry.message}
- * に含まれないため比較対象から自然に除外される。IPv4アドレスはホストごとの
- * 差異を無視できるよう、比較前にマスクする（{@link maskIpv4Addresses}、
+ * に含まれないため比較対象から自然に除外される。IPv4/IPv6アドレスはホストごとの
+ * 差異を無視できるよう、比較前にマスクする（{@link maskHostAddresses}、
  * 日付・ホスト情報が異なる2つのログを比較する機能とマスクロジックを共有）。
  * JSON化することで、フィールド同士の意図しない結合（区切り文字の衝突）を
  * 避ける。
  */
 function groupingKey(entry: LogEntry): string {
-  return JSON.stringify([entry.matched, entry.severity ?? "", maskIpv4Addresses(entry.message)]);
+  return JSON.stringify([entry.matched, entry.severity ?? "", maskHostAddresses(entry.message)]);
 }
 
 /**

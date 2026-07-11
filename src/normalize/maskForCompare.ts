@@ -1,3 +1,4 @@
+import { isIPv6 } from "node:net";
 import type { LogEntry } from "./types";
 import { computeMaxLineNumber, formatGutter } from "./gutter";
 
@@ -13,15 +14,31 @@ const HOST_PLACEHOLDER = "<HOST>";
 const IPV4_OCTET = "(?:25[0-5]|2[0-4][0-9]|1[0-9]{2}|[1-9]?[0-9])";
 const IPV4_REGEX = new RegExp(`\\b${IPV4_OCTET}(?:\\.${IPV4_OCTET}){3}\\b`, "g");
 
+// IPv6は `::` による省略やゾーンID（`%eth0`）などで表記の幅が広く、正規表現
+// だけで正確に構文検証するのは複雑になりやすい。ここでは16進数とコロンから
+// なる「それらしい」候補トークンを緩く抽出し、候補ごとにNode.jsの
+// `net.isIPv6` で正当性を検証する二段構えにする。`03:04:05` のような時刻
+// 表記や `00:1a:2b:3c:4d:5e` のようなMACアドレスも候補としては拾うが、
+// どちらも `net.isIPv6` が false を返すため誤マスクしない。前後がホスト名の
+// 一部を切り出したものにならないよう、英数字・コロンに隣接する位置では
+// 候補を開始/終了させない。
+const IPV6_CANDIDATE_REGEX =
+  /(?<![0-9a-zA-Z:])(?:[0-9a-fA-F]{0,4}:){2,7}[0-9a-fA-F]{0,4}(?:%[0-9A-Za-z]+)?(?![0-9a-zA-Z:])/g;
+
 /**
- * メッセージ中のIPv4アドレスをプレースホルダーに置き換える。
- * ドット区切りの一般的な文字列（クラス名・バージョン番号等）まで
+ * メッセージ中のIPv4/IPv6アドレスをプレースホルダーに置き換える。
+ * IPv4はドット区切りの一般的な文字列（クラス名・バージョン番号等）まで
  * ホスト名とみなして誤マスクしないよう、数字のみのIPv4パターンに限定する。
+ * IPv6は {@link IPV6_CANDIDATE_REGEX} で候補を抽出したうえで `net.isIPv6`
+ * により正当性を検証し、時刻表記等を誤マスクしないようにする。
  * 比較ビュー・コピー機能に加え、繰り返し検出（{@link collapseRepeatedEntries}）
  * が可変部分を除いた一致判定を行う際にも使う。
  */
-export function maskIpv4Addresses(text: string): string {
-  return text.replace(IPV4_REGEX, HOST_PLACEHOLDER);
+export function maskHostAddresses(text: string): string {
+  const withIpv4Masked = text.replace(IPV4_REGEX, HOST_PLACEHOLDER);
+  return withIpv4Masked.replace(IPV6_CANDIDATE_REGEX, (candidate) =>
+    isIPv6(candidate) ? HOST_PLACEHOLDER : candidate
+  );
 }
 
 /**
@@ -31,7 +48,7 @@ export function maskIpv4Addresses(text: string): string {
  * - 認識できたタイムスタンプは、実際の値ではなく固定のプレースホルダーに
  *   置き換える（対応するイベントが起きた時刻が異なるだけでdiffに現れて
  *   しまわないようにする）。
- * - メッセージ中のIPv4アドレスはプレースホルダーに置き換える。
+ * - メッセージ中のIPv4/IPv6アドレスはプレースホルダーに置き換える。
  * - syslog形式（RFC3164）はタイムスタンプの直後に必ずホスト名が来るため、
  *   そのフォーマットで認識したエントリに限り先頭トークンをホスト名として
  *   マスクする。他の形式ではスタックトレースのクラス名（`Foo.java`等）を
@@ -44,7 +61,7 @@ export function formatMaskedLogForCompare(entries: readonly LogEntry[]): string 
   const outputLines: string[] = [];
 
   for (const entry of entries) {
-    const messageLines = entry.message.split("\n").map(maskIpv4Addresses);
+    const messageLines = entry.message.split("\n").map(maskHostAddresses);
 
     if (entry.matched && entry.timestampFormat === "syslog") {
       messageLines[0] = messageLines[0].replace(/^\S+/, HOST_PLACEHOLDER);
@@ -67,7 +84,7 @@ export function formatMaskedLogForCompare(entries: readonly LogEntry[]): string 
 export interface MaskForCopyOptions {
   /** タイムスタンプをマスクするかどうか。省略時は true。 */
   readonly maskTimestamp?: boolean;
-  /** IPv4アドレス・syslogホスト名をマスクするかどうか。省略時は true。 */
+  /** IPv4/IPv6アドレス・syslogホスト名をマスクするかどうか。省略時は true。 */
   readonly maskHost?: boolean;
 }
 
@@ -103,7 +120,7 @@ export function maskLogTextForCopy(
     }
 
     for (const line of lines) {
-      outputLines.push(maskHost ? maskIpv4Addresses(line) : line);
+      outputLines.push(maskHost ? maskHostAddresses(line) : line);
     }
   }
 
