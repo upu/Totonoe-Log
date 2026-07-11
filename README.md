@@ -37,7 +37,9 @@ for the current roadmap.
   (`Totonoe Log: Show Collapsed View`)
 - Merge multiple log files by timestamp for cross-file investigation, with
   source file name / file "kind" columns (e.g. `message_20240101.log` →
-  kind `message`) (`Totonoe Log: Show Merged View`)
+  kind `message`) (`Totonoe Log: Show Merged View`). You can also select two
+  or more files in the Explorer and merge them directly from the right-click
+  context menu (`Totonoe Log: Merge Selected Files`)
 - Hide entries matching a pattern, always compiled as a regular expression
   (plain text without special regex characters works as a literal substring
   search) to cut noisy lines out of the way

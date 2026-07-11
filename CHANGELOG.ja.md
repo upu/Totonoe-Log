@@ -8,6 +8,13 @@
 
 ## [Unreleased]
 
+### Added
+
+- エクスプローラの右クリックコンテキストメニューに `Totonoe Log: Merge
+  Selected Files` コマンドを追加。ファイルを2つ以上選択しているときに表示され、
+  ファイル選択ダイアログを経由せず、`Show Merged View` と同じ時系列マージ処理で
+  選択したファイルを直接マージする。選択範囲にフォルダが混ざっていても無視する。
+
 ### Fixed
 
 - `Compare Logs` / `Copy Masked Text` で IPv6 アドレスがマスクされない問題を

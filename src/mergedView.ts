@@ -30,10 +30,34 @@ async function readLogFiles(fileUris: readonly vscode.Uri[]): Promise<LogFileInp
 }
 
 /**
+ * 指定されたファイル群を時系列順にマージし、読み取り専用の仮想ドキュメントとして
+ * 開く。ファイル選択ダイアログ経由・エクスプローラのコンテキストメニュー経由の
+ * どちらのコマンドからも共通で使う本体処理。ファイルごとの日時フォーマットが
+ * 違っても、正規化エンジンが共通のタイムスタンプに変換するため正しく時系列に並ぶ。
+ */
+async function openMergedView(
+  provider: MergedViewContentProvider,
+  fileUris: readonly vscode.Uri[]
+): Promise<void> {
+  const files = await readLogFiles(fileUris);
+  const mergedEntries = mergeLogFiles(files);
+  const content = formatMergedLog(mergedEntries);
+
+  mergedViewCounter += 1;
+  const uri = vscode.Uri.from({
+    scheme: MERGED_VIEW_SCHEME,
+    path: `/merged-${mergedViewCounter}.log`,
+  });
+
+  provider.register(uri, content);
+
+  const mergedDocument = await vscode.workspace.openTextDocument(uri);
+  await vscode.window.showTextDocument(mergedDocument, { preview: false });
+}
+
+/**
  * ファイル選択ダイアログで、マージ対象のログファイルを複数選ばせ、時系列
  * 順にマージした読み取り専用の仮想ドキュメントとして開くコマンドの本体。
- * ファイルごとの日時フォーマットが違っても、正規化エンジンが共通の
- * タイムスタンプに変換するため正しく時系列に並ぶ。
  */
 export function createShowMergedViewCommand(
   provider: MergedViewContentProvider
@@ -49,19 +73,47 @@ export function createShowMergedViewCommand(
       return;
     }
 
-    const files = await readLogFiles(fileUris);
-    const mergedEntries = mergeLogFiles(files);
-    const content = formatMergedLog(mergedEntries);
+    await openMergedView(provider, fileUris);
+  };
+}
 
-    mergedViewCounter += 1;
-    const uri = vscode.Uri.from({
-      scheme: MERGED_VIEW_SCHEME,
-      path: `/merged-${mergedViewCounter}.log`,
-    });
+/** フォルダを除いたファイルの URI だけを残す。 */
+async function filterOutFolders(uris: readonly vscode.Uri[]): Promise<vscode.Uri[]> {
+  const files: vscode.Uri[] = [];
+  for (const uri of uris) {
+    const stat = await vscode.workspace.fs.stat(uri);
+    if ((stat.type & vscode.FileType.Directory) === 0) {
+      files.push(uri);
+    }
+  }
+  return files;
+}
 
-    provider.register(uri, content);
+/**
+ * エクスプローラで複数選択したログファイルを、ファイル選択ダイアログを
+ * 経由せずに直接マージするコマンドの本体。VSCode はエクスプローラの
+ * コンテキストメニューコマンドに `(クリックされた項目, 選択項目全体の配列)`
+ * を渡すため、`selectedUris` を優先して使い、単一クリック時のフォールバックと
+ * して `clickedUri` を使う。選択範囲にフォルダが混ざっていても無視して続行する。
+ */
+export function createMergeSelectedFilesCommand(
+  provider: MergedViewContentProvider
+): (clickedUri: vscode.Uri, selectedUris?: vscode.Uri[]) => Promise<void> {
+  return async function mergeSelectedFiles(
+    clickedUri: vscode.Uri,
+    selectedUris?: vscode.Uri[]
+  ): Promise<void> {
+    const candidateUris =
+      selectedUris && selectedUris.length > 0 ? selectedUris : clickedUri ? [clickedUri] : [];
+    const fileUris = await filterOutFolders(candidateUris);
 
-    const mergedDocument = await vscode.workspace.openTextDocument(uri);
-    await vscode.window.showTextDocument(mergedDocument, { preview: false });
+    if (fileUris.length < 2) {
+      await vscode.window.showWarningMessage(
+        "マージするには2つ以上のログファイルを選択してください。"
+      );
+      return;
+    }
+
+    await openMergedView(provider, fileUris);
   };
 }

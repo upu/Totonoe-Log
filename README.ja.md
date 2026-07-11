@@ -37,7 +37,9 @@ Normalize, merge, filter, collapse, and compare messy logs.
   （`Totonoe Log: Show Collapsed View`）
 - 複数のログファイルを日時ベースでマージし、ファイルを横断した調査を可能に。
   ファイル名・ファイル「種類」列付き（例: `message_20240101.log` → 種類
-  `message`）（`Totonoe Log: Show Merged View`）
+  `message`）（`Totonoe Log: Show Merged View`）。エクスプローラで2つ以上の
+  ファイルを選択し、右クリックのコンテキストメニューから直接マージすることも
+  できる（`Totonoe Log: Merge Selected Files`）
 - パターン（常に正規表現として解釈される。メタ文字を含まない文字列は
   部分一致の検索として動作）にマッチするエントリを非表示にし、ノイズと
   なる行を調査の邪魔にならないようにする
