@@ -1,9 +1,13 @@
 import * as vscode from "vscode";
 import { parseLog, formatMaskedLogForCompare } from "./normalize";
-import { VirtualDocumentContentProvider } from "./virtualDocumentContentProvider";
+import {
+  VirtualDocumentContentProvider,
+  COMPARE_VIEW_SCHEME,
+} from "./virtualDocumentContentProvider";
 
-/** 比較ビュー用の仮想ドキュメントに割り当てる URI スキーム。 */
-export const COMPARE_VIEW_SCHEME = "totonoe-log-compare";
+// スキーム定義は virtualDocumentContentProvider.ts に集約している
+// （既存の import 元を変えずに済むよう、ここから再エクスポートする）。
+export { COMPARE_VIEW_SCHEME };
 
 /** 比較ビュー用の {@link vscode.TextDocumentContentProvider}。 */
 export class CompareViewContentProvider extends VirtualDocumentContentProvider {

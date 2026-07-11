@@ -1097,3 +1097,332 @@ suite("Totonoe Log merged view", () => {
     assert.notStrictEqual(activeEditor!.document.uri.scheme, "totonoe-log-merged");
   });
 });
+
+suite("Totonoe Log virtual document guard", () => {
+  test("isTotonoeLogVirtualDocument recognizes the normalized, merged, and compare schemes", async () => {
+    const { isTotonoeLogVirtualDocument } = await import("../../virtualDocumentContentProvider");
+
+    const schemes = ["totonoe-log-normalized", "totonoe-log-merged", "totonoe-log-compare"];
+    for (const scheme of schemes) {
+      const fakeDocument = { uri: vscode.Uri.parse(`${scheme}:/sample.log`) } as vscode.TextDocument;
+      assert.ok(
+        isTotonoeLogVirtualDocument(fakeDocument),
+        `${scheme} should be recognized as a Totonoe Log virtual document`
+      );
+    }
+
+    const ordinaryDocument = { uri: vscode.Uri.parse("untitled:not-a-view") } as vscode.TextDocument;
+    assert.strictEqual(isTotonoeLogVirtualDocument(ordinaryDocument), false);
+  });
+
+  test("guardAgainstVirtualDocumentSource warns and returns true only for Totonoe Log's own schemes", async () => {
+    const { guardAgainstVirtualDocumentSource } = await import(
+      "../../virtualDocumentContentProvider"
+    );
+
+    const originalShowWarningMessage = vscode.window.showWarningMessage;
+    let warningMessage: string | undefined;
+    (vscode.window as any).showWarningMessage = async (message: string) => {
+      warningMessage = message;
+      return undefined;
+    };
+
+    try {
+      const virtualDocument = {
+        uri: vscode.Uri.parse("totonoe-log-merged:/sample.log"),
+      } as vscode.TextDocument;
+      assert.strictEqual(guardAgainstVirtualDocumentSource(virtualDocument), true);
+      assert.ok(warningMessage?.includes("元のログファイルに対して実行してください"));
+
+      warningMessage = undefined;
+      const ordinaryDocument = { uri: vscode.Uri.parse("untitled:not-a-view") } as vscode.TextDocument;
+      assert.strictEqual(guardAgainstVirtualDocumentSource(ordinaryDocument), false);
+      assert.strictEqual(warningMessage, undefined);
+    } finally {
+      (vscode.window as any).showWarningMessage = originalShowWarningMessage;
+    }
+  });
+
+  test("re-running Show Normalized View against an already-open normalized view warns and opens nothing new", async () => {
+    const extension = vscode.extensions.getExtension("upu.totonoe-log");
+    await extension!.activate();
+
+    const source = await vscode.workspace.openTextDocument({
+      content: "2024-01-02T03:04:05Z INFO starting",
+      language: "log",
+    });
+    await vscode.window.showTextDocument(source);
+    await vscode.commands.executeCommand("workbench.action.closeOtherEditors");
+
+    await vscode.commands.executeCommand("totonoeLog.showNormalizedView");
+    const normalizedUri = vscode.window.activeTextEditor?.document.uri.toString();
+    assert.strictEqual(vscode.window.activeTextEditor?.document.uri.scheme, "totonoe-log-normalized");
+
+    const originalShowWarningMessage = vscode.window.showWarningMessage;
+    let warningMessage: string | undefined;
+    (vscode.window as any).showWarningMessage = async (message: string) => {
+      warningMessage = message;
+      return undefined;
+    };
+
+    try {
+      await vscode.commands.executeCommand("totonoeLog.showNormalizedView");
+    } finally {
+      (vscode.window as any).showWarningMessage = originalShowWarningMessage;
+    }
+
+    assert.ok(
+      warningMessage?.includes("元のログファイルに対して実行してください"),
+      "a warning should be shown when the source is Totonoe Log's own view"
+    );
+    assert.strictEqual(
+      vscode.window.activeTextEditor?.document.uri.toString(),
+      normalizedUri,
+      "no new virtual document should have been opened"
+    );
+  });
+
+  test("filter commands warn and open nothing new when a normalized view is active", async () => {
+    const extension = vscode.extensions.getExtension("upu.totonoe-log");
+    await extension!.activate();
+
+    const source = await vscode.workspace.openTextDocument({
+      content: "2024-01-02T03:04:05Z INFO starting",
+      language: "log",
+    });
+    await vscode.window.showTextDocument(source);
+    await vscode.commands.executeCommand("workbench.action.closeOtherEditors");
+
+    await vscode.commands.executeCommand("totonoeLog.showNormalizedView");
+    const normalizedUri = vscode.window.activeTextEditor?.document.uri.toString();
+    assert.strictEqual(vscode.window.activeTextEditor?.document.uri.scheme, "totonoe-log-normalized");
+
+    const guardedCommands = [
+      "totonoeLog.showNormalizedViewFilteredBySeverity",
+      "totonoeLog.showNormalizedViewFilteredByDateRange",
+      "totonoeLog.showNormalizedViewFilteredByDateRangeAndSeverity",
+      "totonoeLog.showNormalizedViewFilteredByIgnorePattern",
+      "totonoeLog.showCollapsedView",
+    ];
+
+    const originalShowWarningMessage = vscode.window.showWarningMessage;
+    // 絞り込み系コマンドはガードで早期リターンする前提だが、万一ガードが
+    // 効かずにピッカーへ進んだ場合にテストがハングしないよう、
+    // showQuickPick / showInputBox もあわせてキャンセル相当にしておく。
+    const originalShowQuickPick = vscode.window.showQuickPick;
+    const originalShowInputBox = vscode.window.showInputBox;
+    (vscode.window as any).showQuickPick = async () => undefined;
+    (vscode.window as any).showInputBox = async () => undefined;
+
+    try {
+      for (const command of guardedCommands) {
+        let warningMessage: string | undefined;
+        (vscode.window as any).showWarningMessage = async (message: string) => {
+          warningMessage = message;
+          return undefined;
+        };
+
+        await vscode.commands.executeCommand(command);
+
+        assert.ok(
+          warningMessage?.includes("元のログファイルに対して実行してください"),
+          `${command} should warn when the active editor is a normalized view`
+        );
+        assert.strictEqual(
+          vscode.window.activeTextEditor?.document.uri.toString(),
+          normalizedUri,
+          `${command} should not open a new view`
+        );
+      }
+    } finally {
+      (vscode.window as any).showWarningMessage = originalShowWarningMessage;
+      (vscode.window as any).showQuickPick = originalShowQuickPick;
+      (vscode.window as any).showInputBox = originalShowInputBox;
+    }
+  });
+
+  test("copyMaskedText warns and leaves the clipboard untouched when a collapsed view is active", async () => {
+    const extension = vscode.extensions.getExtension("upu.totonoe-log");
+    await extension!.activate();
+
+    const source = await vscode.workspace.openTextDocument({
+      content: [
+        "2024-01-02T03:04:05Z INFO connect ok",
+        "2024-01-02T03:04:06Z INFO connect ok",
+        "2024-01-02T03:04:07Z INFO connect ok",
+      ].join("\n"),
+      language: "log",
+    });
+    await vscode.window.showTextDocument(source);
+    await vscode.commands.executeCommand("workbench.action.closeOtherEditors");
+
+    await vscode.commands.executeCommand("totonoeLog.showCollapsedView");
+    assert.strictEqual(vscode.window.activeTextEditor?.document.uri.scheme, "totonoe-log-normalized");
+
+    const sentinel = "sentinel-before-guarded-copy";
+    await vscode.env.clipboard.writeText(sentinel);
+
+    const originalShowWarningMessage = vscode.window.showWarningMessage;
+    let warningMessage: string | undefined;
+    (vscode.window as any).showWarningMessage = async (message: string) => {
+      warningMessage = message;
+      return undefined;
+    };
+
+    try {
+      await vscode.commands.executeCommand("totonoeLog.copyMaskedText");
+    } finally {
+      (vscode.window as any).showWarningMessage = originalShowWarningMessage;
+    }
+
+    assert.ok(
+      warningMessage?.includes("元のログファイルに対して実行してください"),
+      "a warning should be shown when copying from a collapsed view"
+    );
+    assert.strictEqual(
+      await vscode.env.clipboard.readText(),
+      sentinel,
+      "the clipboard should not be overwritten"
+    );
+  });
+
+  test("filter commands warn when a merged view is active", async () => {
+    const extension = vscode.extensions.getExtension("upu.totonoe-log");
+    await extension!.activate();
+
+    const fs = await import("node:fs/promises");
+    const os = await import("node:os");
+    const path = await import("node:path");
+
+    const tempDir = await fs.mkdtemp(path.join(os.tmpdir(), "totonoe-log-"));
+    try {
+      const appLogPath = path.join(tempDir, "app.log");
+      await fs.writeFile(appLogPath, "2024-01-02T03:04:05Z INFO hello");
+
+      const originalShowOpenDialog = vscode.window.showOpenDialog;
+      (vscode.window as any).showOpenDialog = async () => [vscode.Uri.file(appLogPath)];
+
+      try {
+        await vscode.commands.executeCommand("totonoeLog.showMergedView");
+      } finally {
+        (vscode.window as any).showOpenDialog = originalShowOpenDialog;
+      }
+
+      assert.strictEqual(vscode.window.activeTextEditor?.document.uri.scheme, "totonoe-log-merged");
+      const mergedUri = vscode.window.activeTextEditor?.document.uri.toString();
+
+      const originalShowWarningMessage = vscode.window.showWarningMessage;
+      let warningMessage: string | undefined;
+      (vscode.window as any).showWarningMessage = async (message: string) => {
+        warningMessage = message;
+        return undefined;
+      };
+
+      try {
+        await vscode.commands.executeCommand("totonoeLog.showNormalizedViewFilteredBySeverity");
+      } finally {
+        (vscode.window as any).showWarningMessage = originalShowWarningMessage;
+      }
+
+      assert.ok(
+        warningMessage?.includes("元のログファイルに対して実行してください"),
+        "a warning should be shown when filtering from a merged view"
+      );
+      assert.strictEqual(
+        vscode.window.activeTextEditor?.document.uri.toString(),
+        mergedUri,
+        "no new view should be opened"
+      );
+    } finally {
+      await vscode.commands.executeCommand("workbench.action.closeAllEditors");
+      await fs.rm(tempDir, { recursive: true, force: true });
+    }
+  });
+
+  test("filter commands warn when a compare view is active", async () => {
+    const extension = vscode.extensions.getExtension("upu.totonoe-log");
+    await extension!.activate();
+
+    const fs = await import("node:fs/promises");
+    const os = await import("node:os");
+    const path = await import("node:path");
+
+    const tempDir = await fs.mkdtemp(path.join(os.tmpdir(), "totonoe-log-"));
+    try {
+      const firstPath = path.join(tempDir, "left.log");
+      const secondPath = path.join(tempDir, "right.log");
+      await fs.writeFile(firstPath, "2024-01-02T03:04:05Z ERROR connect to 192.168.1.10 failed");
+      await fs.writeFile(secondPath, "2024-01-02T09:04:05Z ERROR connect to 10.0.0.1 failed");
+
+      const originalShowOpenDialog = vscode.window.showOpenDialog;
+      let callCount = 0;
+      (vscode.window as any).showOpenDialog = async () => {
+        callCount += 1;
+        return [vscode.Uri.file(callCount === 1 ? firstPath : secondPath)];
+      };
+
+      try {
+        await vscode.commands.executeCommand("totonoeLog.compareLogs");
+      } finally {
+        (vscode.window as any).showOpenDialog = originalShowOpenDialog;
+      }
+
+      assert.strictEqual(vscode.window.activeTextEditor?.document.uri.scheme, "totonoe-log-compare");
+      const compareUri = vscode.window.activeTextEditor?.document.uri.toString();
+
+      const originalShowWarningMessage = vscode.window.showWarningMessage;
+      let warningMessage: string | undefined;
+      (vscode.window as any).showWarningMessage = async (message: string) => {
+        warningMessage = message;
+        return undefined;
+      };
+
+      try {
+        await vscode.commands.executeCommand("totonoeLog.showNormalizedViewFilteredByDateRange");
+      } finally {
+        (vscode.window as any).showWarningMessage = originalShowWarningMessage;
+      }
+
+      assert.ok(
+        warningMessage?.includes("元のログファイルに対して実行してください"),
+        "a warning should be shown when filtering from a compare view"
+      );
+      assert.strictEqual(
+        vscode.window.activeTextEditor?.document.uri.toString(),
+        compareUri,
+        "no new view should be opened"
+      );
+    } finally {
+      await vscode.commands.executeCommand("workbench.action.closeAllEditors");
+      await fs.rm(tempDir, { recursive: true, force: true });
+    }
+  });
+
+  test("normal log files are unaffected by the guard", async () => {
+    const extension = vscode.extensions.getExtension("upu.totonoe-log");
+    await extension!.activate();
+
+    const source = await vscode.workspace.openTextDocument({
+      content: "2024-01-02T03:04:05Z INFO starting",
+      language: "log",
+    });
+    await vscode.window.showTextDocument(source);
+    await vscode.commands.executeCommand("workbench.action.closeOtherEditors");
+
+    const originalShowWarningMessage = vscode.window.showWarningMessage;
+    let warningMessage: string | undefined;
+    (vscode.window as any).showWarningMessage = async (message: string) => {
+      warningMessage = message;
+      return undefined;
+    };
+
+    try {
+      await vscode.commands.executeCommand("totonoeLog.showNormalizedView");
+    } finally {
+      (vscode.window as any).showWarningMessage = originalShowWarningMessage;
+    }
+
+    assert.strictEqual(warningMessage, undefined, "an ordinary log file should not trigger the guard");
+    assert.strictEqual(vscode.window.activeTextEditor?.document.uri.scheme, "totonoe-log-normalized");
+  });
+});
