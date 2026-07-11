@@ -1,4 +1,5 @@
 import type { LogEntry } from "./types";
+import type { ParseLogOptions } from "./parseLog";
 import { parseLog } from "./parseLog";
 
 // 直前に別の文字がある最後の拡張子だけを除去する（`.env` 等のドット
@@ -71,13 +72,20 @@ function compareByTimestamp(a: MergedEntry, b: MergedEntry): number {
  * 同点（両方未認識、または同一タイムスタンプ）の場合は、投入順（ファイルの
  * 入力順・ファイル内の出現順）を明示的なタイブレークとして使う——
  * `Array.prototype.sort` の安定性のみに順序を委ねない。
+ *
+ * `parseOptions` は各ファイルの {@link parseLog} にそのまま渡す（省略時は
+ * デフォルトのタイムスタンプフォーマットを使う）。テストで syslog の年推定の
+ * 基準時刻を固定する場合などに使う。
  */
-export function mergeLogFiles(files: readonly LogFileInput[]): MergedEntry[] {
+export function mergeLogFiles(
+  files: readonly LogFileInput[],
+  parseOptions: ParseLogOptions = {}
+): MergedEntry[] {
   const merged: MergedEntry[] = [];
 
   for (const file of files) {
     const kind = deriveLogKind(file.fileName);
-    for (const entry of parseLog(file.text)) {
+    for (const entry of parseLog(file.text, parseOptions)) {
       merged.push({ entry, fileName: file.fileName, kind });
     }
   }
