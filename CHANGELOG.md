@@ -29,6 +29,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   needing a separate command for every combination of filters. The existing
   single-purpose filter commands (severity only, date range only, date range
   + severity, ignore pattern only) remain available unchanged.
+- Add a `Totonoe Log: Show Merged View Filtered` command that lets you pick
+  the files to merge and then filter the merged result by severity, date/time
+  range, and/or ignore pattern in one flow, reusing the same multi-select
+  QuickPick UX as `Show Normalized View Filtered`. The file name/kind columns
+  and line-number gutter are preserved after filtering, and the number of
+  hidden lines is reported the same way the normalized view's filters do.
 
 ### Fixed
 

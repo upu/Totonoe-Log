@@ -1,9 +1,23 @@
 import * as vscode from "vscode";
-import { mergeLogFiles, formatMergedLog, type LogFileInput } from "./normalize";
+import {
+  mergeLogFiles,
+  formatMergedLog,
+  filterMergedEntriesByCriteria,
+  type LogFileInput,
+  type MergedEntry,
+  type FilterCriteria,
+} from "./normalize";
 import {
   VirtualDocumentContentProvider,
   MERGED_VIEW_SCHEME,
 } from "./virtualDocumentContentProvider";
+import {
+  promptSeveritySelection,
+  promptDateBoundary,
+  promptIgnorePattern,
+  promptFilterKinds,
+  countLines,
+} from "./filterPrompts";
 
 // スキーム定義は virtualDocumentContentProvider.ts に集約している
 // （既存の import 元を変えずに済むよう、ここから再エクスポートする）。
@@ -17,6 +31,7 @@ export class MergedViewContentProvider extends VirtualDocumentContentProvider {
 }
 
 let mergedViewCounter = 0;
+let mergedFilteredViewCounter = 0;
 
 /** 選択されたファイル群を読み込み、{@link mergeLogFiles} に渡す入力へ変換する。 */
 async function readLogFiles(fileUris: readonly vscode.Uri[]): Promise<LogFileInput[]> {
@@ -27,6 +42,23 @@ async function readLogFiles(fileUris: readonly vscode.Uri[]): Promise<LogFileInp
       return { fileName, text: document.getText() };
     })
   );
+}
+
+/**
+ * マージビュー系コマンドが共有する、仮想ドキュメントの発行・登録・表示処理。
+ * `normalizedView.ts` の `openVirtualNormalizedDocument` と同じ役割。
+ */
+async function openVirtualMergedDocument(
+  provider: MergedViewContentProvider,
+  content: string,
+  path: string
+): Promise<void> {
+  const uri = vscode.Uri.from({ scheme: MERGED_VIEW_SCHEME, path });
+
+  provider.register(uri, content);
+
+  const mergedDocument = await vscode.workspace.openTextDocument(uri);
+  await vscode.window.showTextDocument(mergedDocument, { preview: false });
 }
 
 /**
@@ -44,15 +76,7 @@ async function openMergedView(
   const content = formatMergedLog(mergedEntries);
 
   mergedViewCounter += 1;
-  const uri = vscode.Uri.from({
-    scheme: MERGED_VIEW_SCHEME,
-    path: `/merged-${mergedViewCounter}.log`,
-  });
-
-  provider.register(uri, content);
-
-  const mergedDocument = await vscode.workspace.openTextDocument(uri);
-  await vscode.window.showTextDocument(mergedDocument, { preview: false });
+  await openVirtualMergedDocument(provider, content, `/merged-${mergedViewCounter}.log`);
 }
 
 /**
@@ -74,6 +98,112 @@ export function createShowMergedViewCommand(
     }
 
     await openMergedView(provider, fileUris);
+  };
+}
+
+/**
+ * ファイル選択ダイアログで、マージ対象のログファイルを複数選ばせて時系列順に
+ * マージしたうえで、ユーザーが選んだ条件（セベリティ / 日付範囲 / 無視
+ * パターンのうち任意の組み合わせ）で絞り込んだ読み取り専用の仮想ドキュメント
+ * として開くコマンドの本体（issue #61）。
+ *
+ * 「マージビューを開いた後にそのビューへ絞り込みコマンドを実行する」形（正規化
+ * ビューの絞り込み系コマンドと同じ、アクティブエディタを起点とする方式）ではなく、
+ * 「マージしてから絞り込む」を1コマンドにまとめる方式を採った。マージビューは
+ * `formatMergedLog` でファイル名/種類列・行番号ガター付きのテキストに整形済みの
+ * 仮想ドキュメントとして表示されるため、後者を選ぶとその仮想ドキュメントの
+ * テキストから `MergedEntry[]` を再パースする専用ロジックが要り、フォーマットの
+ * 変更に弱くなる（`guardAgainstVirtualDocumentSource` が仮想ドキュメントに対する
+ * `parseLog` 実行を警告する形で防いでいるのと同種の問題、#57）。ファイル選択
+ * ダイアログはファイルシステム上のファイルしか選べず仮想ドキュメントを選択肢に
+ * 含められないため、`showMergedView` と同様にこのコマンドも自ビュー判定は不要
+ * （アクティブエディタを一切参照しない）。
+ */
+export function createShowMergedViewFilteredCommand(
+  provider: MergedViewContentProvider
+): () => Promise<void> {
+  return async function showMergedViewFiltered(): Promise<void> {
+    const fileUris = await vscode.window.showOpenDialog({
+      canSelectMany: true,
+      canSelectFolders: false,
+      openLabel: "選択",
+      title: "マージするログファイルを選択してください（複数選択可）",
+    });
+    if (!fileUris || fileUris.length === 0) {
+      return;
+    }
+
+    const files = await readLogFiles(fileUris);
+    const mergedEntries: MergedEntry[] = mergeLogFiles(files);
+
+    const selectedKinds = await promptFilterKinds();
+    // ユーザーがピッカーを Esc 等でキャンセルした場合は何もしない。
+    if (selectedKinds === undefined) {
+      return;
+    }
+
+    const entries = mergedEntries.map((merged) => merged.entry);
+
+    let severities: Set<string> | undefined;
+    if (selectedKinds.has("severity")) {
+      severities = await promptSeveritySelection(entries);
+      if (severities === undefined) {
+        return;
+      }
+    }
+
+    let dateRange: FilterCriteria["dateRange"];
+    if (selectedKinds.has("dateRange")) {
+      const startMs = await promptDateBoundary("開始日時");
+      // null はキャンセル、または不正な入力による中断を表す。
+      if (startMs === null) {
+        return;
+      }
+
+      const endMs = await promptDateBoundary("終了日時");
+      if (endMs === null) {
+        return;
+      }
+
+      dateRange = { startMs, endMs };
+    }
+
+    let ignorePattern: RegExp | undefined;
+    if (selectedKinds.has("ignorePattern")) {
+      ignorePattern = await promptIgnorePattern();
+      // ユーザーがキャンセルした場合、または不正な入力による中断の場合は何もしない。
+      if (ignorePattern === undefined) {
+        return;
+      }
+    }
+
+    const criteria: FilterCriteria = { severities, dateRange, ignorePattern };
+
+    const filterResult = await filterMergedEntriesByCriteria(mergedEntries, criteria);
+    if (!filterResult.ok) {
+      // 破局的バックトラッキング等でマッチング処理がタイムアウトした場合。
+      // 正規化ビューの統合絞り込みコマンドと同じ理由で、フォールバックせず
+      // 警告のみ出す。
+      vscode.window.showWarningMessage(
+        "Totonoe Log: 入力されたパターンの処理に時間がかかりすぎたため中断しました。より単純なパターンをお試しください。"
+      );
+      return;
+    }
+    const filteredMergedEntries = filterResult.entries;
+    const content = formatMergedLog(filteredMergedEntries);
+
+    mergedFilteredViewCounter += 1;
+    await openVirtualMergedDocument(
+      provider,
+      content,
+      `/merged-filtered-${mergedFilteredViewCounter}.log`
+    );
+
+    const filteredEntries = filteredMergedEntries.map((merged) => merged.entry);
+    const hiddenLineCount = countLines(entries) - countLines(filteredEntries);
+    vscode.window.showInformationMessage(
+      `Totonoe Log: 条件に合わない ${hiddenLineCount} 行を非表示にしました（${countLines(filteredEntries)}/${countLines(entries)} 行を表示）。`
+    );
   };
 }
 

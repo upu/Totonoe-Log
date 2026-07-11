@@ -21,6 +21,8 @@ export type {
   FilterEntriesByCriteriaOptions,
 } from "./filterEntries";
 export { filterEntriesByCriteria } from "./filterEntries";
+export type { FilterMergedEntriesResult } from "./filterMergedEntries";
+export { filterMergedEntriesByCriteria } from "./filterMergedEntries";
 export type { SyslogFormatOptions } from "./timestampFormats";
 export {
   ISO_8601_FORMAT,
