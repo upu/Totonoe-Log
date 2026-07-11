@@ -15,6 +15,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   merges the selected files directly, reusing the same chronological-merge
   logic as `Show Merged View`, without going through the file-picker dialog.
   Folders included in the selection are ignored.
+- Insert a "XX seconds of silence" marker line wherever the timestamp gap
+  between two consecutive entries is large, making it easy to spot "silent"
+  stretches of a log during an incident investigation. Applies to `Show
+  Normalized View` and all of its filtered variants (severity, date range,
+  date range + severity, ignore pattern), so gaps between the entries that
+  remain after filtering are detected too. The threshold is configurable via
+  `totonoeLog.gap.thresholdSeconds` (default: 30 seconds; 0 disables it).
 
 ### Fixed
 

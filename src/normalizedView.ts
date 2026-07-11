@@ -11,6 +11,7 @@ import {
   collapseRepeatedEntries,
   formatCollapsedLog,
   DEFAULT_COLLAPSE_THRESHOLD,
+  DEFAULT_GAP_THRESHOLD_SECONDS,
   type LogEntry,
 } from "./normalize";
 import {
@@ -42,6 +43,22 @@ let dateRangeFilteredViewCounter = 0;
 let dateRangeAndSeverityFilteredViewCounter = 0;
 let ignorePatternFilteredViewCounter = 0;
 let collapsedViewCounter = 0;
+
+/** 時間ギャップ検出のしきい値（秒）を読み込むVSCode設定のセクション名。 */
+const GAP_CONFIG_SECTION = "totonoeLog.gap";
+
+/**
+ * `totonoeLog.gap.thresholdSeconds` 設定を読み込み、{@link formatNormalizedLog}
+ * が受け取るミリ秒単位のしきい値に変換する。0以下を指定した場合は無効化を
+ * 意味するため、そのまま {@link formatNormalizedLog} 側の「0以下なら挿入
+ * しない」判定に委ねる。
+ */
+function readGapThresholdMs(): number {
+  const thresholdSeconds = vscode.workspace
+    .getConfiguration(GAP_CONFIG_SECTION)
+    .get<number>("thresholdSeconds", DEFAULT_GAP_THRESHOLD_SECONDS);
+  return thresholdSeconds * 1000;
+}
 
 /**
  * 正規化ビュー系コマンドが共有する、仮想ドキュメントの発行・登録・表示処理。
@@ -93,7 +110,7 @@ export function createShowNormalizedViewCommand(
     }
 
     const entries = parseLog(sourceDocument.getText());
-    const content = formatNormalizedLog(entries);
+    const content = formatNormalizedLog(entries, { gapThresholdMs: readGapThresholdMs() });
 
     normalizedViewCounter += 1;
     await openVirtualNormalizedDocument(
@@ -170,7 +187,7 @@ export function createShowNormalizedViewFilteredBySeverityCommand(
     }
 
     const filteredEntries = filterEntriesBySeverity(entries, selectedSeverities);
-    const content = formatNormalizedLog(filteredEntries);
+    const content = formatNormalizedLog(filteredEntries, { gapThresholdMs: readGapThresholdMs() });
 
     severityFilteredViewCounter += 1;
     await openVirtualNormalizedDocument(
@@ -258,7 +275,7 @@ export function createShowNormalizedViewFilteredByDateRangeCommand(
     const sourceDocument = activeEditor.document;
     const entries = parseLog(sourceDocument.getText());
     const filteredEntries = filterEntriesByDateRange(entries, { startMs, endMs });
-    const content = formatNormalizedLog(filteredEntries);
+    const content = formatNormalizedLog(filteredEntries, { gapThresholdMs: readGapThresholdMs() });
 
     dateRangeFilteredViewCounter += 1;
     await openVirtualNormalizedDocument(
@@ -324,7 +341,7 @@ export function createShowNormalizedViewFilteredByDateRangeAndSeverityCommand(
       filterEntriesBySeverity(entries, selectedSeverities),
       { startMs, endMs }
     );
-    const content = formatNormalizedLog(filteredEntries);
+    const content = formatNormalizedLog(filteredEntries, { gapThresholdMs: readGapThresholdMs() });
 
     dateRangeAndSeverityFilteredViewCounter += 1;
     await openVirtualNormalizedDocument(
@@ -412,7 +429,7 @@ export function createShowNormalizedViewFilteredByIgnorePatternCommand(
       return;
     }
     const filteredEntries = filterResult.entries;
-    const content = formatNormalizedLog(filteredEntries);
+    const content = formatNormalizedLog(filteredEntries, { gapThresholdMs: readGapThresholdMs() });
 
     ignorePatternFilteredViewCounter += 1;
     await openVirtualNormalizedDocument(

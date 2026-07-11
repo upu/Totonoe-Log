@@ -210,6 +210,95 @@ suite("normalize / formatNormalizedLog", () => {
   test("returns an empty string for no entries", () => {
     assert.strictEqual(formatNormalizedLog([]), "");
   });
+
+  test("does not insert a gap marker when gapThresholdMs is not specified", () => {
+    const text = [
+      "2024-01-02T03:04:05Z INFO before",
+      "2024-01-02T03:05:05Z INFO after (60s later)",
+    ].join("\n");
+
+    const output = formatNormalizedLog(parseLog(text));
+
+    assert.ok(!output.includes("空白"));
+  });
+
+  test("inserts a gap marker between entries whose timestamp gap meets the threshold", () => {
+    const text = [
+      "2024-01-02T03:04:05Z INFO before",
+      "2024-01-02T03:04:35Z INFO after",
+    ].join("\n");
+
+    const output = formatNormalizedLog(parseLog(text), { gapThresholdMs: 30_000 });
+
+    assert.strictEqual(
+      output,
+      [
+        "1 | 2024-01-02T03:04:05.000Z INFO before",
+        "... | 30秒の空白",
+        "2 | 2024-01-02T03:04:35.000Z INFO after",
+      ].join("\n")
+    );
+  });
+
+  test("does not insert a gap marker when the gap is below the threshold", () => {
+    const text = [
+      "2024-01-02T03:04:05Z INFO before",
+      "2024-01-02T03:04:34Z INFO after (29s later)",
+    ].join("\n");
+
+    const output = formatNormalizedLog(parseLog(text), { gapThresholdMs: 30_000 });
+
+    assert.ok(!output.includes("空白"));
+  });
+
+  test("formats a sub-second-precision gap duration with one decimal place", () => {
+    const text = [
+      "2024-01-02T03:04:05.000Z INFO before",
+      "2024-01-02T03:04:35.500Z INFO after",
+    ].join("\n");
+
+    const output = formatNormalizedLog(parseLog(text), { gapThresholdMs: 30_000 });
+
+    assert.ok(output.includes("30.5秒の空白"));
+  });
+
+  test("skips the gap check for a pair where the earlier entry lacks a recognized timestamp, without affecting later pairs", () => {
+    // 先頭の未認識行は matched: false の独立エントリになる（parseLog は、認識済み
+    // タイムスタンプ行より前に現れた行のみを未マッチエントリとして扱うため）。
+    const text = [
+      "unrecognized banner line",
+      "2024-01-02T03:04:05Z INFO first matched entry",
+      "2024-01-02T03:05:05Z INFO second matched entry (60s later)",
+    ].join("\n");
+
+    const output = formatNormalizedLog(parseLog(text), { gapThresholdMs: 30_000 });
+
+    assert.strictEqual((output.match(/秒の空白/g) ?? []).length, 1);
+    assert.ok(output.includes("60秒の空白"));
+  });
+
+  test("treats a gapThresholdMs of 0 as disabled", () => {
+    const text = [
+      "2024-01-02T03:04:05Z INFO before",
+      "2024-01-02T03:04:06Z INFO after",
+    ].join("\n");
+
+    const output = formatNormalizedLog(parseLog(text), { gapThresholdMs: 0 });
+
+    assert.ok(!output.includes("空白"));
+  });
+
+  test("inserts multiple gap markers for multiple qualifying gaps", () => {
+    const text = [
+      "2024-01-02T03:04:05Z INFO a",
+      "2024-01-02T03:04:35Z INFO b",
+      "2024-01-02T03:05:05Z INFO c",
+    ].join("\n");
+
+    const output = formatNormalizedLog(parseLog(text), { gapThresholdMs: 30_000 });
+
+    assert.strictEqual((output.match(/秒の空白/g) ?? []).length, 2);
+  });
 });
 
 suite("normalize / filterEntriesBySeverity", () => {
