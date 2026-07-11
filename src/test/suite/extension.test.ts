@@ -72,7 +72,12 @@ suite("Totonoe Log normalized view", () => {
       assert.match(activeEditor!.document.uri.path, /^\/app\.normalized-\d+\.log$/);
     } finally {
       await vscode.commands.executeCommand("workbench.action.closeAllEditors");
-      await fs.rm(tempDir, { recursive: true, force: true });
+      // Windows CI では、直前の closeAllEditors がファイルハンドルを解放し
+      // きる前に rm が走ることがあり、EBUSY で間欠的に失敗する
+      // （このファイル内の全ての一時ディレクトリ削除で同様の対策をしている）。
+      // maxRetries/retryDelay で短い線形バックオフを挟み、解放を待ってから
+      // 再試行する。
+      await fs.rm(tempDir, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 });
     }
   });
 
@@ -99,7 +104,7 @@ suite("Totonoe Log normalized view", () => {
       assert.match(activeEditor!.document.uri.path, /^\/\.env\.normalized-\d+\.log$/);
     } finally {
       await vscode.commands.executeCommand("workbench.action.closeAllEditors");
-      await fs.rm(tempDir, { recursive: true, force: true });
+      await fs.rm(tempDir, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 });
     }
   });
 
@@ -1056,7 +1061,7 @@ suite("Totonoe Log compare view", () => {
       );
     } finally {
       await vscode.commands.executeCommand("workbench.action.closeAllEditors");
-      await fs.rm(tempDir, { recursive: true, force: true });
+      await fs.rm(tempDir, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 });
     }
   });
 
@@ -1123,7 +1128,7 @@ suite("Totonoe Log compare view", () => {
       assert.notStrictEqual(activeEditor!.document.uri.scheme, "totonoe-log-compare");
     } finally {
       await vscode.commands.executeCommand("workbench.action.closeAllEditors");
-      await fs.rm(tempDir, { recursive: true, force: true });
+      await fs.rm(tempDir, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 });
     }
   });
 });
@@ -1343,7 +1348,7 @@ suite("Totonoe Log merged view", () => {
       );
     } finally {
       await vscode.commands.executeCommand("workbench.action.closeAllEditors");
-      await fs.rm(tempDir, { recursive: true, force: true });
+      await fs.rm(tempDir, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 });
     }
   });
 
@@ -1435,7 +1440,7 @@ suite("Totonoe Log merge selected files (explorer context menu)", () => {
       );
     } finally {
       await vscode.commands.executeCommand("workbench.action.closeAllEditors");
-      await fs.rm(tempDir, { recursive: true, force: true });
+      await fs.rm(tempDir, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 });
     }
   });
 
@@ -1481,7 +1486,7 @@ suite("Totonoe Log merge selected files (explorer context menu)", () => {
       assert.ok(activeEditor, "the original editor should remain active");
       assert.notStrictEqual(activeEditor!.document.uri.scheme, "totonoe-log-merged");
     } finally {
-      await fs.rm(tempDir, { recursive: true, force: true });
+      await fs.rm(tempDir, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 });
     }
   });
 
@@ -1527,7 +1532,7 @@ suite("Totonoe Log merge selected files (explorer context menu)", () => {
       );
     } finally {
       await vscode.commands.executeCommand("workbench.action.closeAllEditors");
-      await fs.rm(tempDir, { recursive: true, force: true });
+      await fs.rm(tempDir, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 });
     }
   });
 });
@@ -1770,7 +1775,7 @@ suite("Totonoe Log virtual document guard", () => {
       );
     } finally {
       await vscode.commands.executeCommand("workbench.action.closeAllEditors");
-      await fs.rm(tempDir, { recursive: true, force: true });
+      await fs.rm(tempDir, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 });
     }
   });
 
@@ -1829,7 +1834,7 @@ suite("Totonoe Log virtual document guard", () => {
       );
     } finally {
       await vscode.commands.executeCommand("workbench.action.closeAllEditors");
-      await fs.rm(tempDir, { recursive: true, force: true });
+      await fs.rm(tempDir, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 });
     }
   });
 
