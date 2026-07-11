@@ -10,6 +10,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- Fix `Compare Logs` and `Copy Masked Text` not masking IPv6 addresses (only
+  IPv4 was masked before). Common IPv6 notations — full form, `::`
+  compression, and zone IDs (`%eth0`) — are now replaced with `<HOST>` like
+  IPv4 addresses already were, so container/Kubernetes logs no longer leak
+  host info or add diff noise. Time-like tokens (e.g. `03:04:05`) are still
+  left untouched.
 - Fix normalize/filter/copy commands (Show Normalized View and its filtered
   variants, Show Collapsed View, Copy Masked Text) silently producing wrong
   results when run against a Totonoe Log view that is already open and

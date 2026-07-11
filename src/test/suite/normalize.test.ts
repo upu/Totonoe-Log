@@ -426,6 +426,34 @@ suite("normalize / formatMaskedLogForCompare", () => {
     assert.strictEqual(output, "1 | <TIMESTAMP> - <HOST> myapp: something happened");
   });
 
+  test("masks a fully expanded IPv6 address anywhere in the message", () => {
+    const output = formatMaskedLogForCompare(
+      parseLog("2024-01-02T03:04:05Z INFO connect to 2001:0db8:0000:0000:0000:0000:0000:0001 failed")
+    );
+    assert.strictEqual(output, "1 | <TIMESTAMP> INFO connect to <HOST> failed");
+  });
+
+  test("masks a :: -compressed IPv6 address anywhere in the message", () => {
+    const output = formatMaskedLogForCompare(
+      parseLog("2024-01-02T03:04:05Z INFO connect to 2001:db8::1 failed")
+    );
+    assert.strictEqual(output, "1 | <TIMESTAMP> INFO connect to <HOST> failed");
+  });
+
+  test("masks a zone-id-qualified link-local IPv6 address", () => {
+    const output = formatMaskedLogForCompare(
+      parseLog("2024-01-02T03:04:05Z INFO connect to fe80::1%eth0 failed")
+    );
+    assert.strictEqual(output, "1 | <TIMESTAMP> INFO connect to <HOST> failed");
+  });
+
+  test("does not mask a time-like token embedded in the message", () => {
+    const output = formatMaskedLogForCompare(
+      parseLog("2024-01-02T03:04:05Z INFO retry backoff 03:04:05 elapsed")
+    );
+    assert.strictEqual(output, "1 | <TIMESTAMP> INFO retry backoff 03:04:05 elapsed");
+  });
+
   test("does not mask dotted tokens that are not IPv4 addresses or syslog hostnames", () => {
     const text = [
       "2024-01-02T03:04:05Z ERROR Unhandled exception",
@@ -504,6 +532,30 @@ suite("normalize / maskLogTextForCopy", () => {
     });
 
     assert.strictEqual(maskLogTextForCopy(entries), "<TIMESTAMP>  <HOST> myapp: hello");
+  });
+
+  test("masks IPv6 addresses (full, :: -compressed, and zone-id forms) in the text", () => {
+    const text = [
+      "==== log start on 2001:0db8:0000:0000:0000:0000:0000:0001 ====",
+      "2024-01-02T03:04:05Z INFO connect to 2001:db8::1 failed",
+      "2024-01-02T03:04:06Z INFO connect to fe80::1%eth0 failed",
+    ].join("\n");
+
+    const output = maskLogTextForCopy(parseLog(text));
+
+    assert.strictEqual(
+      output,
+      [
+        "==== log start on <HOST> ====",
+        "<TIMESTAMP> INFO connect to <HOST> failed",
+        "<TIMESTAMP> INFO connect to <HOST> failed",
+      ].join("\n")
+    );
+  });
+
+  test("does not mask a time-like token embedded in the text", () => {
+    const text = "2024-01-02T03:04:05Z INFO retry backoff 03:04:05 elapsed";
+    assert.strictEqual(maskLogTextForCopy(parseLog(text)), "<TIMESTAMP> INFO retry backoff 03:04:05 elapsed");
   });
 
   test("keeps the original timestamp text when maskTimestamp is false", () => {
