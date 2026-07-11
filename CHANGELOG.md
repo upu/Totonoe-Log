@@ -34,6 +34,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   chronological order of the merged view for year-crossing logs. Explicitly
   passing `assumedYear` still forces that year, as before.
 
+### Security
+
+- Fix "Show Normalized View Filtered by Ignore Pattern" being able to freeze
+  the entire extension host when the entered pattern triggers catastrophic
+  regex backtracking (e.g. `(a+)+b` against a long non-matching input). The
+  match is now run in a worker thread with a 2-second timeout; if it doesn't
+  finish in time, the worker is terminated and a warning is shown instead of
+  opening the view, so a runaway pattern can no longer block VS Code.
+
 ### Added
 
 - Add an icon for the extension, shown in the Marketplace and VS Code's

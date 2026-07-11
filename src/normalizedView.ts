@@ -401,7 +401,17 @@ export function createShowNormalizedViewFilteredByIgnorePatternCommand(
 
     const sourceDocument = activeEditor.document;
     const entries = parseLog(sourceDocument.getText());
-    const filteredEntries = filterEntriesByIgnorePattern(entries, pattern);
+    const filterResult = await filterEntriesByIgnorePattern(entries, pattern);
+    if (!filterResult.ok) {
+      // 破局的バックトラッキング等でマッチング処理がタイムアウトした場合。
+      // 「フィルタなしで全件表示」にフォールバックすると、ユーザーが意図
+      // しない大量表示につながりうるため、何もせず警告のみ出す。
+      vscode.window.showWarningMessage(
+        "Totonoe Log: 入力されたパターンの処理に時間がかかりすぎたため中断しました。より単純なパターンをお試しください。"
+      );
+      return;
+    }
+    const filteredEntries = filterResult.entries;
     const content = formatNormalizedLog(filteredEntries);
 
     ignorePatternFilteredViewCounter += 1;

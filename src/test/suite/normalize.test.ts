@@ -339,33 +339,43 @@ suite("normalize / filterEntriesByDateRange", () => {
 });
 
 suite("normalize / filterEntriesByIgnorePattern", () => {
-  test("excludes entries whose raw text matches a metacharacter-free pattern (substring match)", () => {
+  /** テストの意図（マッチ結果の検証）を明確にするための、成功時のみ通すヘルパー。 */
+  async function filterOk(entries: Parameters<typeof filterEntriesByIgnorePattern>[0], pattern: RegExp) {
+    const result = await filterEntriesByIgnorePattern(entries, pattern);
+    assert.strictEqual(result.ok, true);
+    if (!result.ok) {
+      throw new Error("unreachable");
+    }
+    return result.entries;
+  }
+
+  test("excludes entries whose raw text matches a metacharacter-free pattern (substring match)", async () => {
     const text = [
       "2024-01-02T03:04:05Z INFO heartbeat ok",
       "2024-01-02T03:04:06Z ERROR boom",
     ].join("\n");
     const entries = parseLog(text);
 
-    const filtered = filterEntriesByIgnorePattern(entries, /heartbeat/i);
+    const filtered = await filterOk(entries, /heartbeat/i);
 
     assert.strictEqual(filtered.length, 1);
     assert.strictEqual(filtered[0].message, "boom");
   });
 
-  test("excludes entries matching a regular expression pattern", () => {
+  test("excludes entries matching a regular expression pattern", async () => {
     const text = [
       "2024-01-02T03:04:05Z DEBUG verbose trace",
       "2024-01-02T03:04:06Z ERROR boom",
     ].join("\n");
     const entries = parseLog(text);
 
-    const filtered = filterEntriesByIgnorePattern(entries, /^.*DEBUG.*$/im);
+    const filtered = await filterOk(entries, /^.*DEBUG.*$/im);
 
     assert.strictEqual(filtered.length, 1);
     assert.strictEqual(filtered[0].message, "boom");
   });
 
-  test("excludes a multi-line entry (e.g. stack trace) if any of its lines match", () => {
+  test("excludes a multi-line entry (e.g. stack trace) if any of its lines match", async () => {
     const text = [
       "2024-01-02T03:04:05Z ERROR boom",
       "    at com.example.Foo.bar(Foo.java:42)",
@@ -373,22 +383,22 @@ suite("normalize / filterEntriesByIgnorePattern", () => {
     ].join("\n");
     const entries = parseLog(text);
 
-    const filtered = filterEntriesByIgnorePattern(entries, /com\.example/);
+    const filtered = await filterOk(entries, /com\.example/);
 
     assert.strictEqual(filtered.length, 1);
     assert.strictEqual(filtered[0].message, "keep");
   });
 
-  test("keeps every entry when nothing matches", () => {
+  test("keeps every entry when nothing matches", async () => {
     const text = "2024-01-02T03:04:05Z INFO hello";
     const entries = parseLog(text);
 
-    const filtered = filterEntriesByIgnorePattern(entries, /nope/);
+    const filtered = await filterOk(entries, /nope/);
 
     assert.strictEqual(filtered.length, 1);
   });
 
-  test("matches every entry independently even when the pattern has a global flag", () => {
+  test("matches every entry independently even when the pattern has a global flag", async () => {
     // g フラグ付きの RegExp#test は呼び出しのたびに lastIndex を進めるため、
     // リセットしないと1件目のマッチが2件目以降の判定を狂わせてしまう。
     const text = [
@@ -398,10 +408,72 @@ suite("normalize / filterEntriesByIgnorePattern", () => {
     ].join("\n");
     const entries = parseLog(text);
 
-    const filtered = filterEntriesByIgnorePattern(entries, /heartbeat/g);
+    const filtered = await filterOk(entries, /heartbeat/g);
 
     assert.strictEqual(filtered.length, 1);
     assert.strictEqual(filtered[0].message, "boom");
+  });
+
+  test("returns quickly for a normal pattern against a moderately sized log (no perceptible slowdown)", async () => {
+    const lines = [];
+    for (let i = 0; i < 500; i += 1) {
+      lines.push(`2024-01-02T03:04:05Z INFO message number ${i}`);
+    }
+    const entries = parseLog(lines.join("\n"));
+
+    const startedAt = Date.now();
+    const filtered = await filterOk(entries, /number 42$/);
+    const elapsedMs = Date.now() - startedAt;
+
+    assert.strictEqual(filtered.length, entries.length - 1);
+    // ワーカースレッドの起動コストを含めても、通常のパターンは十分速く
+    // 終わるべき（既定タイムアウトの 2000ms よりずっと短い）。
+    assert.ok(elapsedMs < 1500, `expected a fast result, took ${elapsedMs}ms`);
+  });
+
+  test("terminates and reports a timeout instead of hanging forever when matching doesn't finish in time", async function () {
+    this.timeout(5000);
+
+    // 実際に破局的バックトラッキングを起こす正規表現（例: `(a+)+b` に長い
+    // 非マッチ入力を与える）はリポジトリに literal で置かない。実測すると
+    // 数十秒〜数分ブロックし続ける危険な正規表現がテストコードとして
+    // コミットされ続けることになり、CodeQL の js/redos が（意図どおり）
+    // 正しく検出する。破局的バックトラッキング自体への保護（ワーカー
+    // スレッド + タイムアウトで拡張ホストをブロックしない）が実際に効く
+    // ことは、下記の手動確認手順で検証する:
+    //   1. `Totonoe Log: Show Normalized View Filtered by Ignore Pattern`
+    //      を実行する
+    //   2. パターン入力欄に `(a+)+b` と入力して確定する
+    //   3. 対象ログに "a" が30文字以上連続する行（末尾に "b" が無い）が
+    //      含まれていることを確認した上で実行する
+    //   4. 数秒待っても VS Code 全体が無応答にならず、「入力されたパターン
+    //      の処理に時間がかかりすぎたため中断しました」という警告が表示
+    //      され、ビューが開かれないことを確認する
+    //
+    // ここでは、安全な（破局的でない）パターンに極端に短い timeoutMs を
+    // 与えることで、「マッチングが時間内に終わらなかった場合に
+    // Worker#terminate() で打ち切り、ok: false を返す」という同じコード
+    // パス（filterByIgnorePattern.ts の setTimeout ハンドラ）を、危険な
+    // 正規表現なしに決定的に検証する。ワーカースレッドの起動（新しい
+    // V8 isolate の生成を伴う）は 1ms よりも確実に時間がかかるため、
+    // timeoutMs: 1 は通常のマッチング処理より先に必ず発火する。
+    const text = "2024-01-02T03:04:05Z INFO hello";
+    const entries = parseLog(text);
+
+    const startedAt = Date.now();
+    const result = await filterEntriesByIgnorePattern(entries, /hello/, {
+      timeoutMs: 1,
+    });
+    const elapsedMs = Date.now() - startedAt;
+
+    assert.strictEqual(result.ok, false);
+    if (!result.ok) {
+      assert.strictEqual(result.reason, "timeout");
+    }
+    // タイムアウトによって早期に打ち切られていること（＝拡張ホストを
+    // ブロックし続けない）ことの確認。ワーカーの起動・終了コストを見込んで
+    // 余裕を持たせる。
+    assert.ok(elapsedMs < 4000, `expected an early termination, took ${elapsedMs}ms`);
   });
 });
 
