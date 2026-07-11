@@ -44,6 +44,10 @@ for the current roadmap.
   (plain text without special regex characters works as a literal substring
   search) to cut noisy lines out of the way
   (`Totonoe Log: Show Normalized View Filtered by Ignore Pattern`)
+- Mark large time gaps between entries with a "XX seconds of silence" line,
+  so "silent" stretches stand out during an incident investigation. Applies
+  to `Show Normalized View` and its filtered variants; threshold configurable
+  via `totonoeLog.gap.thresholdSeconds` (default 30s, 0 disables it)
 
 ## Series
 

@@ -44,6 +44,10 @@ Normalize, merge, filter, collapse, and compare messy logs.
   部分一致の検索として動作）にマッチするエントリを非表示にし、ノイズと
   なる行を調査の邪魔にならないようにする
   （`Totonoe Log: Show Normalized View Filtered by Ignore Pattern`）
+- 連続するエントリのタイムスタンプ差が大きく開いた箇所に「XX秒の空白」の
+  区切り行を挿入し、障害調査での「沈黙時間」を見つけやすくする。
+  `Show Normalized View` とその絞り込み系バリエーションに適用され、しきい値は
+  `totonoeLog.gap.thresholdSeconds` で調整可能（既定30秒、0で無効化）
 
 ## シリーズ構想
 

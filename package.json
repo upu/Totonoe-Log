@@ -104,6 +104,12 @@
           "default": 3,
           "minimum": 2,
           "description": "Totonoe Log: Show Collapsed View で、何回以上連続で繰り返されたら1行に折りたたむかのしきい値。"
+        },
+        "totonoeLog.gap.thresholdSeconds": {
+          "type": "number",
+          "default": 30,
+          "minimum": 0,
+          "description": "Totonoe Log: Show Normalized View とその絞り込み系コマンドで、連続するエントリのタイムスタンプ差がこの秒数以上のときに「XX秒の空白」の区切り行を挿入する。0 を指定すると無効化する。"
         }
       }
     }

@@ -1,7 +1,8 @@
 export type { LogEntry, TimestampFormat } from "./types";
 export type { ParseLogOptions } from "./parseLog";
 export { parseLog } from "./parseLog";
-export { formatNormalizedLog } from "./formatNormalizedLog";
+export type { FormatNormalizedLogOptions } from "./formatNormalizedLog";
+export { formatNormalizedLog, DEFAULT_GAP_THRESHOLD_SECONDS } from "./formatNormalizedLog";
 export type { MaskForCopyOptions } from "./maskForCompare";
 export { formatMaskedLogForCompare, maskLogTextForCopy } from "./maskForCompare";
 export type { CollapseOptions, CollapsedItem } from "./collapseRepeatedEntries";
