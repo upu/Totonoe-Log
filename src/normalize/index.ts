@@ -15,6 +15,12 @@ export { UNRECOGNIZED_SEVERITY_KEY, getDistinctSeverities, filterEntriesBySeveri
 export type { DateRange } from "./filterByDateRange";
 export { parseDateBoundary, filterEntriesByDateRange } from "./filterByDateRange";
 export { filterEntriesByIgnorePattern } from "./filterByIgnorePattern";
+export type {
+  FilterCriteria,
+  FilterEntriesResult,
+  FilterEntriesByCriteriaOptions,
+} from "./filterEntries";
+export { filterEntriesByCriteria } from "./filterEntries";
 export type { SyslogFormatOptions } from "./timestampFormats";
 export {
   ISO_8601_FORMAT,

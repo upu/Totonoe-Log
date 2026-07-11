@@ -15,6 +15,7 @@ import {
   parseDateBoundary,
   filterEntriesByDateRange,
   filterEntriesByIgnorePattern,
+  filterEntriesByCriteria,
 } from "../../normalize";
 
 suite("normalize / parseLog", () => {
@@ -563,6 +564,99 @@ suite("normalize / filterEntriesByIgnorePattern", () => {
     // ブロックし続けない）ことの確認。ワーカーの起動・終了コストを見込んで
     // 余裕を持たせる。
     assert.ok(elapsedMs < 4000, `expected an early termination, took ${elapsedMs}ms`);
+  });
+});
+
+suite("normalize / filterEntriesByCriteria", () => {
+  /** テストの意図（絞り込み結果の検証）を明確にするための、成功時のみ通すヘルパー。 */
+  async function filterOk(
+    entries: Parameters<typeof filterEntriesByCriteria>[0],
+    criteria: Parameters<typeof filterEntriesByCriteria>[1]
+  ) {
+    const result = await filterEntriesByCriteria(entries, criteria);
+    assert.strictEqual(result.ok, true);
+    if (!result.ok) {
+      throw new Error("unreachable");
+    }
+    return result.entries;
+  }
+
+  const sampleText = [
+    "2024-01-01T00:00:00Z ERROR before range",
+    "2024-01-02T03:04:05Z INFO in range but wrong severity",
+    "2024-01-02T03:04:06Z ERROR in range and matching",
+    "2024-01-02T03:04:07Z ERROR heartbeat noise",
+    "2024-01-03T00:00:00Z ERROR after range",
+  ].join("\n");
+
+  test("returns every entry unchanged when no criteria are specified", async () => {
+    const entries = parseLog(sampleText);
+
+    const filtered = await filterOk(entries, {});
+
+    assert.strictEqual(filtered.length, entries.length);
+  });
+
+  test("applies only the severity filter when only severities are specified", async () => {
+    const entries = parseLog(sampleText);
+
+    const filtered = await filterOk(entries, { severities: new Set(["INFO"]) });
+
+    assert.strictEqual(filtered.length, 1);
+    assert.strictEqual(filtered[0].message, "in range but wrong severity");
+  });
+
+  test("applies only the date range filter when only a date range is specified", async () => {
+    const entries = parseLog(sampleText);
+
+    const filtered = await filterOk(entries, {
+      dateRange: {
+        startMs: Date.UTC(2024, 0, 2, 0, 0, 0),
+        endMs: Date.UTC(2024, 0, 2, 23, 59, 59),
+      },
+    });
+
+    assert.strictEqual(filtered.length, 3);
+  });
+
+  test("applies only the ignore pattern filter when only a pattern is specified", async () => {
+    const entries = parseLog(sampleText);
+
+    const filtered = await filterOk(entries, { ignorePattern: /heartbeat/ });
+
+    assert.strictEqual(filtered.length, entries.length - 1);
+    assert.ok(!filtered.some((entry) => entry.message.includes("heartbeat")));
+  });
+
+  test("combines all three criteria with AND semantics", async () => {
+    const entries = parseLog(sampleText);
+
+    const filtered = await filterOk(entries, {
+      severities: new Set(["ERROR"]),
+      dateRange: {
+        startMs: Date.UTC(2024, 0, 2, 0, 0, 0),
+        endMs: Date.UTC(2024, 0, 2, 23, 59, 59),
+      },
+      ignorePattern: /heartbeat/,
+    });
+
+    assert.strictEqual(filtered.length, 1);
+    assert.strictEqual(filtered[0].message, "in range and matching");
+  });
+
+  test("propagates a timeout failure from the ignore pattern stage", async () => {
+    const entries = parseLog("2024-01-02T03:04:05Z INFO hello");
+
+    const result = await filterEntriesByCriteria(
+      entries,
+      { ignorePattern: /hello/ },
+      { ignorePatternTimeoutMs: 1 }
+    );
+
+    assert.strictEqual(result.ok, false);
+    if (!result.ok) {
+      assert.strictEqual(result.reason, "timeout");
+    }
   });
 });
 

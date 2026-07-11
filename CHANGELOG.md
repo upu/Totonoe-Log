@@ -22,6 +22,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   date range + severity, ignore pattern), so gaps between the entries that
   remain after filtering are detected too. The threshold is configurable via
   `totonoeLog.gap.thresholdSeconds` (default: 30 seconds; 0 disables it).
+- Add a `Totonoe Log: Show Normalized View Filtered` command that lets you
+  freely combine severity, date/time range, and ignore pattern filters in a
+  single flow: pick which conditions to apply from a multi-select QuickPick,
+  then answer only the prompts for the conditions you picked. This avoids
+  needing a separate command for every combination of filters. The existing
+  single-purpose filter commands (severity only, date range only, date range
+  + severity, ignore pattern only) remain available unchanged.
 
 ### Fixed
 
