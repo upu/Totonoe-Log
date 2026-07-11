@@ -431,27 +431,38 @@ suite("normalize / filterEntriesByIgnorePattern", () => {
     assert.ok(elapsedMs < 1500, `expected a fast result, took ${elapsedMs}ms`);
   });
 
-  test("terminates and reports a timeout instead of hanging forever on catastrophic backtracking", async function () {
+  test("terminates and reports a timeout instead of hanging forever when matching doesn't finish in time", async function () {
     this.timeout(5000);
 
-    // codeql[js/redos]
-    const catastrophicPattern = /(a+)+b/;
-    // 破局的バックトラッキングの典型例（issue #59 に挙げられているものと
-    // 同じ）: 上記の `(a+)+b` に、末尾に "b" が無い長い "a" の並びを与えると、
-    // グループの分割方法の組み合わせ数が入力長に対して指数的に増加し、
-    // 同期的な RegExp#test は現実的な時間内に返らなくなる（意図的な ReDoS
-    // テストフィクスチャであり、実運用コードで使うパターンではない。
-    // 直前の抑制コメントは CodeQL 公式のインライン抑制構文で、対象行の
-    // 直前にそれ単独で置く必要がある）。
-    // アンカー（`^`/`$`）を付けないのは、entry.raw の先頭にはタイムスタンプ
-    // 等の接頭辞が乗るため、`^` 始まりだと "a" 以外の文字で即座に不一致
-    // 判定されてしまい、狙った箇所でバックトラックが起きなくなるため。
-    const text = `2024-01-02T03:04:05Z ERROR ${"a".repeat(40)}`;
+    // 実際に破局的バックトラッキングを起こす正規表現（例: `(a+)+b` に長い
+    // 非マッチ入力を与える）はリポジトリに literal で置かない。実測すると
+    // 数十秒〜数分ブロックし続ける危険な正規表現がテストコードとして
+    // コミットされ続けることになり、CodeQL の js/redos が（意図どおり）
+    // 正しく検出する。破局的バックトラッキング自体への保護（ワーカー
+    // スレッド + タイムアウトで拡張ホストをブロックしない）が実際に効く
+    // ことは、下記の手動確認手順で検証する:
+    //   1. `Totonoe Log: Show Normalized View Filtered by Ignore Pattern`
+    //      を実行する
+    //   2. パターン入力欄に `(a+)+b` と入力して確定する
+    //   3. 対象ログに "a" が30文字以上連続する行（末尾に "b" が無い）が
+    //      含まれていることを確認した上で実行する
+    //   4. 数秒待っても VS Code 全体が無応答にならず、「入力されたパターン
+    //      の処理に時間がかかりすぎたため中断しました」という警告が表示
+    //      され、ビューが開かれないことを確認する
+    //
+    // ここでは、安全な（破局的でない）パターンに極端に短い timeoutMs を
+    // 与えることで、「マッチングが時間内に終わらなかった場合に
+    // Worker#terminate() で打ち切り、ok: false を返す」という同じコード
+    // パス（filterByIgnorePattern.ts の setTimeout ハンドラ）を、危険な
+    // 正規表現なしに決定的に検証する。ワーカースレッドの起動（新しい
+    // V8 isolate の生成を伴う）は 1ms よりも確実に時間がかかるため、
+    // timeoutMs: 1 は通常のマッチング処理より先に必ず発火する。
+    const text = "2024-01-02T03:04:05Z INFO hello";
     const entries = parseLog(text);
 
     const startedAt = Date.now();
-    const result = await filterEntriesByIgnorePattern(entries, catastrophicPattern, {
-      timeoutMs: 200,
+    const result = await filterEntriesByIgnorePattern(entries, /hello/, {
+      timeoutMs: 1,
     });
     const elapsedMs = Date.now() - startedAt;
 
@@ -459,10 +470,10 @@ suite("normalize / filterEntriesByIgnorePattern", () => {
     if (!result.ok) {
       assert.strictEqual(result.reason, "timeout");
     }
-    // タイムアウト設定値近辺で打ち切られていること（＝拡張ホストをブロック
-    // し続けていないこと）を確認する。ワーカー起動・終了のオーバーヘッドを
-    // 見込んで余裕を持たせる。
-    assert.ok(elapsedMs < 4000, `expected termination near the timeout, took ${elapsedMs}ms`);
+    // タイムアウトによって早期に打ち切られていること（＝拡張ホストを
+    // ブロックし続けない）ことの確認。ワーカーの起動・終了コストを見込んで
+    // 余裕を持たせる。
+    assert.ok(elapsedMs < 4000, `expected an early termination, took ${elapsedMs}ms`);
   });
 });
 
