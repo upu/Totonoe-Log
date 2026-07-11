@@ -1,9 +1,13 @@
 import * as vscode from "vscode";
 import { mergeLogFiles, formatMergedLog, type LogFileInput } from "./normalize";
-import { VirtualDocumentContentProvider } from "./virtualDocumentContentProvider";
+import {
+  VirtualDocumentContentProvider,
+  MERGED_VIEW_SCHEME,
+} from "./virtualDocumentContentProvider";
 
-/** マージビュー用の仮想ドキュメントに割り当てる URI スキーム。 */
-export const MERGED_VIEW_SCHEME = "totonoe-log-merged";
+// スキーム定義は virtualDocumentContentProvider.ts に集約している
+// （既存の import 元を変えずに済むよう、ここから再エクスポートする）。
+export { MERGED_VIEW_SCHEME };
 
 /** マージビュー用の {@link vscode.TextDocumentContentProvider}。 */
 export class MergedViewContentProvider extends VirtualDocumentContentProvider {

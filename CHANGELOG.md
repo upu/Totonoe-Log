@@ -10,6 +10,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- Fix normalize/filter/copy commands (Show Normalized View and its filtered
+  variants, Show Collapsed View, Copy Masked Text) silently producing wrong
+  results when run against a Totonoe Log view that is already open and
+  active (e.g. running "Filtered by Severity" right after "Show Normalized
+  View", with the resulting view still focused). Those commands now detect
+  when the active editor is one of Totonoe Log's own virtual documents
+  (normalized/collapsed, merged, or compare view) and show a warning instead
+  of parsing the view's own gutter-prefixed text as if it were a raw log.
 - Fix year-less syslog timestamps (`MMM d HH:mm:ss`) being interpreted with
   the wrong year when a log crosses a year boundary. Instead of always
   assuming the current year, the parser now rolls the assumed year back by

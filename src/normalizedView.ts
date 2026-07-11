@@ -13,10 +13,15 @@ import {
   DEFAULT_COLLAPSE_THRESHOLD,
   type LogEntry,
 } from "./normalize";
-import { VirtualDocumentContentProvider } from "./virtualDocumentContentProvider";
+import {
+  VirtualDocumentContentProvider,
+  NORMALIZED_VIEW_SCHEME,
+  guardAgainstVirtualDocumentSource,
+} from "./virtualDocumentContentProvider";
 
-/** 正規化ビュー用の仮想ドキュメントに割り当てる URI スキーム。 */
-export const NORMALIZED_VIEW_SCHEME = "totonoe-log-normalized";
+// スキーム定義は virtualDocumentContentProvider.ts に集約している
+// （既存の import 元を変えずに済むよう、ここから再エクスポートする）。
+export { NORMALIZED_VIEW_SCHEME };
 
 /**
  * 正規化ビュー用の {@link vscode.TextDocumentContentProvider}。
@@ -83,6 +88,10 @@ export function createShowNormalizedViewCommand(
     }
 
     const sourceDocument = activeEditor.document;
+    if (guardAgainstVirtualDocumentSource(sourceDocument)) {
+      return;
+    }
+
     const entries = parseLog(sourceDocument.getText());
     const content = formatNormalizedLog(entries);
 
@@ -148,6 +157,10 @@ export function createShowNormalizedViewFilteredBySeverityCommand(
     }
 
     const sourceDocument = activeEditor.document;
+    if (guardAgainstVirtualDocumentSource(sourceDocument)) {
+      return;
+    }
+
     const entries = parseLog(sourceDocument.getText());
 
     const selectedSeverities = await promptSeveritySelection(entries);
@@ -227,6 +240,9 @@ export function createShowNormalizedViewFilteredByDateRangeCommand(
       );
       return;
     }
+    if (guardAgainstVirtualDocumentSource(activeEditor.document)) {
+      return;
+    }
 
     const startMs = await promptDateBoundary("開始日時");
     // null はキャンセル、または不正な入力による中断を表す。
@@ -280,6 +296,10 @@ export function createShowNormalizedViewFilteredByDateRangeAndSeverityCommand(
     }
 
     const sourceDocument = activeEditor.document;
+    if (guardAgainstVirtualDocumentSource(sourceDocument)) {
+      return;
+    }
+
     const entries = parseLog(sourceDocument.getText());
 
     const selectedSeverities = await promptSeveritySelection(entries);
@@ -369,6 +389,9 @@ export function createShowNormalizedViewFilteredByIgnorePatternCommand(
       );
       return;
     }
+    if (guardAgainstVirtualDocumentSource(activeEditor.document)) {
+      return;
+    }
 
     const pattern = await promptIgnorePattern();
     // ユーザーがキャンセルした場合、または不正な入力による中断の場合は何もしない。
@@ -420,11 +443,15 @@ export function createShowCollapsedViewCommand(
       return;
     }
 
+    const sourceDocument = activeEditor.document;
+    if (guardAgainstVirtualDocumentSource(sourceDocument)) {
+      return;
+    }
+
     const threshold = vscode.workspace
       .getConfiguration(COLLAPSE_CONFIG_SECTION)
       .get<number>("threshold", DEFAULT_COLLAPSE_THRESHOLD);
 
-    const sourceDocument = activeEditor.document;
     const entries = parseLog(sourceDocument.getText());
     const items = collapseRepeatedEntries(entries, { threshold });
     const content = formatCollapsedLog(entries, items);
