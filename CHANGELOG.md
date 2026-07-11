@@ -8,6 +8,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- Add a `Totonoe Log: Merge Selected Files` command to the Explorer's
+  right-click context menu, shown when two or more files are selected. It
+  merges the selected files directly, reusing the same chronological-merge
+  logic as `Show Merged View`, without going through the file-picker dialog.
+  Folders included in the selection are ignored.
+
 ### Fixed
 
 - Fix `Compare Logs` and `Copy Masked Text` not masking IPv6 addresses (only

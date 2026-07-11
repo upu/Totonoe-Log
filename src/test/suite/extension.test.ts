@@ -1098,6 +1098,165 @@ suite("Totonoe Log merged view", () => {
   });
 });
 
+suite("Totonoe Log merge selected files (explorer context menu)", () => {
+  test("registers the mergeSelectedFiles command", async () => {
+    const extension = vscode.extensions.getExtension("upu.totonoe-log");
+    await extension!.activate();
+
+    const commands = await vscode.commands.getCommands(true);
+    assert.ok(
+      commands.includes("totonoeLog.mergeSelectedFiles"),
+      "totonoeLog.mergeSelectedFiles command should be registered"
+    );
+  });
+
+  test("merges the files passed as the explorer multi-selection, without prompting a file picker", async () => {
+    const extension = vscode.extensions.getExtension("upu.totonoe-log");
+    await extension!.activate();
+
+    const fs = await import("node:fs/promises");
+    const os = await import("node:os");
+    const path = await import("node:path");
+
+    const tempDir = await fs.mkdtemp(path.join(os.tmpdir(), "totonoe-log-"));
+    try {
+      const appLogPath = path.join(tempDir, "app.log");
+      const dbLogPath = path.join(tempDir, "database_20240101.log");
+      await fs.writeFile(appLogPath, "2024-01-02T03:04:05Z INFO hello");
+      await fs.writeFile(dbLogPath, "2024-01-02T03:04:04Z ERROR boom");
+
+      const appUri = vscode.Uri.file(appLogPath);
+      const dbUri = vscode.Uri.file(dbLogPath);
+
+      const originalShowOpenDialog = vscode.window.showOpenDialog;
+      // ピッカーが呼ばれたらテストとして誤りなので、呼ばれたことが分かるよう失敗させる。
+      (vscode.window as any).showOpenDialog = async () => {
+        throw new Error("showOpenDialog should not be called when uris are passed explicitly");
+      };
+
+      try {
+        // エクスプローラのコンテキストメニューは (クリックされた項目, 選択項目全体の配列) を渡す。
+        await vscode.commands.executeCommand(
+          "totonoeLog.mergeSelectedFiles",
+          appUri,
+          [appUri, dbUri]
+        );
+      } finally {
+        (vscode.window as any).showOpenDialog = originalShowOpenDialog;
+      }
+
+      const activeEditor = vscode.window.activeTextEditor;
+      assert.ok(activeEditor, "a merged view editor should be shown");
+      assert.strictEqual(activeEditor!.document.uri.scheme, "totonoe-log-merged");
+
+      const fileNameWidth = "database_20240101.log".length;
+      const kindWidth = "database".length;
+      assert.strictEqual(
+        activeEditor!.document.getText(),
+        [
+          `${"database_20240101.log".padEnd(fileNameWidth)} | ${"database".padEnd(kindWidth)} | 1 | 2024-01-02T03:04:04.000Z ERROR boom`,
+          `${"app.log".padEnd(fileNameWidth)} | ${"app".padEnd(kindWidth)} | 1 | 2024-01-02T03:04:05.000Z INFO hello`,
+        ].join("\n")
+      );
+    } finally {
+      await vscode.commands.executeCommand("workbench.action.closeAllEditors");
+      await fs.rm(tempDir, { recursive: true, force: true });
+    }
+  });
+
+  test("shows a warning and does nothing when fewer than two files are selected", async () => {
+    const extension = vscode.extensions.getExtension("upu.totonoe-log");
+    await extension!.activate();
+
+    const fs = await import("node:fs/promises");
+    const os = await import("node:os");
+    const path = await import("node:path");
+
+    const tempDir = await fs.mkdtemp(path.join(os.tmpdir(), "totonoe-log-"));
+    try {
+      const appLogPath = path.join(tempDir, "app.log");
+      await fs.writeFile(appLogPath, "2024-01-02T03:04:05Z INFO hello");
+      const appUri = vscode.Uri.file(appLogPath);
+
+      const source = await vscode.workspace.openTextDocument({
+        content: "2024-01-02T03:04:05Z INFO starting",
+        language: "log",
+      });
+      await vscode.window.showTextDocument(source);
+      await vscode.commands.executeCommand("workbench.action.closeOtherEditors");
+
+      const originalShowWarningMessage = vscode.window.showWarningMessage;
+      let warningMessage: string | undefined;
+      (vscode.window as any).showWarningMessage = async (message: string) => {
+        warningMessage = message;
+        return undefined;
+      };
+
+      try {
+        await vscode.commands.executeCommand("totonoeLog.mergeSelectedFiles", appUri, [appUri]);
+      } finally {
+        (vscode.window as any).showWarningMessage = originalShowWarningMessage;
+      }
+
+      assert.ok(
+        warningMessage?.includes("2つ以上"),
+        "a warning should explain that at least two files are required"
+      );
+      const activeEditor = vscode.window.activeTextEditor;
+      assert.ok(activeEditor, "the original editor should remain active");
+      assert.notStrictEqual(activeEditor!.document.uri.scheme, "totonoe-log-merged");
+    } finally {
+      await fs.rm(tempDir, { recursive: true, force: true });
+    }
+  });
+
+  test("ignores folders included in the selection and merges the remaining files", async () => {
+    const extension = vscode.extensions.getExtension("upu.totonoe-log");
+    await extension!.activate();
+
+    const fs = await import("node:fs/promises");
+    const os = await import("node:os");
+    const path = await import("node:path");
+
+    const tempDir = await fs.mkdtemp(path.join(os.tmpdir(), "totonoe-log-"));
+    try {
+      const appLogPath = path.join(tempDir, "app.log");
+      const dbLogPath = path.join(tempDir, "database_20240101.log");
+      const subDirPath = path.join(tempDir, "subdir");
+      await fs.writeFile(appLogPath, "2024-01-02T03:04:05Z INFO hello");
+      await fs.writeFile(dbLogPath, "2024-01-02T03:04:04Z ERROR boom");
+      await fs.mkdir(subDirPath);
+
+      const appUri = vscode.Uri.file(appLogPath);
+      const dbUri = vscode.Uri.file(dbLogPath);
+      const subDirUri = vscode.Uri.file(subDirPath);
+
+      await vscode.commands.executeCommand("totonoeLog.mergeSelectedFiles", subDirUri, [
+        subDirUri,
+        appUri,
+        dbUri,
+      ]);
+
+      const activeEditor = vscode.window.activeTextEditor;
+      assert.ok(activeEditor, "a merged view editor should be shown");
+      assert.strictEqual(activeEditor!.document.uri.scheme, "totonoe-log-merged");
+
+      const fileNameWidth = "database_20240101.log".length;
+      const kindWidth = "database".length;
+      assert.strictEqual(
+        activeEditor!.document.getText(),
+        [
+          `${"database_20240101.log".padEnd(fileNameWidth)} | ${"database".padEnd(kindWidth)} | 1 | 2024-01-02T03:04:04.000Z ERROR boom`,
+          `${"app.log".padEnd(fileNameWidth)} | ${"app".padEnd(kindWidth)} | 1 | 2024-01-02T03:04:05.000Z INFO hello`,
+        ].join("\n")
+      );
+    } finally {
+      await vscode.commands.executeCommand("workbench.action.closeAllEditors");
+      await fs.rm(tempDir, { recursive: true, force: true });
+    }
+  });
+});
+
 suite("Totonoe Log virtual document guard", () => {
   test("isTotonoeLogVirtualDocument recognizes the normalized, merged, and compare schemes", async () => {
     const { isTotonoeLogVirtualDocument } = await import("../../virtualDocumentContentProvider");

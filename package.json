@@ -41,6 +41,10 @@
         "title": "Totonoe Log: Show Merged View"
       },
       {
+        "command": "totonoeLog.mergeSelectedFiles",
+        "title": "Totonoe Log: Merge Selected Files"
+      },
+      {
         "command": "totonoeLog.showNormalizedView",
         "title": "Totonoe Log: Show Normalized View"
       },
@@ -73,6 +77,15 @@
         "title": "Totonoe Log: Show Collapsed View"
       }
     ],
+    "menus": {
+      "explorer/context": [
+        {
+          "command": "totonoeLog.mergeSelectedFiles",
+          "when": "listMultiSelection",
+          "group": "totonoeLog@1"
+        }
+      ]
+    },
     "configuration": {
       "title": "Totonoe Log",
       "properties": {
