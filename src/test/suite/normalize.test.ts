@@ -443,9 +443,9 @@ suite("normalize / filterEntriesByIgnorePattern", () => {
     // 判定されてしまい、狙った箇所でバックトラックが起きなくなるため。
     // 意図的な ReDoS テストフィクスチャ。実運用コードで直接使う正規表現では
     // なく、#59 で追加したワーカースレッド + タイムアウトによる保護が実際に
-    // 効くことを検証するためだけに使う（次行の抑制コメントは CodeQL 公式の
-    // インライン抑制構文で、同一行にある必要がある）。
-    const catastrophicPattern = /(a+)+b/; // codeql[js/redos]
+    // 効くことを検証するためだけに使う。
+    // codeql[js/redos]
+    const catastrophicPattern = /(a+)+b/;
     const text = `2024-01-02T03:04:05Z ERROR ${"a".repeat(40)}`;
     const entries = parseLog(text);
 
