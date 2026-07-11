@@ -65,6 +65,10 @@
         "title": "Totonoe Log: Show Normalized View Filtered by Ignore Pattern"
       },
       {
+        "command": "totonoeLog.showNormalizedViewFiltered",
+        "title": "Totonoe Log: Show Normalized View Filtered"
+      },
+      {
         "command": "totonoeLog.compareLogs",
         "title": "Totonoe Log: Compare Logs"
       },

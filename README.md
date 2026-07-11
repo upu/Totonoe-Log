@@ -29,6 +29,10 @@ for the current roadmap.
   (`Totonoe Log: Show Normalized View Filtered by Severity`)
 - Filter by date/time range and severity together
   (`Totonoe Log: Show Normalized View Filtered by Date Range and Severity`)
+- Freely combine severity, date/time range, and ignore pattern filters in a
+  single flow: pick which conditions to apply from a multi-select QuickPick,
+  then answer only the prompts for the conditions you picked
+  (`Totonoe Log: Show Normalized View Filtered`)
 - Compare two logs that differ in dates/hosts, without those differences
   showing up as noise in the diff (`Totonoe Log: Compare Logs`)
 - Copy log text with timestamps/hosts masked, ready to paste into an

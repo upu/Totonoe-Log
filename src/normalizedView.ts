@@ -8,11 +8,13 @@ import {
   parseDateBoundary,
   filterEntriesByDateRange,
   filterEntriesByIgnorePattern,
+  filterEntriesByCriteria,
   collapseRepeatedEntries,
   formatCollapsedLog,
   DEFAULT_COLLAPSE_THRESHOLD,
   DEFAULT_GAP_THRESHOLD_SECONDS,
   type LogEntry,
+  type FilterCriteria,
 } from "./normalize";
 import {
   VirtualDocumentContentProvider,
@@ -42,6 +44,7 @@ let severityFilteredViewCounter = 0;
 let dateRangeFilteredViewCounter = 0;
 let dateRangeAndSeverityFilteredViewCounter = 0;
 let ignorePatternFilteredViewCounter = 0;
+let combinedFilteredViewCounter = 0;
 let collapsedViewCounter = 0;
 
 /** 時間ギャップ検出のしきい値（秒）を読み込むVSCode設定のセクション名。 */
@@ -443,6 +446,145 @@ export function createShowNormalizedViewFilteredByIgnorePatternCommand(
     const hiddenLineCount = countLines(entries) - countLines(filteredEntries);
     vscode.window.showInformationMessage(
       `Totonoe Log: パターンに一致したエントリの ${hiddenLineCount} 行を非表示にしました（${countLines(filteredEntries)}/${countLines(entries)} 行を表示）。`
+    );
+  };
+}
+
+/**
+ * 統合絞り込みコマンドで選べる条件の種類。
+ * QuickPick の選択肢の順序（=表示順）としても使う。
+ */
+type FilterKind = "severity" | "dateRange" | "ignorePattern";
+
+/**
+ * 条件選択 QuickPick の1項目。選ばれた {@link FilterKind} を保持する。
+ * `vscode.QuickPickItem` には（セパレータ表示用の）`kind` プロパティが
+ * 既に存在するため、名前を衝突させないよう `filterKind` にする。
+ */
+interface FilterKindQuickPickItem extends vscode.QuickPickItem {
+  readonly filterKind: FilterKind;
+}
+
+/**
+ * 絞り込みに使う条件（セベリティ / 日付範囲 / 無視パターン）を複数選択
+ * ピッカーで尋ね、選ばれた種類の集合を返す。Esc 等でキャンセルした場合は、
+ * 呼び出し側に処理を中断させるため `undefined` を返す。何も選ばずに確定した
+ * 場合（キャンセルではない）は空集合を返し、呼び出し側はどの条件も適用せず
+ * 絞り込みなしの正規化ビューを開く。
+ */
+async function promptFilterKinds(): Promise<Set<FilterKind> | undefined> {
+  const items: FilterKindQuickPickItem[] = [
+    { label: "セベリティ", filterKind: "severity" },
+    { label: "日付範囲", filterKind: "dateRange" },
+    { label: "無視パターン", filterKind: "ignorePattern" },
+  ];
+
+  const selectedItems = await vscode.window.showQuickPick(items, {
+    canPickMany: true,
+    placeHolder: "絞り込みに使う条件を選択してください（複数選択可）",
+  });
+
+  if (selectedItems === undefined) {
+    return undefined;
+  }
+
+  return new Set(selectedItems.map((item) => item.filterKind));
+}
+
+/**
+ * アクティブなエディタの内容を正規化し、ユーザーが選んだ条件（セベリティ /
+ * 日付範囲 / 無視パターンのうち任意の組み合わせ）だけを順に尋ねて絞り込んだ
+ * 読み取り専用の仮想ドキュメントとして開くコマンド。個別の組み合わせごとに
+ * コマンドを増やす代わりに、まず「どの条件で絞り込むか」を複数選択ピッカーで
+ * 尋ね、選ばれた条件についてだけ既存のプロンプト（{@link promptSeveritySelection}
+ * 等）を順に呼ぶ（issue #60 の推奨案1）。非表示にした行数は、開いた直後に
+ * 通知として表示する。
+ */
+export function createShowNormalizedViewFilteredCommand(
+  provider: NormalizedViewContentProvider
+): () => Promise<void> {
+  return async function showNormalizedViewFiltered(): Promise<void> {
+    const activeEditor = vscode.window.activeTextEditor;
+    if (!activeEditor) {
+      vscode.window.showWarningMessage(
+        "Totonoe Log: 絞り込むログファイルが開かれていません。"
+      );
+      return;
+    }
+
+    const sourceDocument = activeEditor.document;
+    if (guardAgainstVirtualDocumentSource(sourceDocument)) {
+      return;
+    }
+
+    const selectedKinds = await promptFilterKinds();
+    // ユーザーがピッカーを Esc 等でキャンセルした場合は何もしない。
+    if (selectedKinds === undefined) {
+      return;
+    }
+
+    const entries = parseLog(sourceDocument.getText());
+
+    let severities: Set<string> | undefined;
+    if (selectedKinds.has("severity")) {
+      severities = await promptSeveritySelection(entries);
+      if (severities === undefined) {
+        return;
+      }
+    }
+
+    let dateRange: FilterCriteria["dateRange"];
+    if (selectedKinds.has("dateRange")) {
+      const startMs = await promptDateBoundary("開始日時");
+      // null はキャンセル、または不正な入力による中断を表す。
+      if (startMs === null) {
+        return;
+      }
+
+      const endMs = await promptDateBoundary("終了日時");
+      if (endMs === null) {
+        return;
+      }
+
+      dateRange = { startMs, endMs };
+    }
+
+    let ignorePattern: RegExp | undefined;
+    if (selectedKinds.has("ignorePattern")) {
+      ignorePattern = await promptIgnorePattern();
+      // ユーザーがキャンセルした場合、または不正な入力による中断の場合は何もしない。
+      if (ignorePattern === undefined) {
+        return;
+      }
+    }
+
+    const criteria: FilterCriteria = { severities, dateRange, ignorePattern };
+
+    const filterResult = await filterEntriesByCriteria(entries, criteria);
+    if (!filterResult.ok) {
+      // 破局的バックトラッキング等でマッチング処理がタイムアウトした場合。
+      // ignorePatternフィルタ単体のコマンドと同じ理由で、フォールバックせず
+      // 警告のみ出す。
+      vscode.window.showWarningMessage(
+        "Totonoe Log: 入力されたパターンの処理に時間がかかりすぎたため中断しました。より単純なパターンをお試しください。"
+      );
+      return;
+    }
+    const filteredEntries = filterResult.entries;
+    const content = formatNormalizedLog(filteredEntries, { gapThresholdMs: readGapThresholdMs() });
+
+    combinedFilteredViewCounter += 1;
+    await openVirtualNormalizedDocument(
+      provider,
+      sourceDocument,
+      content,
+      "filtered",
+      combinedFilteredViewCounter
+    );
+
+    const hiddenLineCount = countLines(entries) - countLines(filteredEntries);
+    vscode.window.showInformationMessage(
+      `Totonoe Log: 条件に合わない ${hiddenLineCount} 行を非表示にしました（${countLines(filteredEntries)}/${countLines(entries)} 行を表示）。`
     );
   };
 }
