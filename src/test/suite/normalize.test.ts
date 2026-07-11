@@ -441,7 +441,11 @@ suite("normalize / filterEntriesByIgnorePattern", () => {
     // アンカー（`^`/`$`）を付けないのは、entry.raw の先頭にはタイムスタンプ
     // 等の接頭辞が乗るため、`^` 始まりだと "a" 以外の文字で即座に不一致
     // 判定されてしまい、狙った箇所でバックトラックが起きなくなるため。
-    const catastrophicPattern = /(a+)+b/;
+    // 意図的な ReDoS テストフィクスチャ。実運用コードで直接使う正規表現では
+    // なく、#59 で追加したワーカースレッド + タイムアウトによる保護が実際に
+    // 効くことを検証するためだけに使う（次行の抑制コメントは CodeQL 公式の
+    // インライン抑制構文で、同一行にある必要がある）。
+    const catastrophicPattern = /(a+)+b/; // codeql[js/redos]
     const text = `2024-01-02T03:04:05Z ERROR ${"a".repeat(40)}`;
     const entries = parseLog(text);
 
