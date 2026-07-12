@@ -8,6 +8,8 @@
 
 ## [Unreleased]
 
+## [0.3.0] - 2026-07-12
+
 ### Added
 
 - エクスプローラの右クリックコンテキストメニューに `Totonoe Log: Merge
@@ -159,7 +161,8 @@
   ドットファイルの場合に名前全体が消えてしまい、`/.normalized-1.log`
   のようなパスになっていた問題を修正。先頭のドットは保持されるようにした。
 
-[Unreleased]: https://github.com/upu/Totonoe-Log/compare/v0.2.1...HEAD
+[Unreleased]: https://github.com/upu/Totonoe-Log/compare/v0.3.0...HEAD
+[0.3.0]: https://github.com/upu/Totonoe-Log/releases/tag/v0.3.0
 [0.2.1]: https://github.com/upu/Totonoe-Log/releases/tag/v0.2.1
 [0.2.0]: https://github.com/upu/Totonoe-Log/releases/tag/v0.2.0
 [0.1.0]: https://github.com/upu/Totonoe-Log/releases/tag/v0.1.0
