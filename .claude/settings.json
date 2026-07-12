@@ -1,5 +1,6 @@
 {
   "enabledPlugins": {
-    "dev-flow@upu-agent-marketplace": true
+    "dev-flow@upu-agent-marketplace": true,
+    "vscode-ext@upu-agent-marketplace": true
   }
 }
