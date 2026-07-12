@@ -2,7 +2,7 @@
   "name": "totonoe-log",
   "displayName": "Totonoe Log",
   "description": "Normalize, merge, filter, collapse, and compare messy logs.",
-  "version": "0.3.0",
+  "version": "0.3.1",
   "publisher": "upu",
   "icon": "media/icon.png",
   "license": "MIT",
