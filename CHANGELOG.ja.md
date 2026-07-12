@@ -8,6 +8,11 @@
 
 ## [Unreleased]
 
+## [0.3.1] - 2026-07-13
+
+- ユーザー向けの変更なし。Marketplace 公開が「suspicious content」エラーで
+  失敗した問題の再試行を目的とした技術リリース。
+
 ## [0.3.0] - 2026-07-12
 
 ### Added
@@ -161,7 +166,8 @@
   ドットファイルの場合に名前全体が消えてしまい、`/.normalized-1.log`
   のようなパスになっていた問題を修正。先頭のドットは保持されるようにした。
 
-[Unreleased]: https://github.com/upu/Totonoe-Log/compare/v0.3.0...HEAD
+[Unreleased]: https://github.com/upu/Totonoe-Log/compare/v0.3.1...HEAD
+[0.3.1]: https://github.com/upu/Totonoe-Log/releases/tag/v0.3.1
 [0.3.0]: https://github.com/upu/Totonoe-Log/releases/tag/v0.3.0
 [0.2.1]: https://github.com/upu/Totonoe-Log/releases/tag/v0.2.1
 [0.2.0]: https://github.com/upu/Totonoe-Log/releases/tag/v0.2.0
