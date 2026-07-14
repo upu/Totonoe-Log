@@ -4,6 +4,7 @@
 .vscode-test/**
 .vscode-test.mjs
 demo/**
+AGENTS.md
 README.ja.md
 CHANGELOG.ja.md
 docs/**
