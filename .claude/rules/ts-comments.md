@@ -5,4 +5,4 @@ paths:
 
 # TypeScript コメント規約
 
-- プログラム中のコメントは日本語で書く（英語のコメントは避ける）
+`docs/coding-guidelines.md` の「TypeScript」セクションを読み、その規約に従う。
