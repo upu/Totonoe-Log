@@ -32,6 +32,10 @@ function isoLikeGroupsToEpochMs(groups: Record<string, string | undefined>): num
   const hour = Number(groups.h);
   const minute = Number(groups.mi);
   const second = Number(groups.s);
+  // 3桁未満（例: ".5" → "500"）は0埋めし、4桁以上（.NETの7桁・Goの9桁など）は
+  // 先頭3桁だけを使ってミリ秒に切り捨てる。丸めではなく切り捨てなのは、
+  // タイムスタンプ順のマージで「実際より後ろの時刻」に繰り上がる方が
+  // 「実際より前」より誤解を招きやすいと判断したため。
   const ms = groups.ms ? Number(groups.ms.padEnd(3, "0").slice(0, 3)) : 0;
 
   const epochMs = Date.UTC(year, month, day, hour, minute, second, ms);
@@ -66,8 +70,12 @@ function isoLikeGroupsToEpochMs(groups: Record<string, string | undefined>): num
  */
 export const ISO_8601_FORMAT: TimestampFormat = {
   name: "iso8601",
+  // 小数秒は .NET（7桁）・Go RFC3339Nano（9桁）を考慮して9桁まで許容する。
+  // ミリ秒への変換（isoLikeGroupsToEpochMs）は先頭3桁のみを使うため、6桁を
+  // 超える分は自動的に切り捨てられる。桁数を絞りすぎるとタイムゾーン部分が
+  // 未マッチのままログメッセージへ混入してしまう（#94）。
   regex:
-    /^(?<y>\d{4})-(?<mo>\d{2})-(?<d>\d{2})[T ](?<h>\d{2}):(?<mi>\d{2}):(?<s>\d{2})(?:[.,](?<ms>\d{1,6}))?(?:Z|(?<tzs>[+-])(?<tzh>\d{2}):?(?<tzm>\d{2}))?/,
+    /^(?<y>\d{4})-(?<mo>\d{2})-(?<d>\d{2})[T ](?<h>\d{2}):(?<mi>\d{2}):(?<s>\d{2})(?:[.,](?<ms>\d{1,9}))?(?:Z|(?<tzs>[+-])(?<tzh>\d{2}):?(?<tzm>\d{2}))?/,
   parse(match) {
     return isoLikeGroupsToEpochMs(match.groups ?? {});
   },
@@ -79,8 +87,9 @@ export const ISO_8601_FORMAT: TimestampFormat = {
  */
 export const BRACKETED_ISO_8601_FORMAT: TimestampFormat = {
   name: "bracketed-iso8601",
+  // 小数秒の桁数上限の理由は ISO_8601_FORMAT のコメント参照。
   regex:
-    /^\[(?<y>\d{4})-(?<mo>\d{2})-(?<d>\d{2})[T ](?<h>\d{2}):(?<mi>\d{2}):(?<s>\d{2})(?:[.,](?<ms>\d{1,6}))?(?:Z|(?<tzs>[+-])(?<tzh>\d{2}):?(?<tzm>\d{2}))?\]/,
+    /^\[(?<y>\d{4})-(?<mo>\d{2})-(?<d>\d{2})[T ](?<h>\d{2}):(?<mi>\d{2}):(?<s>\d{2})(?:[.,](?<ms>\d{1,9}))?(?:Z|(?<tzs>[+-])(?<tzh>\d{2}):?(?<tzm>\d{2}))?\]/,
   parse(match) {
     return isoLikeGroupsToEpochMs(match.groups ?? {});
   },

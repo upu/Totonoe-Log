@@ -73,6 +73,35 @@ suite("normalize / parseLog", () => {
     assert.strictEqual(entry.timestampMs, Date.UTC(2024, 0, 1, 18, 4, 5));
   });
 
+  test("applies a UTC offset with .NET-style 7-digit fractional seconds (#94)", () => {
+    const [entry] = parseLog("2024-01-02T03:04:05.1234567+09:00 INFO hello");
+    // タイムゾーンオフセットが正しく読まれていれば前日18時台になる。
+    // 落ちていると UTC のまま扱われ 03:04:05 台に留まってしまう。
+    assert.strictEqual(entry.timestampMs, Date.UTC(2024, 0, 1, 18, 4, 5, 123));
+    assert.strictEqual(entry.severity, "INFO");
+    assert.strictEqual(entry.message, "hello");
+  });
+
+  test("applies a UTC offset with Go RFC3339Nano-style 9-digit fractional seconds (#94)", () => {
+    const [entry] = parseLog("2024-01-02T03:04:05.123456789+09:00 INFO hello");
+    assert.strictEqual(entry.timestampMs, Date.UTC(2024, 0, 1, 18, 4, 5, 123));
+    assert.strictEqual(entry.severity, "INFO");
+    assert.strictEqual(entry.message, "hello");
+  });
+
+  test("recognizes a Z-suffixed timestamp with 9-digit fractional seconds without leaking leftover digits into the message (#94)", () => {
+    const [entry] = parseLog("2024-01-02T03:04:05.123456789Z INFO hello");
+    assert.strictEqual(entry.timestampMs, Date.UTC(2024, 0, 2, 3, 4, 5, 123));
+    assert.strictEqual(entry.message, "hello");
+  });
+
+  test("applies a UTC offset with 7-digit fractional seconds for bracketed ISO timestamps (#94)", () => {
+    const [entry] = parseLog("[2024-01-02 03:04:05.1234567+09:00] INFO hello");
+    assert.strictEqual(entry.timestampFormat, "bracketed-iso8601");
+    assert.strictEqual(entry.timestampMs, Date.UTC(2024, 0, 1, 18, 4, 5, 123));
+    assert.strictEqual(entry.message, "hello");
+  });
+
   test("parses syslog-style timestamps given an assumed year", () => {
     const [entry] = parseLog("Jan  2 03:04:05 host myapp: something happened", {
       timestampFormats: [createSyslogFormat({ assumedYear: 2024 })],
