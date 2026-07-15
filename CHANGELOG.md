@@ -8,6 +8,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- New built-in timestamp formats: slash-separated dates
+  (`2024/01/02 03:04:05`, common in Japanese Windows/business-system
+  logs), Apache/Nginx access-log timestamps
+  (`[02/Jan/2024:03:04:05 +0900]`), and leading epoch
+  seconds/milliseconds. Lines in these formats used to be silently
+  absorbed as continuation lines of the preceding entry.
+- New `totonoeLog.timestampFormats` setting to add custom timestamp
+  formats as regular expressions with named capture groups (calendar
+  groups `y` `mo` `d` `h` `mi` `s` with optional `ms`/timezone groups, or
+  epoch groups `epochMs`/`epochSec`). Custom formats are tried before the
+  built-in ones; invalid entries are skipped with a warning.
+
 ### Fixed
 
 - Normalized/merged/compare views no longer silently render blank when

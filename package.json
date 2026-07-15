@@ -119,6 +119,27 @@
           "default": 30,
           "minimum": 0,
           "description": "Totonoe Log: Show Normalized View とその絞り込み系コマンドで、連続するエントリのタイムスタンプ差がこの秒数以上のときに「XX秒の空白」の区切り行を挿入する。0 を指定すると無効化する。"
+        },
+        "totonoeLog.timestampFormats": {
+          "type": "array",
+          "default": [],
+          "markdownDescription": "組み込みで認識されないタイムスタンプ形式を、正規表現＋名前付きキャプチャグループで追加する。組み込み形式より先に試行される。カレンダー形式はグループ `y` `mo` `d` `h` `mi` `s`（任意で `ms` `tzs` `tzh` `tzm`）、エポック形式はグループ `epochMs` または `epochSec`（任意で `ms`）を含めること。詳細は README の「Custom timestamp formats」参照。",
+          "items": {
+            "type": "object",
+            "required": [
+              "pattern"
+            ],
+            "properties": {
+              "name": {
+                "type": "string",
+                "description": "この形式の表示名。省略時は custom-<連番>。"
+              },
+              "pattern": {
+                "type": "string",
+                "description": "行頭のタイムスタンプにマッチする正規表現（自動的に行頭へアンカーされる）。名前付きキャプチャグループでパース方法を指定する。"
+              }
+            }
+          }
         }
       }
     }

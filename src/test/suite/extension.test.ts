@@ -2197,3 +2197,86 @@ suite("Totonoe Log virtual document guard", () => {
     assert.strictEqual(vscode.window.activeTextEditor?.document.uri.scheme, "totonoe-log-normalized");
   });
 });
+
+suite("Totonoe Log custom timestamp formats", () => {
+  test("recognizes a custom format configured via totonoeLog.timestampFormats", async function () {
+    this.timeout(10000);
+    const extension = vscode.extensions.getExtension("upu.totonoe-log");
+    await extension!.activate();
+
+    const config = vscode.workspace.getConfiguration("totonoeLog");
+    await config.update(
+      "timestampFormats",
+      [
+        {
+          name: "jp-date",
+          pattern:
+            "(?<y>\\d{4})年(?<mo>\\d{2})月(?<d>\\d{2})日 (?<h>\\d{2}):(?<mi>\\d{2}):(?<s>\\d{2})",
+        },
+      ],
+      vscode.ConfigurationTarget.Global
+    );
+
+    try {
+      const source = await vscode.workspace.openTextDocument({
+        content: "2024年01月02日 03:04:05 INFO custom format entry",
+        language: "log",
+      });
+      await vscode.window.showTextDocument(source);
+
+      await vscode.commands.executeCommand("totonoeLog.showNormalizedView");
+
+      const activeEditor = vscode.window.activeTextEditor;
+      assert.ok(activeEditor, "a normalized view editor should be shown");
+      assert.strictEqual(
+        activeEditor!.document.getText(),
+        "1 | 2024-01-02T03:04:05.000Z INFO custom format entry"
+      );
+    } finally {
+      await config.update("timestampFormats", undefined, vscode.ConfigurationTarget.Global);
+    }
+  });
+
+  test("warns about invalid custom format entries and keeps parsing with the rest", async function () {
+    this.timeout(10000);
+    const extension = vscode.extensions.getExtension("upu.totonoe-log");
+    await extension!.activate();
+
+    const config = vscode.workspace.getConfiguration("totonoeLog");
+    await config.update(
+      "timestampFormats",
+      [{ name: "broken", pattern: "(" }],
+      vscode.ConfigurationTarget.Global
+    );
+
+    const originalShowWarningMessage = vscode.window.showWarningMessage;
+    let warningMessage: string | undefined;
+    (vscode.window as any).showWarningMessage = async (message: string) => {
+      warningMessage = message;
+      return undefined;
+    };
+
+    try {
+      const source = await vscode.workspace.openTextDocument({
+        content: "2024-01-02T03:04:05Z INFO built-in still works",
+        language: "log",
+      });
+      await vscode.window.showTextDocument(source);
+
+      await vscode.commands.executeCommand("totonoeLog.showNormalizedView");
+
+      assert.ok(
+        warningMessage?.includes("timestampFormats"),
+        "a warning should be shown for the invalid custom format entry"
+      );
+      const activeEditor = vscode.window.activeTextEditor;
+      assert.strictEqual(
+        activeEditor!.document.getText(),
+        "1 | 2024-01-02T03:04:05.000Z INFO built-in still works"
+      );
+    } finally {
+      (vscode.window as any).showWarningMessage = originalShowWarningMessage;
+      await config.update("timestampFormats", undefined, vscode.ConfigurationTarget.Global);
+    }
+  });
+});

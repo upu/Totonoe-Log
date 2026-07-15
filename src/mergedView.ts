@@ -18,6 +18,7 @@ import {
   promptFilterKinds,
   countLines,
 } from "./filterPrompts";
+import { readConfiguredTimestampFormats } from "./timestampFormatSettings";
 
 // スキーム定義は virtualDocumentContentProvider.ts に集約している
 // （既存の import 元を変えずに済むよう、ここから再エクスポートする）。
@@ -72,7 +73,9 @@ async function openMergedView(
   fileUris: readonly vscode.Uri[]
 ): Promise<void> {
   const files = await readLogFiles(fileUris);
-  const mergedEntries = mergeLogFiles(files);
+  const mergedEntries = mergeLogFiles(files, {
+    timestampFormats: readConfiguredTimestampFormats(),
+  });
   const content = formatMergedLog(mergedEntries);
 
   mergedViewCounter += 1;
@@ -134,7 +137,9 @@ export function createShowMergedViewFilteredCommand(
     }
 
     const files = await readLogFiles(fileUris);
-    const mergedEntries: MergedEntry[] = mergeLogFiles(files);
+    const mergedEntries: MergedEntry[] = mergeLogFiles(files, {
+      timestampFormats: readConfiguredTimestampFormats(),
+    });
 
     const selectedKinds = await promptFilterKinds();
     // ユーザーがピッカーを Esc 等でキャンセルした場合は何もしない。

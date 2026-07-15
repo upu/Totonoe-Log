@@ -2,6 +2,7 @@ import * as assert from "node:assert";
 import {
   parseLog,
   createSyslogFormat,
+  compileCustomTimestampFormats,
   formatNormalizedLog,
   formatMaskedLogForCompare,
   maskLogTextForCopy,
@@ -210,6 +211,217 @@ suite("normalize / parseLog", () => {
     const [entry] = parseLog("2024-02-30T03:04:05Z ERROR impossible date");
     assert.strictEqual(entry.matched, false);
     assert.strictEqual(entry.raw, "2024-02-30T03:04:05Z ERROR impossible date");
+  });
+});
+
+suite("normalize / timestampFormats (built-in additions, #100)", () => {
+  test("parses slash-separated dates", () => {
+    const [entry] = parseLog("2024/01/02 03:04:05 INFO hello");
+
+    assert.strictEqual(entry.matched, true);
+    assert.strictEqual(entry.timestampFormat, "slash-date");
+    assert.strictEqual(entry.timestampMs, Date.UTC(2024, 0, 2, 3, 4, 5));
+    assert.strictEqual(entry.severity, "INFO");
+    assert.strictEqual(entry.message, "hello");
+  });
+
+  test("parses slash-separated dates with single-digit month/day/hour", () => {
+    const [entry] = parseLog("2024/1/2 3:04:05 WARN low disk");
+
+    assert.strictEqual(entry.matched, true);
+    assert.strictEqual(entry.timestampMs, Date.UTC(2024, 0, 2, 3, 4, 5));
+    assert.strictEqual(entry.severity, "WARN");
+  });
+
+  test("parses slash-separated dates with fractional seconds", () => {
+    const [entry] = parseLog("2024/01/02 03:04:05.678 message body");
+
+    assert.strictEqual(entry.timestampMs, Date.UTC(2024, 0, 2, 3, 4, 5, 678));
+    assert.strictEqual(entry.message, "message body");
+  });
+
+  test("rejects invalid slash-separated calendar dates", () => {
+    const [entry] = parseLog("2024/13/02 03:04:05 boom");
+    assert.strictEqual(entry.matched, false);
+  });
+
+  test("parses Apache/Nginx access-log timestamps with a UTC offset", () => {
+    const [entry] = parseLog('[02/Jan/2024:03:04:05 +0900] "GET / HTTP/1.1" 200 123');
+
+    assert.strictEqual(entry.matched, true);
+    assert.strictEqual(entry.timestampFormat, "apache-access-log");
+    // 03:04:05+09:00 は UTC では前日の 18:04:05。
+    assert.strictEqual(entry.timestampMs, Date.UTC(2024, 0, 1, 18, 4, 5));
+    assert.strictEqual(entry.message, '"GET / HTTP/1.1" 200 123');
+  });
+
+  test("parses Apache/Nginx access-log timestamps without an offset as UTC", () => {
+    const [entry] = parseLog("[02/Jan/2024:03:04:05] request done");
+
+    assert.strictEqual(entry.matched, true);
+    assert.strictEqual(entry.timestampMs, Date.UTC(2024, 0, 2, 3, 4, 5));
+  });
+
+  test("rejects an Apache/Nginx access-log timestamp with an unknown month abbreviation", () => {
+    const [entry] = parseLog("[02/Foo/2024:03:04:05 +0900] request done");
+    assert.strictEqual(entry.matched, false);
+  });
+
+  test("parses 10-digit epoch seconds at the start of a line", () => {
+    const [entry] = parseLog("1704164645 INFO hello");
+
+    assert.strictEqual(entry.matched, true);
+    assert.strictEqual(entry.timestampFormat, "epoch");
+    assert.strictEqual(entry.timestampMs, Date.UTC(2024, 0, 2, 3, 4, 5));
+    assert.strictEqual(entry.severity, "INFO");
+    assert.strictEqual(entry.message, "hello");
+  });
+
+  test("parses 13-digit epoch milliseconds at the start of a line", () => {
+    const [entry] = parseLog("1704164645678 ERROR boom");
+
+    assert.strictEqual(entry.matched, true);
+    assert.strictEqual(entry.timestampMs, Date.UTC(2024, 0, 2, 3, 4, 5, 678));
+    assert.strictEqual(entry.severity, "ERROR");
+  });
+
+  test("parses epoch seconds with a fractional part", () => {
+    const [entry] = parseLog("1704164645.678 hello");
+    assert.strictEqual(entry.timestampMs, Date.UTC(2024, 0, 2, 3, 4, 5, 678));
+  });
+
+  test("does not treat an 11-digit number as an epoch timestamp", () => {
+    const [entry] = parseLog("17041646456 hello");
+    assert.strictEqual(entry.matched, false);
+  });
+});
+
+suite("normalize / compileCustomTimestampFormats", () => {
+  test("compiles a calendar-part pattern and parses matching lines", () => {
+    const { formats, errors } = compileCustomTimestampFormats([
+      {
+        name: "jp-date",
+        pattern:
+          "(?<y>\\d{4})年(?<mo>\\d{1,2})月(?<d>\\d{1,2})日 (?<h>\\d{1,2}):(?<mi>\\d{2}):(?<s>\\d{2})",
+      },
+    ]);
+
+    assert.deepStrictEqual(errors, []);
+    assert.strictEqual(formats.length, 1);
+
+    const [entry] = parseLog("2024年1月2日 3:04:05 INFO hello", { timestampFormats: formats });
+    assert.strictEqual(entry.matched, true);
+    assert.strictEqual(entry.timestampFormat, "jp-date");
+    assert.strictEqual(entry.timestampMs, Date.UTC(2024, 0, 2, 3, 4, 5));
+    assert.strictEqual(entry.severity, "INFO");
+    assert.strictEqual(entry.message, "hello");
+  });
+
+  test("applies timezone capture groups in a custom pattern", () => {
+    const { formats, errors } = compileCustomTimestampFormats([
+      {
+        name: "with-tz",
+        pattern:
+          "(?<y>\\d{4})\\.(?<mo>\\d{2})\\.(?<d>\\d{2}) (?<h>\\d{2}):(?<mi>\\d{2}):(?<s>\\d{2}) (?<tzs>[+-])(?<tzh>\\d{2}):(?<tzm>\\d{2})",
+      },
+    ]);
+
+    assert.deepStrictEqual(errors, []);
+    const [entry] = parseLog("2024.01.02 03:04:05 +09:00 hello", { timestampFormats: formats });
+    assert.strictEqual(entry.timestampMs, Date.UTC(2024, 0, 1, 18, 4, 5));
+  });
+
+  test("supports an epochMs capture group", () => {
+    const { formats, errors } = compileCustomTimestampFormats([
+      { name: "epoch-ms", pattern: "ts=(?<epochMs>\\d{13})" },
+    ]);
+
+    assert.deepStrictEqual(errors, []);
+    const [entry] = parseLog("ts=1704164645678 boom", { timestampFormats: formats });
+    assert.strictEqual(entry.matched, true);
+    assert.strictEqual(entry.timestampMs, Date.UTC(2024, 0, 2, 3, 4, 5, 678));
+  });
+
+  test("supports an epochSec capture group with an optional ms group", () => {
+    const { formats, errors } = compileCustomTimestampFormats([
+      { name: "epoch-sec", pattern: "(?<epochSec>\\d{10})#(?<ms>\\d{3})" },
+    ]);
+
+    assert.deepStrictEqual(errors, []);
+    const [entry] = parseLog("1704164645#678 hello", { timestampFormats: formats });
+    assert.strictEqual(entry.timestampMs, Date.UTC(2024, 0, 2, 3, 4, 5, 678));
+  });
+
+  test("anchors patterns to the start of the line even without a leading ^", () => {
+    const { formats } = compileCustomTimestampFormats([
+      { name: "epoch-ms", pattern: "ts=(?<epochMs>\\d{13})" },
+    ]);
+
+    const [entry] = parseLog("prefix ts=1704164645678 boom", { timestampFormats: formats });
+    assert.strictEqual(entry.matched, false);
+  });
+
+  test("rejects invalid calendar dates parsed by a custom pattern", () => {
+    const { formats } = compileCustomTimestampFormats([
+      {
+        name: "jp-date",
+        pattern:
+          "(?<y>\\d{4})年(?<mo>\\d{1,2})月(?<d>\\d{1,2})日 (?<h>\\d{1,2}):(?<mi>\\d{2}):(?<s>\\d{2})",
+      },
+    ]);
+
+    const [entry] = parseLog("2024年13月2日 3:04:05 boom", { timestampFormats: formats });
+    assert.strictEqual(entry.matched, false);
+  });
+
+  test("uses a positional fallback name when name is omitted", () => {
+    const { formats, errors } = compileCustomTimestampFormats([
+      { pattern: "(?<epochMs>\\d{13})" },
+    ]);
+
+    assert.deepStrictEqual(errors, []);
+    assert.strictEqual(formats[0].name, "custom-1");
+  });
+
+  test("reports an error for an invalid regular expression", () => {
+    const { formats, errors } = compileCustomTimestampFormats([{ name: "broken", pattern: "(" }]);
+
+    assert.strictEqual(formats.length, 0);
+    assert.strictEqual(errors.length, 1);
+    assert.ok(errors[0].includes("broken"));
+  });
+
+  test("reports an error when required capture groups are missing", () => {
+    const { formats, errors } = compileCustomTimestampFormats([
+      { name: "no-groups", pattern: "\\d+" },
+    ]);
+
+    assert.strictEqual(formats.length, 0);
+    assert.strictEqual(errors.length, 1);
+  });
+
+  test("reports an error for entries that are not objects with a string pattern", () => {
+    const { formats, errors } = compileCustomTimestampFormats(["oops", { name: "no-pattern" }]);
+
+    assert.strictEqual(formats.length, 0);
+    assert.strictEqual(errors.length, 2);
+  });
+
+  test("keeps valid entries while reporting invalid ones", () => {
+    const { formats, errors } = compileCustomTimestampFormats([
+      { name: "broken", pattern: "(" },
+      { name: "ok", pattern: "(?<epochMs>\\d{13})" },
+    ]);
+
+    assert.strictEqual(formats.length, 1);
+    assert.strictEqual(formats[0].name, "ok");
+    assert.strictEqual(errors.length, 1);
+  });
+
+  test("returns no formats and no errors for an empty setting", () => {
+    const { formats, errors } = compileCustomTimestampFormats([]);
+    assert.deepStrictEqual(formats, []);
+    assert.deepStrictEqual(errors, []);
   });
 });
 
