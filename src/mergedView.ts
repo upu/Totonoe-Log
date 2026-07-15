@@ -21,6 +21,7 @@ import {
 } from "./filterPrompts";
 import { readConfiguredTimestampFormats } from "./timestampFormatSettings";
 import { createSourceOffsetResolver, readDisplayTimezone } from "./timezoneSettings";
+import { createClockSkewResolver } from "./clockSkewSettings";
 import { warnIfLowTimestampRecognition } from "./timestampRecognitionWarning";
 
 // スキーム定義は virtualDocumentContentProvider.ts に集約している
@@ -40,10 +41,12 @@ let mergedFilteredViewCounter = 0;
 /**
  * 選択されたファイル群を読み込み、{@link mergeLogFiles} に渡す入力へ変換する。
  * ファイルごとのソースオフセット（`totonoeLog.timezone.fileOffsets`、issue #13）
- * もここで解決して添付する。
+ * とクロックスキュー補正（`totonoeLog.clockSkew.fileOffsets`、issue #15）も
+ * ここで解決して添付する。
  */
 async function readLogFiles(fileUris: readonly vscode.Uri[]): Promise<LogFileInput[]> {
   const resolveSourceOffsetMinutes = createSourceOffsetResolver();
+  const resolveClockSkewMs = createClockSkewResolver();
   return Promise.all(
     fileUris.map(async (fileUri) => {
       const document = await vscode.workspace.openTextDocument(fileUri);
@@ -52,6 +55,7 @@ async function readLogFiles(fileUris: readonly vscode.Uri[]): Promise<LogFileInp
         fileName,
         text: document.getText(),
         sourceUtcOffsetMinutes: resolveSourceOffsetMinutes(fileName),
+        clockSkewMs: resolveClockSkewMs(fileName),
       };
     })
   );

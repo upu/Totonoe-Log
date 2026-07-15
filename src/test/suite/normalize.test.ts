@@ -25,6 +25,9 @@ import {
   formatTimestampForDisplay,
   compileFileOffsetRules,
   resolveFileOffsetMinutes,
+  compileClockSkewRules,
+  resolveClockSkewMs,
+  applyClockSkew,
 } from "../../normalize";
 
 suite("normalize / parseLog", () => {
@@ -1896,5 +1899,127 @@ suite("normalize / display timezone in formatters (#13)", () => {
     const output = formatCollapsedLog(entries, items, { displayTimezone: 540 });
 
     assert.strictEqual(output, "1 | 2024-01-02T12:04:05.000+09:00 ERROR boom");
+  });
+});
+
+suite("normalize / compileClockSkewRules (#15)", () => {
+  test("compiles valid rules and resolves the first matching one", () => {
+    const { rules, errors } = compileClockSkewRules([
+      { filePattern: "server-a.*\\.log", offsetSeconds: 37 },
+      { filePattern: "server-.*\\.log", offsetSeconds: -5 },
+    ]);
+
+    assert.deepStrictEqual(errors, []);
+    assert.strictEqual(rules.length, 2);
+    // 先勝ちなので server-a はより広い2番目の規則ではなく1番目に解決される。
+    assert.strictEqual(resolveClockSkewMs("server-a-20240101.log", rules), 37000);
+    assert.strictEqual(resolveClockSkewMs("server-b-20240101.log", rules), -5000);
+  });
+
+  test("returns undefined when no rule matches", () => {
+    const { rules } = compileClockSkewRules([
+      { filePattern: "server-a.*\\.log", offsetSeconds: 37 },
+    ]);
+    assert.strictEqual(resolveClockSkewMs("other.log", rules), undefined);
+  });
+
+  test("accepts fractional seconds and converts them to milliseconds", () => {
+    const { rules, errors } = compileClockSkewRules([
+      { filePattern: "app\\.log", offsetSeconds: 1.5 },
+    ]);
+    assert.deepStrictEqual(errors, []);
+    assert.strictEqual(resolveClockSkewMs("app.log", rules), 1500);
+  });
+
+  test("skips invalid entries with per-entry errors while keeping valid ones", () => {
+    const { rules, errors } = compileClockSkewRules([
+      "not-an-object",
+      { filePattern: "", offsetSeconds: 1 },
+      { filePattern: "[invalid", offsetSeconds: 1 },
+      { filePattern: "a\\.log", offsetSeconds: "10" },
+      { filePattern: "a\\.log", offsetSeconds: Number.NaN },
+      { filePattern: "valid\\.log", offsetSeconds: 10 },
+    ]);
+
+    assert.strictEqual(errors.length, 5);
+    assert.strictEqual(rules.length, 1);
+    assert.strictEqual(resolveClockSkewMs("valid.log", rules), 10000);
+  });
+
+  test("returns no rules and no errors for an empty setting", () => {
+    const { rules, errors } = compileClockSkewRules([]);
+    assert.deepStrictEqual(rules, []);
+    assert.deepStrictEqual(errors, []);
+  });
+});
+
+suite("normalize / applyClockSkew (#15)", () => {
+  test("shifts recognized timestamps by the skew, leaving the raw text untouched", () => {
+    const entries = parseLog("2024-01-02T03:04:05Z INFO hello");
+    const shifted = applyClockSkew(entries, 37000);
+
+    assert.strictEqual(shifted[0].timestampMs, Date.UTC(2024, 0, 2, 3, 4, 42));
+    assert.strictEqual(shifted[0].raw, "2024-01-02T03:04:05Z INFO hello");
+    assert.strictEqual(shifted[0].rawTimestamp, "2024-01-02T03:04:05Z");
+    // 入力の配列・エントリは変更しない（純粋関数）。
+    assert.strictEqual(entries[0].timestampMs, Date.UTC(2024, 0, 2, 3, 4, 5));
+  });
+
+  test("shifts timestamps with an explicit offset too, unlike the source timezone offset", () => {
+    // クロックスキューは「時計そのもののずれ」なので、タイムゾーン表記の
+    // 有無にかかわらず全タイムスタンプへ適用されるのが正しい。
+    const entries = parseLog("2024-01-02T12:04:05+09:00 INFO hello");
+    const shifted = applyClockSkew(entries, -5000);
+    assert.strictEqual(shifted[0].timestampMs, Date.UTC(2024, 0, 2, 3, 4, 0));
+  });
+
+  test("shifts epoch timestamps too", () => {
+    const entries = parseLog("1704164645 INFO hello");
+    const shifted = applyClockSkew(entries, 1000);
+    assert.strictEqual(shifted[0].timestampMs, Date.UTC(2024, 0, 2, 3, 4, 6));
+  });
+
+  test("leaves entries without a recognized timestamp unchanged", () => {
+    const entries = parseLog("no timestamp here");
+    const shifted = applyClockSkew(entries, 37000);
+    assert.strictEqual(shifted[0].timestampMs, undefined);
+    assert.strictEqual(shifted[0].raw, "no timestamp here");
+  });
+
+  test("returns entries as-is for a zero skew", () => {
+    const entries = parseLog("2024-01-02T03:04:05Z INFO hello");
+    const shifted = applyClockSkew(entries, 0);
+    assert.strictEqual(shifted[0].timestampMs, Date.UTC(2024, 0, 2, 3, 4, 5));
+  });
+});
+
+suite("normalize / mergeLogFiles per-file clock skew (#15)", () => {
+  test("merges files into corrected chronological order when a clock skew is applied", () => {
+    // fast.log のホストは時計が40秒進んでいる想定。生の壁時計では
+    // fast-entry（03:04:30）が after-entry（03:04:00）より後だが、-40秒の
+    // 補正で 03:03:50 となり先頭に並ぶのが正しい。
+    const merged = mergeLogFiles([
+      { fileName: "fast.log", text: "2024-01-02T03:04:30Z INFO fast-entry", clockSkewMs: -40000 },
+      { fileName: "steady.log", text: "2024-01-02T03:04:00Z INFO after-entry" },
+    ]);
+
+    assert.deepStrictEqual(
+      merged.map((m) => m.entry.message),
+      ["fast-entry", "after-entry"]
+    );
+    assert.strictEqual(merged[0].entry.timestampMs, Date.UTC(2024, 0, 2, 3, 3, 50));
+  });
+
+  test("applies the clock skew on top of the per-file source timezone offset", () => {
+    // +09:00 の壁時計 12:04:05 は UTC 03:04:05、そこへ +2 秒の補正が乗る。
+    const merged = mergeLogFiles([
+      {
+        fileName: "tokyo.log",
+        text: "2024-01-02 12:04:05 INFO tokyo-entry",
+        sourceUtcOffsetMinutes: 540,
+        clockSkewMs: 2000,
+      },
+    ]);
+    assert.strictEqual(merged[0].entry.timestampMs, Date.UTC(2024, 0, 2, 3, 4, 7));
   });
 });

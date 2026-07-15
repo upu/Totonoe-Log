@@ -15,6 +15,12 @@ export {
   compileFileOffsetRules,
   resolveFileOffsetMinutes,
 } from "./timezone";
+export type {
+  ClockSkewRuleSetting,
+  ClockSkewRule,
+  CompileClockSkewRulesResult,
+} from "./clockSkew";
+export { compileClockSkewRules, resolveClockSkewMs, applyClockSkew } from "./clockSkew";
 export type { MaskForCopyOptions } from "./maskForCompare";
 export { formatMaskedLogForCompare, maskLogTextForCopy } from "./maskForCompare";
 export type { CollapseOptions, CollapsedItem } from "./collapseRepeatedEntries";

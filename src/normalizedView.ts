@@ -7,6 +7,7 @@ import {
   filterEntriesByCriteria,
   collapseRepeatedEntries,
   formatCollapsedLog,
+  applyClockSkew,
   DEFAULT_COLLAPSE_THRESHOLD,
   DEFAULT_GAP_THRESHOLD_SECONDS,
   type FilterCriteria,
@@ -26,6 +27,7 @@ import {
 } from "./filterPrompts";
 import { parseLogWithConfiguredFormats } from "./timestampFormatSettings";
 import { createSourceOffsetResolver, readDisplayTimezone } from "./timezoneSettings";
+import { createClockSkewResolver } from "./clockSkewSettings";
 import { warnIfLowTimestampRecognition } from "./timestampRecognitionWarning";
 
 // スキーム定義は virtualDocumentContentProvider.ts に集約している
@@ -116,14 +118,19 @@ function getSourceDocumentOrWarn(actionLabel: string): vscode.TextDocument | und
 
 /**
  * 元ドキュメントを設定反映済みのフォーマット一覧・ソースオフセット
- * （issue #13）でパースし、タイムスタンプ認識率が低い場合の警告通知
- * （issue #101）まで済ませる。正規化ビュー系の全コマンドがパース直後に
- * 同じ判定を必要とするため一箇所にまとめる。
+ * （issue #13）でパースし、クロックスキュー補正（issue #15）と、タイム
+ * スタンプ認識率が低い場合の警告通知（issue #101）まで済ませる。正規化
+ * ビュー系の全コマンドがパース直後に同じ判定を必要とするため一箇所に
+ * まとめる。
  */
 function parseSourceLog(sourceDocument: vscode.TextDocument): LogEntry[] {
   const fileName = sourceDocument.uri.path.split("/").pop() ?? "";
   const sourceUtcOffsetMinutes = createSourceOffsetResolver()(fileName);
-  const entries = parseLogWithConfiguredFormats(sourceDocument.getText(), sourceUtcOffsetMinutes);
+  const parsedEntries = parseLogWithConfiguredFormats(
+    sourceDocument.getText(),
+    sourceUtcOffsetMinutes
+  );
+  const entries = applyClockSkew(parsedEntries, createClockSkewResolver()(fileName));
   warnIfLowTimestampRecognition(sourceDocument.uri, entries);
   return entries;
 }

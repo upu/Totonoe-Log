@@ -68,6 +68,10 @@ for the current roadmap.
   timezones merge into the true chronological order — and pick the timezone
   every view displays (`totonoeLog.timezone.display`: `UTC`, `local`, or a
   fixed offset like `+09:00`) (see below)
+- Correct clock skew: shift the timestamps of logs from a host whose
+  clock is off by ±N seconds, per file-name pattern
+  (`totonoeLog.clockSkew.fileOffsets`), so its entries line up with the
+  other logs in merged and normalized views (see below)
 
 ## Timezone normalization
 
@@ -97,6 +101,29 @@ involved, that skews the merged timeline. Three settings fix this:
 Timezone auto-detection is not implemented: a timestamp without an offset
 carries no reliable signal to detect one from, so guessing would silently
 corrupt the timeline instead of tidying it.
+
+## Clock skew correction
+
+Timezone settings can't help when a host's clock itself is wrong — say,
+a server drifting 40 seconds ahead because NTP is broken. The
+`totonoeLog.clockSkew.fileOffsets` setting corrects such logs by ±N
+seconds, per file-name pattern (first matching rule wins):
+
+```jsonc
+"totonoeLog.clockSkew.fileOffsets": [
+  { "filePattern": "app-server\\.log", "offsetSeconds": -40 },
+  { "filePattern": "db-.*\\.log", "offsetSeconds": 2.5 }
+]
+```
+
+Unlike `totonoeLog.timezone.sourceOffset`, the correction applies to
+every recognized timestamp — including ones with an explicit offset,
+`Z`, or epoch form — because the clock that produced them was itself
+off. Merged and normalized/filtered/collapsed views sort, display, and
+date-filter by the corrected times. The raw log text is never
+rewritten, and the compare view is unaffected (it masks timestamps
+entirely). Invalid entries are skipped with a warning; the remaining
+rules keep working.
 
 ## Custom timestamp formats
 

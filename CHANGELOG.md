@@ -20,6 +20,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   every view renders timestamps in (`UTC` by default, `local`, or a fixed
   offset like `+09:00`). Custom calendar-style timestamp formats can now
   also capture a literal `Z` with the new `tzz` group to mark explicit UTC.
+- New `totonoeLog.clockSkew.fileOffsets` setting to correct logs from
+  hosts whose clock is off by ±N seconds, per file-name pattern
+  (issue #15). Unlike the timezone source offset, the correction applies
+  to every recognized timestamp — including those with an explicit
+  offset, `Z`, or epoch form — because the host clock itself is wrong.
+  Merged and normalized/filtered/collapsed views sort, display, and
+  filter by the corrected times; the raw log text is never rewritten.
 
 - New built-in timestamp formats: slash-separated dates
   (`2024/01/02 03:04:05`, common in Japanese Windows/business-system
