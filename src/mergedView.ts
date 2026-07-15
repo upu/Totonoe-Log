@@ -20,6 +20,7 @@ import {
   countLines,
 } from "./filterPrompts";
 import { readConfiguredTimestampFormats } from "./timestampFormatSettings";
+import { createSourceOffsetResolver, readDisplayTimezone } from "./timezoneSettings";
 import { warnIfLowTimestampRecognition } from "./timestampRecognitionWarning";
 
 // スキーム定義は virtualDocumentContentProvider.ts に集約している
@@ -36,13 +37,22 @@ export class MergedViewContentProvider extends VirtualDocumentContentProvider {
 let mergedViewCounter = 0;
 let mergedFilteredViewCounter = 0;
 
-/** 選択されたファイル群を読み込み、{@link mergeLogFiles} に渡す入力へ変換する。 */
+/**
+ * 選択されたファイル群を読み込み、{@link mergeLogFiles} に渡す入力へ変換する。
+ * ファイルごとのソースオフセット（`totonoeLog.timezone.fileOffsets`、issue #13）
+ * もここで解決して添付する。
+ */
 async function readLogFiles(fileUris: readonly vscode.Uri[]): Promise<LogFileInput[]> {
+  const resolveSourceOffsetMinutes = createSourceOffsetResolver();
   return Promise.all(
     fileUris.map(async (fileUri) => {
       const document = await vscode.workspace.openTextDocument(fileUri);
       const fileName = fileUri.path.split("/").pop() ?? "log";
-      return { fileName, text: document.getText() };
+      return {
+        fileName,
+        text: document.getText(),
+        sourceUtcOffsetMinutes: resolveSourceOffsetMinutes(fileName),
+      };
     })
   );
 }
@@ -107,7 +117,7 @@ async function openMergedView(
     timestampFormats: readConfiguredTimestampFormats(),
   });
   warnLowTimestampRecognitionPerFile(fileUris, mergedEntries);
-  const content = formatMergedLog(mergedEntries);
+  const content = formatMergedLog(mergedEntries, { displayTimezone: readDisplayTimezone() });
 
   mergedViewCounter += 1;
   await openVirtualMergedDocument(provider, content, `/merged-${mergedViewCounter}.log`);
@@ -227,7 +237,9 @@ export function createShowMergedViewFilteredCommand(
       return;
     }
     const filteredMergedEntries = filterResult.entries;
-    const content = formatMergedLog(filteredMergedEntries);
+    const content = formatMergedLog(filteredMergedEntries, {
+      displayTimezone: readDisplayTimezone(),
+    });
 
     mergedFilteredViewCounter += 1;
     await openVirtualMergedDocument(

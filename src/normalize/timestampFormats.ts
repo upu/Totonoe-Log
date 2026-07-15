@@ -21,15 +21,19 @@ const MONTH_ABBREVIATIONS: Record<string, number> = {
  * エポックミリ秒に変換する。範囲外の値（月が 13 など）は `undefined` を返し、
  * 不正な日付をサイレントに受け入れないようにする。
  *
- * タイムゾーンオフセットがない場合は UTC として扱う。これにより、ホスト
- * マシンのローカルタイムゾーンに関わらず解析結果が一定になる（テスト時や
- * 異なるマシンで収集したログを比較する際に重要）。
+ * タイムゾーン表記がない場合は `fallbackUtcOffsetMinutes`（既定 0 = UTC）を
+ * 仮定する。既定を UTC にすることで、ホストマシンのローカルタイムゾーンに
+ * 関わらず解析結果が一定になる（テスト時や異なるマシンで収集したログを
+ * 比較する際に重要）。`tzs` グループ（明示オフセット）または `tzz` グループ
+ * （`Z` = UTC 明示）が捕捉されている場合は、書かれている情報を優先して
+ * フォールバックを適用しない。
  *
  * カスタムフォーマット（`customTimestampFormats.ts`）も同じグループ名を
  * ユーザー向け仕様として採用しているため、モジュール外へ公開している。
  */
 export function isoLikeGroupsToEpochMs(
-  groups: Record<string, string | undefined>
+  groups: Record<string, string | undefined>,
+  fallbackUtcOffsetMinutes = 0
 ): number | undefined {
   const year = Number(groups.y);
   const month = Number(groups.mo) - 1;
@@ -64,7 +68,13 @@ export function isoLikeGroupsToEpochMs(
     return epochMs - tzSign * (tzHours * 60 + tzMinutes) * 60 * 1000;
   }
 
-  return epochMs;
+  if (groups.tzz) {
+    // `Z` は UTC の明示。タイムゾーン表記なしとは区別し、フォールバックを
+    // 適用しない。
+    return epochMs;
+  }
+
+  return epochMs - fallbackUtcOffsetMinutes * 60 * 1000;
 }
 
 /**
@@ -79,10 +89,12 @@ export const ISO_8601_FORMAT: TimestampFormat = {
   // ミリ秒への変換（isoLikeGroupsToEpochMs）は先頭3桁のみを使うため、6桁を
   // 超える分は自動的に切り捨てられる。桁数を絞りすぎるとタイムゾーン部分が
   // 未マッチのままログメッセージへ混入してしまう（#94）。
+  // `Z` を tzz グループで捕捉するのは、「UTC の明示」と「タイムゾーン表記
+  // なし」を区別してソースオフセット（#13）を後者にだけ適用するため。
   regex:
-    /^(?<y>\d{4})-(?<mo>\d{2})-(?<d>\d{2})[T ](?<h>\d{2}):(?<mi>\d{2}):(?<s>\d{2})(?:[.,](?<ms>\d{1,9}))?(?:Z|(?<tzs>[+-])(?<tzh>\d{2}):?(?<tzm>\d{2}))?/,
-  parse(match) {
-    return isoLikeGroupsToEpochMs(match.groups ?? {});
+    /^(?<y>\d{4})-(?<mo>\d{2})-(?<d>\d{2})[T ](?<h>\d{2}):(?<mi>\d{2}):(?<s>\d{2})(?:[.,](?<ms>\d{1,9}))?(?:(?<tzz>Z)|(?<tzs>[+-])(?<tzh>\d{2}):?(?<tzm>\d{2}))?/,
+  parse(match, context) {
+    return isoLikeGroupsToEpochMs(match.groups ?? {}, context?.fallbackUtcOffsetMinutes);
   },
 };
 
@@ -92,11 +104,11 @@ export const ISO_8601_FORMAT: TimestampFormat = {
  */
 export const BRACKETED_ISO_8601_FORMAT: TimestampFormat = {
   name: "bracketed-iso8601",
-  // 小数秒の桁数上限の理由は ISO_8601_FORMAT のコメント参照。
+  // 小数秒の桁数上限・tzz グループの理由は ISO_8601_FORMAT のコメント参照。
   regex:
-    /^\[(?<y>\d{4})-(?<mo>\d{2})-(?<d>\d{2})[T ](?<h>\d{2}):(?<mi>\d{2}):(?<s>\d{2})(?:[.,](?<ms>\d{1,9}))?(?:Z|(?<tzs>[+-])(?<tzh>\d{2}):?(?<tzm>\d{2}))?\]/,
-  parse(match) {
-    return isoLikeGroupsToEpochMs(match.groups ?? {});
+    /^\[(?<y>\d{4})-(?<mo>\d{2})-(?<d>\d{2})[T ](?<h>\d{2}):(?<mi>\d{2}):(?<s>\d{2})(?:[.,](?<ms>\d{1,9}))?(?:(?<tzz>Z)|(?<tzs>[+-])(?<tzh>\d{2}):?(?<tzm>\d{2}))?\]/,
+  parse(match, context) {
+    return isoLikeGroupsToEpochMs(match.groups ?? {}, context?.fallbackUtcOffsetMinutes);
   },
 };
 
@@ -107,14 +119,15 @@ export const BRACKETED_ISO_8601_FORMAT: TimestampFormat = {
  *
  * 日本語圏の Windows 系アプリ・業務システムのログで広く使われる形式。
  * タイムゾーン表記を持たないログがほとんどのため、オフセットは受け付けず
- * 常に UTC として解釈する（ISO 形式のタイムゾーンなしの場合と同じ扱い）。
+ * ソースオフセット未指定なら UTC として解釈する（ISO 形式のタイムゾーン
+ * なしの場合と同じ扱い）。
  */
 export const SLASH_DATE_FORMAT: TimestampFormat = {
   name: "slash-date",
   regex:
     /^(?<y>\d{4})\/(?<mo>\d{1,2})\/(?<d>\d{1,2})[T ](?<h>\d{1,2}):(?<mi>\d{2}):(?<s>\d{2})(?:[.,](?<ms>\d{1,9}))?/,
-  parse(match) {
-    return isoLikeGroupsToEpochMs(match.groups ?? {});
+  parse(match, context) {
+    return isoLikeGroupsToEpochMs(match.groups ?? {}, context?.fallbackUtcOffsetMinutes);
   },
 };
 
@@ -132,16 +145,21 @@ export const APACHE_ACCESS_LOG_FORMAT: TimestampFormat = {
   name: "apache-access-log",
   regex:
     /^\[(?<d>\d{2})\/(?<mon>[A-Za-z]{3})\/(?<y>\d{4}):(?<h>\d{2}):(?<mi>\d{2}):(?<s>\d{2})(?: (?<tzs>[+-])(?<tzh>\d{2})(?<tzm>\d{2}))?\]/,
-  parse(match) {
+  parse(match, context) {
     const groups = match.groups ?? {};
     const month = MONTH_ABBREVIATIONS[(groups.mon ?? "").toLowerCase()];
     if (month === undefined) {
       return undefined;
     }
-    return isoLikeGroupsToEpochMs({
-      ...groups,
-      mo: String(month + 1),
-    });
+    // オフセット部分が省略されている場合のみ、isoLikeGroupsToEpochMs 側の
+    // 判定によりソースオフセットのフォールバックが適用される。
+    return isoLikeGroupsToEpochMs(
+      {
+        ...groups,
+        mo: String(month + 1),
+      },
+      context?.fallbackUtcOffsetMinutes
+    );
   },
 };
 
@@ -215,21 +233,28 @@ export function createSyslogFormat(options: SyslogFormatOptions = {}): Timestamp
   return {
     name: "syslog",
     regex: /^(?<mon>[A-Za-z]{3})\s+(?<d>\d{1,2})\s(?<h>\d{2}):(?<mi>\d{2}):(?<s>\d{2})/,
-    parse(match) {
+    parse(match, context) {
       const groups = match.groups ?? {};
       const month = MONTH_ABBREVIATIONS[(groups.mon ?? "").toLowerCase()];
       if (month === undefined) {
         return undefined;
       }
+      // syslog はタイムゾーン表記を持たないため、常にフォールバック
+      // オフセットの適用対象になる。年推定の未来判定はオフセット適用後の
+      // 値で行うが、ずれは最大 ±14 時間で FUTURE_TOLERANCE_MS（24時間）に
+      // 収まるため判定を壊さない。
       const toEpochMs = (year: number): number | undefined =>
-        isoLikeGroupsToEpochMs({
-          y: String(year),
-          mo: String(month + 1).padStart(2, "0"),
-          d: groups.d,
-          h: groups.h,
-          mi: groups.mi,
-          s: groups.s,
-        });
+        isoLikeGroupsToEpochMs(
+          {
+            y: String(year),
+            mo: String(month + 1).padStart(2, "0"),
+            d: groups.d,
+            h: groups.h,
+            mi: groups.mi,
+            s: groups.s,
+          },
+          context?.fallbackUtcOffsetMinutes
+        );
 
       if (options.assumedYear !== undefined) {
         return toEpochMs(options.assumedYear);

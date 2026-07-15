@@ -43,6 +43,18 @@ export interface LogEntry {
 }
 
 /**
+ * {@link TimestampFormat.parse} に渡す解釈コンテキスト。
+ */
+export interface TimestampParseContext {
+  /**
+   * タイムスタンプ自体がタイムゾーン表記を持たない場合に仮定する UTC
+   * オフセット（分）。省略時は UTC（0）。明示的なオフセットや `Z` を持つ
+   * タイムスタンプには適用しないこと（書かれている情報を常に優先する）。
+   */
+  readonly fallbackUtcOffsetMinutes?: number;
+}
+
+/**
  * タイムスタンプ形式1種類に対応する、正規表現ベースのプラガブルパーサ。
  *
  * `parseLog` が各物理行の先頭を確実に判定できるよう、実装側は `regex` を
@@ -57,6 +69,10 @@ export interface TimestampFormat {
    * `regex` のマッチ結果をエポックミリ秒に変換する。
    * マッチしたテキストが有効な日時でない場合（例: "Feb 30"）は
    * `undefined` を返し、その行を未マッチとして扱わせる。
+   *
+   * `context` はタイムゾーン表記を持たない形式向けの補助情報。エポック形式の
+   * ように絶対時刻を表す形式は無視してよい（省略可能な引数のため、既存の
+   * 実装は変更なしで互換）。
    */
-  parse(match: RegExpExecArray): number | undefined;
+  parse(match: RegExpExecArray, context?: TimestampParseContext): number | undefined;
 }

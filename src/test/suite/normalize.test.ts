@@ -21,6 +21,10 @@ import {
   assessTimestampRecognition,
   LOW_RECOGNITION_MIN_LINE_COUNT,
   LOW_RECOGNITION_RATIO_THRESHOLD,
+  parseUtcOffsetMinutes,
+  formatTimestampForDisplay,
+  compileFileOffsetRules,
+  resolveFileOffsetMinutes,
 } from "../../normalize";
 
 suite("normalize / parseLog", () => {
@@ -1645,5 +1649,252 @@ suite("normalize / assessTimestampRecognition", () => {
     assert.strictEqual(result.unrecognizedLineCount, 0);
     assert.strictEqual(result.unrecognizedRatio, 0);
     assert.strictEqual(result.shouldWarn, false);
+  });
+});
+
+suite("normalize / parseUtcOffsetMinutes (#13)", () => {
+  test("parses colon-separated offsets", () => {
+    assert.strictEqual(parseUtcOffsetMinutes("+09:00"), 540);
+    assert.strictEqual(parseUtcOffsetMinutes("-05:30"), -330);
+  });
+
+  test("parses compact and hour-only offsets", () => {
+    assert.strictEqual(parseUtcOffsetMinutes("+0900"), 540);
+    assert.strictEqual(parseUtcOffsetMinutes("-05"), -300);
+  });
+
+  test("treats UTC and Z as a zero offset, case-insensitively", () => {
+    assert.strictEqual(parseUtcOffsetMinutes("UTC"), 0);
+    assert.strictEqual(parseUtcOffsetMinutes("utc"), 0);
+    assert.strictEqual(parseUtcOffsetMinutes("Z"), 0);
+    assert.strictEqual(parseUtcOffsetMinutes("+00:00"), 0);
+  });
+
+  test("ignores surrounding whitespace", () => {
+    assert.strictEqual(parseUtcOffsetMinutes(" +09:00 "), 540);
+  });
+
+  test("rejects malformed or out-of-range offsets", () => {
+    assert.strictEqual(parseUtcOffsetMinutes(""), undefined);
+    assert.strictEqual(parseUtcOffsetMinutes("abc"), undefined);
+    assert.strictEqual(parseUtcOffsetMinutes("09:00"), undefined);
+    assert.strictEqual(parseUtcOffsetMinutes("+15:00"), undefined);
+    assert.strictEqual(parseUtcOffsetMinutes("+09:60"), undefined);
+  });
+});
+
+suite("normalize / formatTimestampForDisplay (#13)", () => {
+  const epochMs = Date.UTC(2024, 0, 2, 3, 4, 5, 678);
+
+  test("renders a zero offset with the Z suffix, matching the existing display", () => {
+    assert.strictEqual(formatTimestampForDisplay(epochMs, 0), "2024-01-02T03:04:05.678Z");
+  });
+
+  test("renders a positive offset as shifted wall-clock time with the offset suffix", () => {
+    assert.strictEqual(formatTimestampForDisplay(epochMs, 540), "2024-01-02T12:04:05.678+09:00");
+  });
+
+  test("renders a negative offset, including non-whole-hour minutes", () => {
+    assert.strictEqual(formatTimestampForDisplay(epochMs, -330), "2024-01-01T21:34:05.678-05:30");
+  });
+
+  test("renders the host-local timezone so that the output round-trips to the same instant", () => {
+    // ホストのタイムゾーンに依存させないため、値の決め打ちではなく
+    // 「表示文字列を再解析すると元のエポックに戻る」性質で検証する。
+    const output = formatTimestampForDisplay(epochMs, "local");
+    assert.strictEqual(Date.parse(output), epochMs);
+  });
+});
+
+suite("normalize / compileFileOffsetRules (#13)", () => {
+  test("compiles valid rules and resolves the offset for a matching file name", () => {
+    const { rules, errors } = compileFileOffsetRules([
+      { filePattern: "server-a.*\\.log", offset: "+09:00" },
+      { filePattern: "server-b.*\\.log", offset: "-05:00" },
+    ]);
+
+    assert.deepStrictEqual(errors, []);
+    assert.strictEqual(rules.length, 2);
+    assert.strictEqual(resolveFileOffsetMinutes("server-a-20240101.log", rules), 540);
+    assert.strictEqual(resolveFileOffsetMinutes("server-b-20240101.log", rules), -300);
+  });
+
+  test("returns undefined for a file name that matches no rule", () => {
+    const { rules } = compileFileOffsetRules([
+      { filePattern: "server-a.*\\.log", offset: "+09:00" },
+    ]);
+    assert.strictEqual(resolveFileOffsetMinutes("other.log", rules), undefined);
+  });
+
+  test("uses the first matching rule when multiple rules match", () => {
+    const { rules } = compileFileOffsetRules([
+      { filePattern: "server-.*", offset: "+09:00" },
+      { filePattern: "server-a.*", offset: "-05:00" },
+    ]);
+    assert.strictEqual(resolveFileOffsetMinutes("server-a.log", rules), 540);
+  });
+
+  test("reports errors for invalid entries while keeping valid ones", () => {
+    const { rules, errors } = compileFileOffsetRules([
+      "oops",
+      { filePattern: "(", offset: "+09:00" },
+      { filePattern: "ok.*", offset: "bogus" },
+      { filePattern: "valid.*", offset: "+02:00" },
+    ]);
+
+    assert.strictEqual(errors.length, 3);
+    assert.strictEqual(rules.length, 1);
+    assert.strictEqual(resolveFileOffsetMinutes("valid.log", rules), 120);
+  });
+
+  test("returns no rules and no errors for an empty setting", () => {
+    const { rules, errors } = compileFileOffsetRules([]);
+    assert.deepStrictEqual(rules, []);
+    assert.deepStrictEqual(errors, []);
+  });
+});
+
+suite("normalize / parseLog source timezone (#13)", () => {
+  test("applies the source offset to timestamps without explicit zone information", () => {
+    const [entry] = parseLog("2024-01-02 12:04:05 INFO hello", { sourceUtcOffsetMinutes: 540 });
+    // +09:00 の壁時計 12:04:05 は UTC の 03:04:05。
+    assert.strictEqual(entry.timestampMs, Date.UTC(2024, 0, 2, 3, 4, 5));
+  });
+
+  test("applies a negative source offset", () => {
+    const [entry] = parseLog("2024-01-01 22:04:05 INFO hello", { sourceUtcOffsetMinutes: -300 });
+    assert.strictEqual(entry.timestampMs, Date.UTC(2024, 0, 2, 3, 4, 5));
+  });
+
+  test("does not shift Z-suffixed timestamps", () => {
+    const [entry] = parseLog("2024-01-02T03:04:05Z INFO hello", { sourceUtcOffsetMinutes: 540 });
+    assert.strictEqual(entry.timestampMs, Date.UTC(2024, 0, 2, 3, 4, 5));
+  });
+
+  test("does not shift timestamps with an explicit offset", () => {
+    const [entry] = parseLog("2024-01-02T03:04:05+02:00 INFO hello", {
+      sourceUtcOffsetMinutes: 540,
+    });
+    assert.strictEqual(entry.timestampMs, Date.UTC(2024, 0, 2, 1, 4, 5));
+  });
+
+  test("does not shift epoch timestamps, which are absolute by definition", () => {
+    const [entry] = parseLog("1704164645 INFO hello", { sourceUtcOffsetMinutes: 540 });
+    assert.strictEqual(entry.timestampMs, Date.UTC(2024, 0, 2, 3, 4, 5));
+  });
+
+  test("applies the source offset to slash-date timestamps", () => {
+    const [entry] = parseLog("2024/01/02 12:04:05 INFO hello", { sourceUtcOffsetMinutes: 540 });
+    assert.strictEqual(entry.timestampMs, Date.UTC(2024, 0, 2, 3, 4, 5));
+  });
+
+  test("applies the source offset to syslog timestamps, which never carry a zone", () => {
+    const [entry] = parseLog("Jan  2 12:04:05 host app: hello", {
+      timestampFormats: [createSyslogFormat({ assumedYear: 2024 })],
+      sourceUtcOffsetMinutes: 540,
+    });
+    assert.strictEqual(entry.timestampMs, Date.UTC(2024, 0, 2, 3, 4, 5));
+  });
+
+  test("applies the source offset to Apache access-log timestamps only when the offset part is omitted", () => {
+    const [withoutZone] = parseLog("[02/Jan/2024:12:04:05] request done", {
+      sourceUtcOffsetMinutes: 540,
+    });
+    assert.strictEqual(withoutZone.timestampMs, Date.UTC(2024, 0, 2, 3, 4, 5));
+
+    const [withZone] = parseLog("[02/Jan/2024:12:04:05 +0900] request done", {
+      sourceUtcOffsetMinutes: 0,
+    });
+    assert.strictEqual(withZone.timestampMs, Date.UTC(2024, 0, 2, 3, 4, 5));
+  });
+
+  test("applies the source offset to custom calendar formats without timezone groups", () => {
+    const { formats } = compileCustomTimestampFormats([
+      {
+        name: "jp-date",
+        pattern:
+          "(?<y>\\d{4})年(?<mo>\\d{1,2})月(?<d>\\d{1,2})日 (?<h>\\d{1,2}):(?<mi>\\d{2}):(?<s>\\d{2})",
+      },
+    ]);
+
+    const [entry] = parseLog("2024年1月2日 12:04:05 INFO hello", {
+      timestampFormats: formats,
+      sourceUtcOffsetMinutes: 540,
+    });
+    assert.strictEqual(entry.timestampMs, Date.UTC(2024, 0, 2, 3, 4, 5));
+  });
+});
+
+suite("normalize / mergeLogFiles per-file timezone (#13)", () => {
+  test("merges files with different per-file source offsets into true chronological order", () => {
+    // 壁時計上は tokyo.log の方が後（09:00 > 03:00）だが、+09:00 を適用すると
+    // UTC では 00:00 となり utc.log（03:00）より前に並ぶのが正しい。
+    const merged = mergeLogFiles([
+      {
+        fileName: "tokyo.log",
+        text: "2024-01-02 09:00:00 INFO tokyo-entry",
+        sourceUtcOffsetMinutes: 540,
+      },
+      { fileName: "utc.log", text: "2024-01-02 03:00:00 INFO utc-entry" },
+    ]);
+
+    assert.deepStrictEqual(
+      merged.map((m) => m.entry.message),
+      ["tokyo-entry", "utc-entry"]
+    );
+  });
+
+  test("prefers the per-file offset over the offset in shared parse options", () => {
+    const merged = mergeLogFiles(
+      [
+        {
+          fileName: "tokyo.log",
+          text: "2024-01-02 09:00:00 INFO tokyo-entry",
+          sourceUtcOffsetMinutes: 540,
+        },
+        { fileName: "berlin.log", text: "2024-01-02 02:30:00 INFO berlin-entry" },
+      ],
+      { sourceUtcOffsetMinutes: 60 }
+    );
+
+    // tokyo.log は個別指定の +09:00（UTC 00:00）、berlin.log は共通指定の
+    // +01:00（UTC 01:30）で解釈される。
+    assert.deepStrictEqual(
+      merged.map((m) => m.entry.message),
+      ["tokyo-entry", "berlin-entry"]
+    );
+    assert.strictEqual(merged[0].entry.timestampMs, Date.UTC(2024, 0, 2, 0, 0, 0));
+    assert.strictEqual(merged[1].entry.timestampMs, Date.UTC(2024, 0, 2, 1, 30, 0));
+  });
+});
+
+suite("normalize / display timezone in formatters (#13)", () => {
+  test("formatNormalizedLog renders timestamps in the requested display timezone", () => {
+    const entries = parseLog("[2024-01-02 03:04:05,678] INFO Starting up");
+    const output = formatNormalizedLog(entries, { displayTimezone: 540 });
+
+    assert.strictEqual(output, "1 | 2024-01-02T12:04:05.678+09:00 INFO Starting up");
+  });
+
+  test("formatNormalizedLog keeps the UTC (Z) display by default", () => {
+    const entries = parseLog("2024-01-02T03:04:05Z INFO hello");
+    assert.strictEqual(formatNormalizedLog(entries), "1 | 2024-01-02T03:04:05.000Z INFO hello");
+  });
+
+  test("formatMergedLog renders timestamps in the requested display timezone", () => {
+    const merged = mergeLogFiles([
+      { fileName: "app.log", text: "2024-01-02T03:04:05Z INFO hello" },
+    ]);
+    const output = formatMergedLog(merged, { displayTimezone: 540 });
+
+    assert.strictEqual(output, "app.log | app | 1 | 2024-01-02T12:04:05.000+09:00 INFO hello");
+  });
+
+  test("formatCollapsedLog renders timestamps in the requested display timezone", () => {
+    const entries = parseLog("2024-01-02T03:04:05Z ERROR boom");
+    const items = collapseRepeatedEntries(entries, { threshold: 3 });
+    const output = formatCollapsedLog(entries, items, { displayTimezone: 540 });
+
+    assert.strictEqual(output, "1 | 2024-01-02T12:04:05.000+09:00 ERROR boom");
   });
 });

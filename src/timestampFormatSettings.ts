@@ -37,7 +37,18 @@ export function readConfiguredTimestampFormats(): TimestampFormat[] {
  * `totonoeLog.timestampFormats` 設定を反映して {@link parseLog} を実行する。
  * VSCode API に触れる各コマンドは、素の `parseLog` の代わりにこれを使う
  * （純粋ロジック層に VSCode 依存を持ち込まないための薄いラッパー）。
+ *
+ * `sourceUtcOffsetMinutes` はタイムゾーン表記を持たないタイムスタンプに
+ * 仮定するソースオフセット（issue #13）。設定からの解決は呼び出し側が
+ * `timezoneSettings.ts` を通じて行う（このモジュールをタイムスタンプ形式
+ * 設定専用に保つため）。
  */
-export function parseLogWithConfiguredFormats(text: string): LogEntry[] {
-  return parseLog(text, { timestampFormats: readConfiguredTimestampFormats() });
+export function parseLogWithConfiguredFormats(
+  text: string,
+  sourceUtcOffsetMinutes?: number
+): LogEntry[] {
+  return parseLog(text, {
+    timestampFormats: readConfiguredTimestampFormats(),
+    sourceUtcOffsetMinutes,
+  });
 }

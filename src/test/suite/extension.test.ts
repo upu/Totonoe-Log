@@ -2281,6 +2281,155 @@ suite("Totonoe Log custom timestamp formats", () => {
   });
 });
 
+suite("Totonoe Log timezone settings (#13)", () => {
+  test("renders normalized timestamps in the timezone configured via totonoeLog.timezone.display", async function () {
+    this.timeout(10000);
+    const extension = vscode.extensions.getExtension("upu.totonoe-log");
+    await extension!.activate();
+
+    const config = vscode.workspace.getConfiguration("totonoeLog.timezone");
+    await config.update("display", "+09:00", vscode.ConfigurationTarget.Global);
+
+    try {
+      const source = await vscode.workspace.openTextDocument({
+        content: "2024-01-02T03:04:05Z INFO hello",
+        language: "log",
+      });
+      await vscode.window.showTextDocument(source);
+
+      await vscode.commands.executeCommand("totonoeLog.showNormalizedView");
+
+      const activeEditor = vscode.window.activeTextEditor;
+      assert.ok(activeEditor, "a normalized view editor should be shown");
+      assert.strictEqual(
+        activeEditor!.document.getText(),
+        "1 | 2024-01-02T12:04:05.000+09:00 INFO hello"
+      );
+    } finally {
+      await config.update("display", undefined, vscode.ConfigurationTarget.Global);
+    }
+  });
+
+  test("interprets zone-less timestamps with the offset configured via totonoeLog.timezone.sourceOffset", async function () {
+    this.timeout(10000);
+    const extension = vscode.extensions.getExtension("upu.totonoe-log");
+    await extension!.activate();
+
+    const config = vscode.workspace.getConfiguration("totonoeLog.timezone");
+    await config.update("sourceOffset", "+09:00", vscode.ConfigurationTarget.Global);
+
+    try {
+      const source = await vscode.workspace.openTextDocument({
+        content: "2024-01-02 12:04:05 INFO hello",
+        language: "log",
+      });
+      await vscode.window.showTextDocument(source);
+
+      await vscode.commands.executeCommand("totonoeLog.showNormalizedView");
+
+      const activeEditor = vscode.window.activeTextEditor;
+      assert.ok(activeEditor, "a normalized view editor should be shown");
+      // +09:00 の壁時計 12:04:05 は UTC の 03:04:05。表示は既定（UTC）のまま。
+      assert.strictEqual(
+        activeEditor!.document.getText(),
+        "1 | 2024-01-02T03:04:05.000Z INFO hello"
+      );
+    } finally {
+      await config.update("sourceOffset", undefined, vscode.ConfigurationTarget.Global);
+    }
+  });
+
+  test("applies per-file source offsets configured via totonoeLog.timezone.fileOffsets to the merged view", async function () {
+    this.timeout(10000);
+    const extension = vscode.extensions.getExtension("upu.totonoe-log");
+    await extension!.activate();
+
+    const fs = await import("node:fs/promises");
+    const os = await import("node:os");
+    const path = await import("node:path");
+
+    const config = vscode.workspace.getConfiguration("totonoeLog.timezone");
+    await config.update(
+      "fileOffsets",
+      [{ filePattern: "tokyo.*\\.log", offset: "+09:00" }],
+      vscode.ConfigurationTarget.Global
+    );
+
+    const tempDir = await fs.mkdtemp(path.join(os.tmpdir(), "totonoe-log-tz-"));
+    try {
+      const tokyoLogPath = path.join(tempDir, "tokyo.log");
+      const utcLogPath = path.join(tempDir, "utc.log");
+      // 壁時計上は tokyo.log の方が後（09:00 > 03:00）だが、+09:00 を適用すると
+      // UTC 00:00 になり utc.log（03:00）より前に並ぶのが正しい。
+      await fs.writeFile(tokyoLogPath, "2024-01-02 09:00:00 INFO tokyo-entry");
+      await fs.writeFile(utcLogPath, "2024-01-02 03:00:00 INFO utc-entry");
+
+      const originalShowOpenDialog = vscode.window.showOpenDialog;
+      (vscode.window as any).showOpenDialog = async () => [
+        vscode.Uri.file(tokyoLogPath),
+        vscode.Uri.file(utcLogPath),
+      ];
+
+      try {
+        await vscode.commands.executeCommand("totonoeLog.showMergedView");
+      } finally {
+        (vscode.window as any).showOpenDialog = originalShowOpenDialog;
+      }
+
+      const activeEditor = vscode.window.activeTextEditor;
+      assert.ok(activeEditor, "a merged view editor should be shown");
+      const expected = [
+        "tokyo.log | tokyo | 1 | 2024-01-02T00:00:00.000Z INFO tokyo-entry",
+        "utc.log   | utc   | 1 | 2024-01-02T03:00:00.000Z INFO utc-entry",
+      ].join("\n");
+      assert.strictEqual(activeEditor!.document.getText(), expected);
+    } finally {
+      await config.update("fileOffsets", undefined, vscode.ConfigurationTarget.Global);
+      await vscode.commands.executeCommand("workbench.action.closeAllEditors");
+      await fs.rm(tempDir, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 });
+    }
+  });
+
+  test("warns about an invalid timezone setting and falls back to UTC", async function () {
+    this.timeout(10000);
+    const extension = vscode.extensions.getExtension("upu.totonoe-log");
+    await extension!.activate();
+
+    const config = vscode.workspace.getConfiguration("totonoeLog.timezone");
+    await config.update("display", "bogus", vscode.ConfigurationTarget.Global);
+
+    const originalShowWarningMessage = vscode.window.showWarningMessage;
+    let warningMessage: string | undefined;
+    (vscode.window as any).showWarningMessage = async (message: string) => {
+      warningMessage = message;
+      return undefined;
+    };
+
+    try {
+      const source = await vscode.workspace.openTextDocument({
+        content: "2024-01-02T03:04:05Z INFO hello",
+        language: "log",
+      });
+      await vscode.window.showTextDocument(source);
+
+      await vscode.commands.executeCommand("totonoeLog.showNormalizedView");
+
+      assert.ok(
+        warningMessage?.includes("timezone"),
+        "a warning should be shown for the invalid timezone setting"
+      );
+      const activeEditor = vscode.window.activeTextEditor;
+      assert.strictEqual(
+        activeEditor!.document.getText(),
+        "1 | 2024-01-02T03:04:05.000Z INFO hello"
+      );
+    } finally {
+      (vscode.window as any).showWarningMessage = originalShowWarningMessage;
+      await config.update("display", undefined, vscode.ConfigurationTarget.Global);
+    }
+  });
+});
+
 suite("Totonoe Log low timestamp recognition warning", () => {
   /** タイムスタンプを含まないプレーンな行（警告条件を満たす12行）。 */
   const UNRECOGNIZED_LOG = Array.from({ length: 12 }, (_, i) => `plain line ${i + 1}`).join("\n");

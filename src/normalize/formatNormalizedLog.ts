@@ -1,5 +1,6 @@
 import type { LogEntry } from "./types";
 import { computeMaxLineNumber, formatGutter } from "./gutter";
+import { formatTimestampForDisplay, type DisplayTimezone } from "./timezone";
 
 /** セベリティが認識できなかったエントリの見出しに表示するプレースホルダー。 */
 const SEVERITY_PLACEHOLDER = "-";
@@ -19,10 +20,12 @@ export interface FormatNormalizedLogOptions {
    * 場合のみ判定対象になる）。
    */
   readonly gapThresholdMs?: number;
-}
 
-function formatTimestamp(timestampMs: number): string {
-  return new Date(timestampMs).toISOString();
+  /**
+   * タイムスタンプの表示タイムゾーン。省略時は UTC（従来どおり `Z` サフィックス
+   * 表示）。指定するとその壁時計時刻＋オフセットサフィックスで表示する（issue #13）。
+   */
+  readonly displayTimezone?: DisplayTimezone;
 }
 
 /**
@@ -60,6 +63,7 @@ export function formatNormalizedLog(
   const gutterWidth = String(computeMaxLineNumber(entries)).length;
   const outputLines: string[] = [];
   const gapThresholdMs = options.gapThresholdMs;
+  const displayTimezone = options.displayTimezone ?? 0;
 
   for (let i = 0; i < entries.length; i++) {
     const entry = entries[i];
@@ -79,7 +83,7 @@ export function formatNormalizedLog(
     const messageLines = entry.message.split("\n");
 
     const headerText = entry.matched && entry.timestampMs !== undefined
-      ? `${formatTimestamp(entry.timestampMs)} ${entry.severity ?? SEVERITY_PLACEHOLDER} ${messageLines[0]}`
+      ? `${formatTimestampForDisplay(entry.timestampMs, displayTimezone)} ${entry.severity ?? SEVERITY_PLACEHOLDER} ${messageLines[0]}`
       : messageLines[0];
     outputLines.push(formatGutter(entry.startLine, gutterWidth) + headerText);
 

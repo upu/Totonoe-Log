@@ -10,6 +10,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- New timezone normalization settings (issue #13):
+  `totonoeLog.timezone.sourceOffset` sets the UTC offset assumed for
+  timestamps without explicit timezone information (timestamps with an
+  explicit offset or `Z`, and epoch timestamps, are never shifted), and
+  `totonoeLog.timezone.fileOffsets` overrides it per file-name pattern so
+  logs from servers in different timezones merge into the true
+  chronological order. `totonoeLog.timezone.display` selects the timezone
+  every view renders timestamps in (`UTC` by default, `local`, or a fixed
+  offset like `+09:00`). Custom calendar-style timestamp formats can now
+  also capture a literal `Z` with the new `tzz` group to mark explicit UTC.
+
 - New built-in timestamp formats: slash-separated dates
   (`2024/01/02 03:04:05`, common in Japanese Windows/business-system
   logs), Apache/Nginx access-log timestamps

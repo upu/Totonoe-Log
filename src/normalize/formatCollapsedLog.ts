@@ -1,12 +1,18 @@
 import type { LogEntry } from "./types";
 import { computeMaxLineNumber, formatGutter } from "./gutter";
 import type { CollapsedItem } from "./collapseRepeatedEntries";
+import { formatTimestampForDisplay, type DisplayTimezone } from "./timezone";
 
 /** セベリティが認識できなかったエントリの見出しに表示するプレースホルダー。 */
 const SEVERITY_PLACEHOLDER = "-";
 
-function formatTimestamp(timestampMs: number): string {
-  return new Date(timestampMs).toISOString();
+/** {@link formatCollapsedLog} の挙動を調整するオプション。 */
+export interface FormatCollapsedLogOptions {
+  /**
+   * タイムスタンプの表示タイムゾーン。省略時は UTC（従来どおり `Z` サフィックス
+   * 表示）。指定するとその壁時計時刻＋オフセットサフィックスで表示する（issue #13）。
+   */
+  readonly displayTimezone?: DisplayTimezone;
 }
 
 function rangeLabel(entries: readonly LogEntry[]): string {
@@ -43,8 +49,10 @@ function computeGutterWidth(entries: readonly LogEntry[], items: readonly Collap
  */
 export function formatCollapsedLog(
   entries: readonly LogEntry[],
-  items: readonly CollapsedItem[]
+  items: readonly CollapsedItem[],
+  options: FormatCollapsedLogOptions = {}
 ): string {
+  const displayTimezone = options.displayTimezone ?? 0;
   const gutterWidth = computeGutterWidth(entries, items);
   const outputLines: string[] = [];
 
@@ -54,7 +62,7 @@ export function formatCollapsedLog(
     const suffix = item.kind === "group" ? ` (×${item.entries.length})` : "";
 
     const headerText = representative.matched && representative.timestampMs !== undefined
-      ? `${formatTimestamp(representative.timestampMs)} ${representative.severity ?? SEVERITY_PLACEHOLDER} ${messageLines[0]}${suffix}`
+      ? `${formatTimestampForDisplay(representative.timestampMs, displayTimezone)} ${representative.severity ?? SEVERITY_PLACEHOLDER} ${messageLines[0]}${suffix}`
       : `${messageLines[0]}${suffix}`;
     const gutterLabel = item.kind === "single" ? representative.startLine : rangeLabel(item.entries);
     outputLines.push(formatGutter(gutterLabel, gutterWidth) + headerText);
