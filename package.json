@@ -152,6 +152,28 @@
             }
           }
         },
+        "totonoeLog.clockSkew.fileOffsets": {
+          "type": "array",
+          "default": [],
+          "markdownDescription": "時計がずれているホストのログの時刻を、ファイル名パターンごとに±N秒補正する。タイムゾーン表記の有無にかかわらず全タイムスタンプに適用され、マージ・正規化ビューは補正後の時刻を使う。上から順に評価し、最初にマッチした規則を使う。",
+          "items": {
+            "type": "object",
+            "required": [
+              "filePattern",
+              "offsetSeconds"
+            ],
+            "properties": {
+              "filePattern": {
+                "type": "string",
+                "description": "ファイル名（パスを除いたベース名）にマッチさせる正規表現。"
+              },
+              "offsetSeconds": {
+                "type": "number",
+                "description": "適用する補正量（秒）。時計が進んでいるホストには負の値（例: -40）で戻す。"
+              }
+            }
+          }
+        },
         "totonoeLog.timestampFormats": {
           "type": "array",
           "default": [],

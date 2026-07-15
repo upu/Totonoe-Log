@@ -2430,6 +2430,143 @@ suite("Totonoe Log timezone settings (#13)", () => {
   });
 });
 
+suite("Totonoe Log clock skew settings (#15)", () => {
+  test("applies the per-file clock skew configured via totonoeLog.clockSkew.fileOffsets to the normalized view", async function () {
+    this.timeout(10000);
+    const extension = vscode.extensions.getExtension("upu.totonoe-log");
+    await extension!.activate();
+
+    const fs = await import("node:fs/promises");
+    const os = await import("node:os");
+    const path = await import("node:path");
+
+    const config = vscode.workspace.getConfiguration("totonoeLog.clockSkew");
+    await config.update(
+      "fileOffsets",
+      [{ filePattern: "skewed.*\\.log", offsetSeconds: -40 }],
+      vscode.ConfigurationTarget.Global
+    );
+
+    const tempDir = await fs.mkdtemp(path.join(os.tmpdir(), "totonoe-log-skew-"));
+    try {
+      const skewedLogPath = path.join(tempDir, "skewed.log");
+      // このホストの時計は40秒進んでいる想定。タイムゾーン表記付きの
+      // タイムスタンプにも補正がかかる（時計そのもののずれの補正のため）。
+      await fs.writeFile(skewedLogPath, "2024-01-02T03:04:45Z INFO hello");
+
+      const source = await vscode.workspace.openTextDocument(vscode.Uri.file(skewedLogPath));
+      await vscode.window.showTextDocument(source);
+
+      await vscode.commands.executeCommand("totonoeLog.showNormalizedView");
+
+      const activeEditor = vscode.window.activeTextEditor;
+      assert.ok(activeEditor, "a normalized view editor should be shown");
+      assert.strictEqual(
+        activeEditor!.document.getText(),
+        "1 | 2024-01-02T03:04:05.000Z INFO hello"
+      );
+    } finally {
+      await config.update("fileOffsets", undefined, vscode.ConfigurationTarget.Global);
+      await vscode.commands.executeCommand("workbench.action.closeAllEditors");
+      await fs.rm(tempDir, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 });
+    }
+  });
+
+  test("applies per-file clock skews configured via totonoeLog.clockSkew.fileOffsets to the merged view", async function () {
+    this.timeout(10000);
+    const extension = vscode.extensions.getExtension("upu.totonoe-log");
+    await extension!.activate();
+
+    const fs = await import("node:fs/promises");
+    const os = await import("node:os");
+    const path = await import("node:path");
+
+    const config = vscode.workspace.getConfiguration("totonoeLog.clockSkew");
+    await config.update(
+      "fileOffsets",
+      [{ filePattern: "fast.*\\.log", offsetSeconds: -40 }],
+      vscode.ConfigurationTarget.Global
+    );
+
+    const tempDir = await fs.mkdtemp(path.join(os.tmpdir(), "totonoe-log-skew-"));
+    try {
+      const fastLogPath = path.join(tempDir, "fast.log");
+      const steadyLogPath = path.join(tempDir, "steady.log");
+      // 生の壁時計では fast.log（03:04:30）の方が後だが、-40秒の補正で
+      // 03:03:50 となり steady.log（03:04:00）より前に並ぶのが正しい。
+      await fs.writeFile(fastLogPath, "2024-01-02T03:04:30Z INFO fast-entry");
+      await fs.writeFile(steadyLogPath, "2024-01-02T03:04:00Z INFO steady-entry");
+
+      const originalShowOpenDialog = vscode.window.showOpenDialog;
+      (vscode.window as any).showOpenDialog = async () => [
+        vscode.Uri.file(fastLogPath),
+        vscode.Uri.file(steadyLogPath),
+      ];
+
+      try {
+        await vscode.commands.executeCommand("totonoeLog.showMergedView");
+      } finally {
+        (vscode.window as any).showOpenDialog = originalShowOpenDialog;
+      }
+
+      const activeEditor = vscode.window.activeTextEditor;
+      assert.ok(activeEditor, "a merged view editor should be shown");
+      const expected = [
+        "fast.log   | fast   | 1 | 2024-01-02T03:03:50.000Z INFO fast-entry",
+        "steady.log | steady | 1 | 2024-01-02T03:04:00.000Z INFO steady-entry",
+      ].join("\n");
+      assert.strictEqual(activeEditor!.document.getText(), expected);
+    } finally {
+      await config.update("fileOffsets", undefined, vscode.ConfigurationTarget.Global);
+      await vscode.commands.executeCommand("workbench.action.closeAllEditors");
+      await fs.rm(tempDir, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 });
+    }
+  });
+
+  test("warns about invalid clock skew entries and continues with the valid ones", async function () {
+    this.timeout(10000);
+    const extension = vscode.extensions.getExtension("upu.totonoe-log");
+    await extension!.activate();
+
+    const config = vscode.workspace.getConfiguration("totonoeLog.clockSkew");
+    await config.update(
+      "fileOffsets",
+      [{ filePattern: "[invalid", offsetSeconds: 1 }],
+      vscode.ConfigurationTarget.Global
+    );
+
+    const originalShowWarningMessage = vscode.window.showWarningMessage;
+    let warningMessage: string | undefined;
+    (vscode.window as any).showWarningMessage = async (message: string) => {
+      warningMessage = message;
+      return undefined;
+    };
+
+    try {
+      const source = await vscode.workspace.openTextDocument({
+        content: "2024-01-02T03:04:05Z INFO hello",
+        language: "log",
+      });
+      await vscode.window.showTextDocument(source);
+
+      await vscode.commands.executeCommand("totonoeLog.showNormalizedView");
+
+      assert.ok(
+        warningMessage?.includes("clockSkew"),
+        "a warning should be shown for the invalid clock skew setting"
+      );
+      const activeEditor = vscode.window.activeTextEditor;
+      assert.strictEqual(
+        activeEditor!.document.getText(),
+        "1 | 2024-01-02T03:04:05.000Z INFO hello"
+      );
+    } finally {
+      (vscode.window as any).showWarningMessage = originalShowWarningMessage;
+      await config.update("fileOffsets", undefined, vscode.ConfigurationTarget.Global);
+    }
+  });
+});
+
 suite("Totonoe Log low timestamp recognition warning", () => {
   /** タイムスタンプを含まないプレーンな行（警告条件を満たす12行）。 */
   const UNRECOGNIZED_LOG = Array.from({ length: 12 }, (_, i) => `plain line ${i + 1}`).join("\n");
