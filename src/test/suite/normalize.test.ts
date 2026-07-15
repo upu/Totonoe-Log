@@ -47,6 +47,26 @@ suite("normalize / parseLog", () => {
     assert.strictEqual(entry.message, "disk almost full");
   });
 
+  test("recognizes severity after a bracketed thread-name token (log4j %d [%t] %-5p layout)", () => {
+    const [entry] = parseLog("2024-01-02 03:04:05 [main] INFO com.example.App - started");
+    assert.strictEqual(entry.severity, "INFO");
+    assert.strictEqual(entry.message, "com.example.App - started");
+  });
+
+  test("still recognizes severity immediately after the timestamp when no thread token is present", () => {
+    const [entry] = parseLog("2024-01-02 03:04:05 ERROR no thread token");
+    assert.strictEqual(entry.severity, "ERROR");
+    assert.strictEqual(entry.message, "no thread token");
+  });
+
+  test("does not treat a severity-like word beyond the skip limit as the severity", () => {
+    const [entry] = parseLog(
+      "2024-01-02 03:04:05 [main] [com.example.App] started, INFO was logged"
+    );
+    assert.strictEqual(entry.severity, undefined);
+    assert.strictEqual(entry.message, "[main] [com.example.App] started, INFO was logged");
+  });
+
   test("applies a UTC offset when present", () => {
     const [entry] = parseLog("2024-01-02T03:04:05+09:00 INFO hello");
     // 03:04:05+09:00 is 18:04:05 the previous day in UTC.
