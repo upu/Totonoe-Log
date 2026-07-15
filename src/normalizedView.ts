@@ -192,13 +192,13 @@ export function createShowNormalizedViewFilteredByDateRangeCommand(
       return;
     }
 
-    const startMs = await promptDateBoundary("開始日時");
+    const startMs = await promptDateBoundary("開始日時", "start");
     // null はキャンセル、または不正な入力による中断を表す。
     if (startMs === null) {
       return;
     }
 
-    const endMs = await promptDateBoundary("終了日時");
+    const endMs = await promptDateBoundary("終了日時", "end");
     if (endMs === null) {
       return;
     }
@@ -256,13 +256,13 @@ export function createShowNormalizedViewFilteredByDateRangeAndSeverityCommand(
       return;
     }
 
-    const startMs = await promptDateBoundary("開始日時");
+    const startMs = await promptDateBoundary("開始日時", "start");
     // null はキャンセル、または不正な入力による中断を表す。
     if (startMs === null) {
       return;
     }
 
-    const endMs = await promptDateBoundary("終了日時");
+    const endMs = await promptDateBoundary("終了日時", "end");
     if (endMs === null) {
       return;
     }
@@ -391,13 +391,13 @@ export function createShowNormalizedViewFilteredCommand(
 
     let dateRange: FilterCriteria["dateRange"];
     if (selectedKinds.has("dateRange")) {
-      const startMs = await promptDateBoundary("開始日時");
+      const startMs = await promptDateBoundary("開始日時", "start");
       // null はキャンセル、または不正な入力による中断を表す。
       if (startMs === null) {
         return;
       }
 
-      const endMs = await promptDateBoundary("終了日時");
+      const endMs = await promptDateBoundary("終了日時", "end");
       if (endMs === null) {
         return;
       }

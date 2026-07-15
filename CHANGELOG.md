@@ -16,6 +16,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   it). Instead of a silent empty document, a visible placeholder message
   now explains that the view's content was lost and that the command
   should be re-run.
+- Entering a date-only value (e.g. `2024-01-02`) as the end boundary of a
+  date range filter no longer excludes almost all of that day's entries.
+  It now completes to the last instant of that day (`23:59:59.999`)
+  instead of midnight; the start boundary's `00:00:00` completion is
+  unchanged.
 
 ## [0.3.1] - 2026-07-13
 

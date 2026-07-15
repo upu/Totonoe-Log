@@ -12,7 +12,7 @@ export type { LogFileInput, MergedEntry } from "./mergeLogFiles";
 export { deriveLogKind, mergeLogFiles } from "./mergeLogFiles";
 export { formatMergedLog } from "./formatMergedLog";
 export { UNRECOGNIZED_SEVERITY_KEY, getDistinctSeverities, filterEntriesBySeverity } from "./filterBySeverity";
-export type { DateRange } from "./filterByDateRange";
+export type { DateBoundaryKind, DateRange } from "./filterByDateRange";
 export { parseDateBoundary, filterEntriesByDateRange } from "./filterByDateRange";
 export { filterEntriesByIgnorePattern } from "./filterByIgnorePattern";
 export type {

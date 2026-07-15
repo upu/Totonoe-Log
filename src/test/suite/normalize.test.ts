@@ -344,26 +344,40 @@ suite("normalize / filterEntriesBySeverity", () => {
 });
 
 suite("normalize / filterEntriesByDateRange", () => {
-  test("parseDateBoundary parses a date-only string as UTC midnight", () => {
-    assert.strictEqual(parseDateBoundary("2024-01-02"), Date.UTC(2024, 0, 2, 0, 0, 0));
+  test("parseDateBoundary parses a date-only start boundary as UTC midnight", () => {
+    assert.strictEqual(
+      parseDateBoundary("2024-01-02", "start"),
+      Date.UTC(2024, 0, 2, 0, 0, 0, 0)
+    );
   });
 
-  test("parseDateBoundary parses a date and time string as UTC", () => {
+  test("parseDateBoundary parses a date-only end boundary as the last instant of that day (issue #93)", () => {
     assert.strictEqual(
-      parseDateBoundary("2024-01-02T03:04:05"),
+      parseDateBoundary("2024-01-02", "end"),
+      Date.UTC(2024, 0, 2, 23, 59, 59, 999)
+    );
+  });
+
+  test("parseDateBoundary parses a date and time string as UTC regardless of boundary kind", () => {
+    assert.strictEqual(
+      parseDateBoundary("2024-01-02T03:04:05", "start"),
       Date.UTC(2024, 0, 2, 3, 4, 5)
     );
     assert.strictEqual(
-      parseDateBoundary("2024-01-02 03:04"),
+      parseDateBoundary("2024-01-02T03:04:05", "end"),
+      Date.UTC(2024, 0, 2, 3, 4, 5)
+    );
+    assert.strictEqual(
+      parseDateBoundary("2024-01-02 03:04", "start"),
       Date.UTC(2024, 0, 2, 3, 4, 0)
     );
   });
 
   test("parseDateBoundary returns undefined for an unrecognized or invalid string", () => {
-    assert.strictEqual(parseDateBoundary("not a date"), undefined);
-    assert.strictEqual(parseDateBoundary("2024-02-30"), undefined);
-    assert.strictEqual(parseDateBoundary("2024-01-02T24:00:00"), undefined);
-    assert.strictEqual(parseDateBoundary("2024-01-02T03:60:00"), undefined);
+    assert.strictEqual(parseDateBoundary("not a date", "start"), undefined);
+    assert.strictEqual(parseDateBoundary("2024-02-30", "end"), undefined);
+    assert.strictEqual(parseDateBoundary("2024-01-02T24:00:00", "start"), undefined);
+    assert.strictEqual(parseDateBoundary("2024-01-02T03:60:00", "end"), undefined);
   });
 
   test("filterEntriesByDateRange keeps only entries within [startMs, endMs]", () => {
@@ -381,6 +395,26 @@ suite("normalize / filterEntriesByDateRange", () => {
 
     assert.strictEqual(filtered.length, 1);
     assert.strictEqual(filtered[0].message, "in range");
+  });
+
+  test("filterEntriesByDateRange keeps a whole day when the end boundary is date-only (issue #93)", () => {
+    const text = [
+      "2024-01-02T00:00:00Z INFO start of day",
+      "2024-01-02T23:59:59Z INFO end of day",
+      "2024-01-03T00:00:00Z INFO next day",
+    ].join("\n");
+    const entries = parseLog(text);
+
+    const filtered = filterEntriesByDateRange(entries, {
+      startMs: parseDateBoundary("2024-01-02", "start"),
+      endMs: parseDateBoundary("2024-01-02", "end"),
+    });
+
+    assert.strictEqual(filtered.length, 2);
+    assert.deepStrictEqual(
+      filtered.map((entry) => entry.message),
+      ["start of day", "end of day"]
+    );
   });
 
   test("filterEntriesByDateRange treats an omitted bound as unbounded", () => {

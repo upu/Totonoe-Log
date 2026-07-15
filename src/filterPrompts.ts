@@ -3,6 +3,7 @@ import {
   getDistinctSeverities,
   parseDateBoundary,
   UNRECOGNIZED_SEVERITY_KEY,
+  type DateBoundaryKind,
   type LogEntry,
 } from "./normalize";
 
@@ -53,12 +54,19 @@ export async function promptSeveritySelection(
  * 入力を空のまま確定した場合は「境界なし」を表す `undefined` を返す。
  * Esc 等でのキャンセル、および日時を解釈できない不正な入力の場合は、
  * どちらも呼び出し側に処理を中断させるため `null` を返す。
+ *
+ * `boundaryKind` は時刻を省略した日付のみの入力の補完先を決める
+ * （開始境界なら当日の始まり、終了境界なら当日の終わり。issue #93）。
+ * プロンプトの説明文にもその補完先を明記し、ユーザーが挙動を予測できる
+ * ようにする。
  */
 export async function promptDateBoundary(
-  promptLabel: string
+  promptLabel: string,
+  boundaryKind: DateBoundaryKind
 ): Promise<number | undefined | null> {
+  const timeHint = boundaryKind === "end" ? "終了 → 23:59:59.999" : "開始 → 00:00:00.000";
   const input = await vscode.window.showInputBox({
-    prompt: `${promptLabel}（YYYY-MM-DD、または YYYY-MM-DD HH:mm[:ss]。省略可）`,
+    prompt: `${promptLabel}（YYYY-MM-DD、または YYYY-MM-DD HH:mm[:ss]。省略可。時刻省略時は${timeHint}に補完）`,
     placeHolder: "例: 2024-01-02 or 2024-01-02T03:04:05",
   });
 
@@ -69,7 +77,7 @@ export async function promptDateBoundary(
     return undefined;
   }
 
-  const boundaryMs = parseDateBoundary(input);
+  const boundaryMs = parseDateBoundary(input, boundaryKind);
   if (boundaryMs === undefined) {
     vscode.window.showWarningMessage(`Totonoe Log: 日時を解釈できませんでした: "${input}"`);
     return null;
