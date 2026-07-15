@@ -2280,3 +2280,165 @@ suite("Totonoe Log custom timestamp formats", () => {
     }
   });
 });
+
+suite("Totonoe Log low timestamp recognition warning", () => {
+  /** タイムスタンプを含まないプレーンな行（警告条件を満たす12行）。 */
+  const UNRECOGNIZED_LOG = Array.from({ length: 12 }, (_, i) => `plain line ${i + 1}`).join("\n");
+
+  /** 全行が ISO 8601 タイムスタンプ付きの正常なログ（12行）。 */
+  const RECOGNIZED_LOG = Array.from(
+    { length: 12 },
+    (_, i) => `2024-01-02T03:04:${String(i).padStart(2, "0")}Z INFO line ${i + 1}`
+  ).join("\n");
+
+  /** 認識率警告の通知本文を判定するパターン。 */
+  const WARNING_PATTERN = /タイムスタンプ形式を認識できませんでした/;
+
+  /**
+   * showWarningMessage をモックして action 実行中に表示された警告本文を集める。
+   * 認識率警告と無関係な警告（設定不正など）を拾わないよう、認識率警告の
+   * 文言だけに絞って返す。
+   */
+  async function collectRecognitionWarningsWhile(action: () => Promise<void>): Promise<string[]> {
+    const messages: string[] = [];
+    const originalShowWarningMessage = vscode.window.showWarningMessage;
+    (vscode.window as any).showWarningMessage = async (message: string) => {
+      messages.push(message);
+      return undefined;
+    };
+    try {
+      await action();
+    } finally {
+      (vscode.window as any).showWarningMessage = originalShowWarningMessage;
+    }
+    return messages.filter((message) => WARNING_PATTERN.test(message));
+  }
+
+  /** 一時ディレクトリにログファイルを作って action に渡し、後片付けまで行う。 */
+  async function withTempLogFiles(
+    files: ReadonlyArray<{ name: string; content: string }>,
+    action: (uris: vscode.Uri[]) => Promise<void>
+  ): Promise<void> {
+    const fs = await import("node:fs/promises");
+    const os = await import("node:os");
+    const path = await import("node:path");
+
+    const tempDir = await fs.mkdtemp(path.join(os.tmpdir(), "totonoe-log-"));
+    try {
+      const uris: vscode.Uri[] = [];
+      for (const file of files) {
+        const filePath = path.join(tempDir, file.name);
+        await fs.writeFile(filePath, file.content);
+        uris.push(vscode.Uri.file(filePath));
+      }
+      await action(uris);
+    } finally {
+      await vscode.commands.executeCommand("workbench.action.closeAllEditors");
+      await fs.rm(tempDir, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 });
+    }
+  }
+
+  test("warns when opening the normalized view for a log with mostly unrecognized timestamps", async () => {
+    const extension = vscode.extensions.getExtension("upu.totonoe-log");
+    await extension!.activate();
+
+    await withTempLogFiles([{ name: "unrecognized.log", content: UNRECOGNIZED_LOG }], async (uris) => {
+      const source = await vscode.workspace.openTextDocument(uris[0]);
+      await vscode.window.showTextDocument(source);
+
+      const warnings = await collectRecognitionWarningsWhile(async () => {
+        await vscode.commands.executeCommand("totonoeLog.showNormalizedView");
+      });
+
+      assert.strictEqual(warnings.length, 1, "exactly one recognition warning should be shown");
+      assert.ok(warnings[0].includes("unrecognized.log"), "the warning should name the file");
+      assert.ok(warnings[0].includes("100%"), "the warning should report the unrecognized ratio");
+      assert.ok(
+        warnings[0].includes("totonoeLog.timestampFormats"),
+        "the warning should point to the custom format setting"
+      );
+    });
+  });
+
+  test("shows the warning only once per file within a session", async () => {
+    const extension = vscode.extensions.getExtension("upu.totonoe-log");
+    await extension!.activate();
+
+    await withTempLogFiles([{ name: "repeat.log", content: UNRECOGNIZED_LOG }], async (uris) => {
+      const source = await vscode.workspace.openTextDocument(uris[0]);
+      await vscode.window.showTextDocument(source);
+
+      const firstRun = await collectRecognitionWarningsWhile(async () => {
+        await vscode.commands.executeCommand("totonoeLog.showNormalizedView");
+      });
+      assert.strictEqual(firstRun.length, 1, "the first run should warn");
+
+      await vscode.window.showTextDocument(source);
+      const secondRun = await collectRecognitionWarningsWhile(async () => {
+        await vscode.commands.executeCommand("totonoeLog.showNormalizedView");
+      });
+      assert.strictEqual(secondRun.length, 0, "the second run on the same file should not warn again");
+    });
+  });
+
+  test("does not warn for a log whose timestamps are recognized", async () => {
+    const extension = vscode.extensions.getExtension("upu.totonoe-log");
+    await extension!.activate();
+
+    await withTempLogFiles([{ name: "recognized.log", content: RECOGNIZED_LOG }], async (uris) => {
+      const source = await vscode.workspace.openTextDocument(uris[0]);
+      await vscode.window.showTextDocument(source);
+
+      const warnings = await collectRecognitionWarningsWhile(async () => {
+        await vscode.commands.executeCommand("totonoeLog.showNormalizedView");
+      });
+
+      assert.strictEqual(warnings.length, 0);
+    });
+  });
+
+  test("warns via the collapsed view too (derived views share the check)", async () => {
+    const extension = vscode.extensions.getExtension("upu.totonoe-log");
+    await extension!.activate();
+
+    await withTempLogFiles([{ name: "collapsed-source.log", content: UNRECOGNIZED_LOG }], async (uris) => {
+      const source = await vscode.workspace.openTextDocument(uris[0]);
+      await vscode.window.showTextDocument(source);
+
+      const warnings = await collectRecognitionWarningsWhile(async () => {
+        await vscode.commands.executeCommand("totonoeLog.showCollapsedView");
+      });
+
+      assert.strictEqual(warnings.length, 1);
+      assert.ok(warnings[0].includes("collapsed-source.log"));
+    });
+  });
+
+  test("warns per file in the merged view, only for files with low recognition", async () => {
+    const extension = vscode.extensions.getExtension("upu.totonoe-log");
+    await extension!.activate();
+
+    await withTempLogFiles(
+      [
+        { name: "bad.log", content: UNRECOGNIZED_LOG },
+        { name: "good.log", content: RECOGNIZED_LOG },
+      ],
+      async (uris) => {
+        const originalShowOpenDialog = vscode.window.showOpenDialog;
+        (vscode.window as any).showOpenDialog = async () => uris;
+
+        try {
+          const warnings = await collectRecognitionWarningsWhile(async () => {
+            await vscode.commands.executeCommand("totonoeLog.showMergedView");
+          });
+
+          assert.strictEqual(warnings.length, 1, "only the unrecognized file should warn");
+          assert.ok(warnings[0].includes("bad.log"));
+          assert.ok(!warnings[0].includes("good.log"));
+        } finally {
+          (vscode.window as any).showOpenDialog = originalShowOpenDialog;
+        }
+      }
+    );
+  });
+});

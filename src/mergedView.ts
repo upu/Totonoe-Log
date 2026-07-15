@@ -4,6 +4,7 @@ import {
   formatMergedLog,
   filterMergedEntriesByCriteria,
   type LogFileInput,
+  type LogEntry,
   type MergedEntry,
   type FilterCriteria,
 } from "./normalize";
@@ -19,6 +20,7 @@ import {
   countLines,
 } from "./filterPrompts";
 import { readConfiguredTimestampFormats } from "./timestampFormatSettings";
+import { warnIfLowTimestampRecognition } from "./timestampRecognitionWarning";
 
 // スキーム定義は virtualDocumentContentProvider.ts に集約している
 // （既存の import 元を変えずに済むよう、ここから再エクスポートする）。
@@ -43,6 +45,34 @@ async function readLogFiles(fileUris: readonly vscode.Uri[]): Promise<LogFileInp
       return { fileName, text: document.getText() };
     })
   );
+}
+
+/**
+ * マージ対象の各ファイルについて、タイムスタンプ認識率が低い場合の警告を
+ * ファイル単位で表示する（issue #101）。マージ結果はファイル横断で時系列に
+ * 並び替えられているため、`MergedEntry.fileName` でエントリを元ファイルごとに
+ * グループし直してから判定する。異なるフォルダの同名ファイルが混在する場合は
+ * 1グループにまとまるが、通知の目的（形式未対応への気づき）には支障がない
+ * ため許容する。
+ */
+function warnLowTimestampRecognitionPerFile(
+  fileUris: readonly vscode.Uri[],
+  mergedEntries: readonly MergedEntry[]
+): void {
+  const entriesByFileName = new Map<string, LogEntry[]>();
+  for (const merged of mergedEntries) {
+    const entries = entriesByFileName.get(merged.fileName);
+    if (entries) {
+      entries.push(merged.entry);
+    } else {
+      entriesByFileName.set(merged.fileName, [merged.entry]);
+    }
+  }
+
+  for (const fileUri of fileUris) {
+    const fileName = fileUri.path.split("/").pop() ?? "log";
+    warnIfLowTimestampRecognition(fileUri, entriesByFileName.get(fileName) ?? []);
+  }
 }
 
 /**
@@ -76,6 +106,7 @@ async function openMergedView(
   const mergedEntries = mergeLogFiles(files, {
     timestampFormats: readConfiguredTimestampFormats(),
   });
+  warnLowTimestampRecognitionPerFile(fileUris, mergedEntries);
   const content = formatMergedLog(mergedEntries);
 
   mergedViewCounter += 1;
@@ -140,6 +171,7 @@ export function createShowMergedViewFilteredCommand(
     const mergedEntries: MergedEntry[] = mergeLogFiles(files, {
       timestampFormats: readConfiguredTimestampFormats(),
     });
+    warnLowTimestampRecognitionPerFile(fileUris, mergedEntries);
 
     const selectedKinds = await promptFilterKinds();
     // ユーザーがピッカーを Esc 等でキャンセルした場合は何もしない。
