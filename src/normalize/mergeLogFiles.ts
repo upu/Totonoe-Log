@@ -27,6 +27,12 @@ export function deriveLogKind(fileName: string): string {
 export interface LogFileInput {
   readonly fileName: string;
   readonly text: string;
+  /**
+   * このファイル専用のソースオフセット（分）。指定すると `parseOptions` の
+   * {@link ParseLogOptions.sourceUtcOffsetMinutes} より優先される。サーバごとに
+   * タイムゾーンが異なるログを正しい時系列へマージするために使う（issue #13）。
+   */
+  readonly sourceUtcOffsetMinutes?: number;
 }
 
 /**
@@ -85,7 +91,11 @@ export function mergeLogFiles(
 
   for (const file of files) {
     const kind = deriveLogKind(file.fileName);
-    for (const entry of parseLog(file.text, parseOptions)) {
+    const fileParseOptions =
+      file.sourceUtcOffsetMinutes !== undefined
+        ? { ...parseOptions, sourceUtcOffsetMinutes: file.sourceUtcOffsetMinutes }
+        : parseOptions;
+    for (const entry of parseLog(file.text, fileParseOptions)) {
       merged.push({ entry, fileName: file.fileName, kind });
     }
   }

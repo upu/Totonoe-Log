@@ -25,6 +25,7 @@ import {
   countLines,
 } from "./filterPrompts";
 import { parseLogWithConfiguredFormats } from "./timestampFormatSettings";
+import { createSourceOffsetResolver, readDisplayTimezone } from "./timezoneSettings";
 import { warnIfLowTimestampRecognition } from "./timestampRecognitionWarning";
 
 // スキーム定義は virtualDocumentContentProvider.ts に集約している
@@ -76,11 +77,15 @@ function readGapThresholdMs(): number {
 }
 
 /**
- * 時間ギャップ設定込みで正規化ログ本文を組み立てる。折りたたみビュー以外の
- * 全コマンドがこのオプション組み立てを共有するため一箇所にまとめる。
+ * 時間ギャップ設定・表示タイムゾーン設定込みで正規化ログ本文を組み立てる。
+ * 折りたたみビュー以外の全コマンドがこのオプション組み立てを共有するため
+ * 一箇所にまとめる。
  */
 function formatNormalizedWithGap(entries: readonly LogEntry[]): string {
-  return formatNormalizedLog(entries, { gapThresholdMs: readGapThresholdMs() });
+  return formatNormalizedLog(entries, {
+    gapThresholdMs: readGapThresholdMs(),
+    displayTimezone: readDisplayTimezone(),
+  });
 }
 
 /**
@@ -110,12 +115,15 @@ function getSourceDocumentOrWarn(actionLabel: string): vscode.TextDocument | und
 }
 
 /**
- * 元ドキュメントを設定反映済みのフォーマット一覧でパースし、タイムスタンプ
- * 認識率が低い場合の警告通知（issue #101）まで済ませる。正規化ビュー系の
- * 全コマンドがパース直後に同じ判定を必要とするため一箇所にまとめる。
+ * 元ドキュメントを設定反映済みのフォーマット一覧・ソースオフセット
+ * （issue #13）でパースし、タイムスタンプ認識率が低い場合の警告通知
+ * （issue #101）まで済ませる。正規化ビュー系の全コマンドがパース直後に
+ * 同じ判定を必要とするため一箇所にまとめる。
  */
 function parseSourceLog(sourceDocument: vscode.TextDocument): LogEntry[] {
-  const entries = parseLogWithConfiguredFormats(sourceDocument.getText());
+  const fileName = sourceDocument.uri.path.split("/").pop() ?? "";
+  const sourceUtcOffsetMinutes = createSourceOffsetResolver()(fileName);
+  const entries = parseLogWithConfiguredFormats(sourceDocument.getText(), sourceUtcOffsetMinutes);
   warnIfLowTimestampRecognition(sourceDocument.uri, entries);
   return entries;
 }
@@ -455,7 +463,9 @@ export function createShowCollapsedViewCommand(
 
     const entries = parseSourceLog(sourceDocument);
     const items = collapseRepeatedEntries(entries, { threshold });
-    const content = formatCollapsedLog(entries, items);
+    const content = formatCollapsedLog(entries, items, {
+      displayTimezone: readDisplayTimezone(),
+    });
 
     await openVirtualNormalizedDocument(provider, sourceDocument, content, "collapsed");
   };

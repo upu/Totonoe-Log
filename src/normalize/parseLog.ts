@@ -30,6 +30,13 @@ export interface ParseLogOptions {
    * このモジュールを変更せずに追加フォーマットを対応できる（プラガブル設計）。
    */
   readonly timestampFormats?: readonly TimestampFormat[];
+
+  /**
+   * タイムゾーン表記を持たないタイムスタンプに仮定する UTC オフセット（分）。
+   * 省略時は UTC（0）。明示的なオフセットや `Z` を持つタイムスタンプ、
+   * エポック形式には影響しない（issue #13）。
+   */
+  readonly sourceUtcOffsetMinutes?: number;
 }
 
 interface MutableEntry {
@@ -72,6 +79,7 @@ function finalizeEntry(entry: MutableEntry): LogEntry {
  */
 export function parseLog(text: string, options: ParseLogOptions = {}): LogEntry[] {
   const timestampFormats = options.timestampFormats ?? getDefaultTimestampFormats();
+  const parseContext = { fallbackUtcOffsetMinutes: options.sourceUtcOffsetMinutes };
   const lines = text.length === 0 ? [] : text.split(/\r\n|\r|\n/);
 
   const entries: LogEntry[] = [];
@@ -90,7 +98,7 @@ export function parseLog(text: string, options: ParseLogOptions = {}): LogEntry[
       format.regex.lastIndex = 0;
       const candidate = format.regex.exec(line);
       if (candidate && candidate.index === 0) {
-        const epochMs = format.parse(candidate);
+        const epochMs = format.parse(candidate, parseContext);
         if (epochMs !== undefined) {
           matchedFormat = format;
           match = candidate;

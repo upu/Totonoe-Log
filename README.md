@@ -61,6 +61,42 @@ for the current roadmap.
   Apache/Nginx access-log timestamps (`[02/Jan/2024:03:04:05 +0900]`), and
   leading epoch seconds/milliseconds. Formats not covered by the built-ins
   can be added via the `totonoeLog.timestampFormats` setting (see below)
+- Normalize timezones: tell Totonoe Log which UTC offset to assume for
+  timestamps that don't carry one — globally
+  (`totonoeLog.timezone.sourceOffset`) or per file-name pattern
+  (`totonoeLog.timezone.fileOffsets`), so logs from servers in different
+  timezones merge into the true chronological order — and pick the timezone
+  every view displays (`totonoeLog.timezone.display`: `UTC`, `local`, or a
+  fixed offset like `+09:00`) (see below)
+
+## Timezone normalization
+
+Logs written in local time without an offset (e.g. `2024-01-02 03:04:05`)
+are interpreted as UTC by default. When servers in different timezones are
+involved, that skews the merged timeline. Three settings fix this:
+
+- `totonoeLog.timezone.sourceOffset` — the UTC offset to assume for
+  timestamps without explicit timezone information (default `UTC`).
+  Timestamps that spell out an offset or `Z`, and epoch timestamps, are
+  never shifted: what the log says always wins
+- `totonoeLog.timezone.fileOffsets` — per-file overrides, matched against
+  the file name (first matching rule wins):
+
+  ```jsonc
+  "totonoeLog.timezone.fileOffsets": [
+    { "filePattern": "tokyo-.*\\.log", "offset": "+09:00" },
+    { "filePattern": "nyc-.*\\.log", "offset": "-05:00" }
+  ]
+  ```
+
+- `totonoeLog.timezone.display` — the timezone every view renders
+  timestamps in: `UTC` (default, `Z` suffix), `local` (this machine's
+  timezone, DST-aware), or a fixed offset such as `+09:00` (rendered as
+  `2024-01-02T12:04:05.000+09:00`)
+
+Timezone auto-detection is not implemented: a timestamp without an offset
+carries no reliable signal to detect one from, so guessing would silently
+corrupt the timeline instead of tidying it.
 
 ## Custom timestamp formats
 
@@ -83,8 +119,10 @@ the start of the line.
 Supported capture groups:
 
 - Calendar style: `y` `mo` `d` `h` `mi` `s` (all required), plus optional
-  `ms` (fractional seconds), and `tzs` `tzh` `tzm` (offset sign/hours/minutes).
-  Without an offset the timestamp is interpreted as UTC
+  `ms` (fractional seconds), `tzs` `tzh` `tzm` (offset sign/hours/minutes),
+  and `tzz` (a literal `Z` meaning explicit UTC). Without an offset the
+  timestamp is interpreted as UTC, or as `totonoeLog.timezone.sourceOffset`
+  when that setting is configured
 - Epoch style: `epochMs` (epoch milliseconds) or `epochSec` (epoch seconds,
   with an optional `ms` group for the fractional part)
 

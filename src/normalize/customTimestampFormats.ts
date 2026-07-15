@@ -12,7 +12,9 @@ export interface CustomTimestampFormatSetting {
   /**
    * タイムスタンプにマッチする正規表現パターン。名前付きキャプチャグループで
    * パース方法を指定する（カレンダー形式: `y` `mo` `d` `h` `mi` `s` と任意の
-   * `ms` `tzs` `tzh` `tzm` / エポック形式: `epochMs` または `epochSec`＋任意の `ms`）。
+   * `ms` `tzz` `tzs` `tzh` `tzm` / エポック形式: `epochMs` または `epochSec`＋任意の `ms`）。
+   * `tzz` は `Z`（UTC の明示）を捕捉するグループで、これか `tzs` が捕捉されて
+   * いる場合はソースオフセット（#13）のフォールバックを適用しない。
    */
   readonly pattern: string;
 }
@@ -50,7 +52,7 @@ function getNamedGroups(source: string): string[] {
 function createParseFunction(groupNames: readonly string[]): TimestampFormat["parse"] {
   const hasEpochMs = groupNames.includes("epochMs");
   const hasEpochSec = groupNames.includes("epochSec");
-  return (match) => {
+  return (match, context) => {
     const groups = match.groups ?? {};
     if (hasEpochMs && groups.epochMs) {
       const epochMs = Number(groups.epochMs);
@@ -66,7 +68,10 @@ function createParseFunction(groupNames: readonly string[]): TimestampFormat["pa
       const ms = groups.ms ? Number(groups.ms.padEnd(3, "0").slice(0, 3)) : 0;
       return epochSec * 1000 + ms;
     }
-    return isoLikeGroupsToEpochMs(groups);
+    // カレンダー形式は組み込み形式と同じ規則でソースオフセット（#13）の
+    // フォールバック対象になる（tzs / tzz グループを捕捉していれば書かれて
+    // いる情報が優先される）。エポック形式は絶対時刻のため対象外。
+    return isoLikeGroupsToEpochMs(groups, context?.fallbackUtcOffsetMinutes);
   };
 }
 

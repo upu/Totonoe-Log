@@ -61,6 +61,41 @@ Normalize, merge, filter, collapse, and compare messy logs.
   Apache/Nginx アクセスログ形式（`[02/Jan/2024:03:04:05 +0900]`）、行頭の
   エポック秒/ミリ秒。組み込みでカバーしきれない形式は
   `totonoeLog.timestampFormats` 設定で追加できる（下記参照）
+- タイムゾーンの正規化: タイムゾーン表記を持たないタイムスタンプに仮定する
+  UTC オフセットを、全体（`totonoeLog.timezone.sourceOffset`）または
+  ファイル名パターンごと（`totonoeLog.timezone.fileOffsets`）に指定でき、
+  タイムゾーンが異なるサーバのログも正しい時系列にマージできる。各ビューの
+  表示タイムゾーンも選べる（`totonoeLog.timezone.display`: `UTC` / `local` /
+  `+09:00` のような固定オフセット）（下記参照）
+
+## タイムゾーンの正規化
+
+オフセットなしのローカル時刻で書かれたログ（例: `2024-01-02 03:04:05`）は、
+既定では UTC として解釈されます。タイムゾーンが異なるサーバのログが混ざると、
+マージ後の時系列がずれてしまいます。次の3つの設定でこれを補正できます。
+
+- `totonoeLog.timezone.sourceOffset` — タイムゾーン表記を持たない
+  タイムスタンプに仮定する UTC オフセット（既定は `UTC`）。オフセットや
+  `Z` が明示されたタイムスタンプ、エポック形式には適用されない
+  （ログに書かれている情報が常に優先される）
+- `totonoeLog.timezone.fileOffsets` — ファイル名にマッチさせる
+  パターンごとの上書き（最初にマッチした規則を使う）:
+
+  ```jsonc
+  "totonoeLog.timezone.fileOffsets": [
+    { "filePattern": "tokyo-.*\\.log", "offset": "+09:00" },
+    { "filePattern": "nyc-.*\\.log", "offset": "-05:00" }
+  ]
+  ```
+
+- `totonoeLog.timezone.display` — 各ビューでタイムスタンプを表示する
+  タイムゾーン。`UTC`（既定、`Z` サフィックス）、`local`（このマシンの
+  タイムゾーン。DST 対応）、または `+09:00` のような固定オフセット
+  （`2024-01-02T12:04:05.000+09:00` の形で表示される）
+
+タイムゾーンの自動検出は実装していません。オフセットのないタイムスタンプ
+にはタイムゾーンを判別できる確かな手がかりがなく、推測で決めると時系列を
+静かに壊してしまうためです。
 
 ## カスタムタイムスタンプ形式
 
@@ -82,8 +117,10 @@ Normalize, merge, filter, collapse, and compare messy logs.
 使用できるキャプチャグループ:
 
 - カレンダー形式: `y` `mo` `d` `h` `mi` `s`（すべて必須）に加え、任意で
-  `ms`（小数秒）、`tzs` `tzh` `tzm`（オフセットの符号/時/分）。オフセットが
-  ない場合は UTC として解釈される
+  `ms`（小数秒）、`tzs` `tzh` `tzm`（オフセットの符号/時/分）、`tzz`
+  （UTC の明示を表すリテラル `Z`）。オフセットがない場合は UTC、
+  `totonoeLog.timezone.sourceOffset` を設定している場合はそのオフセット
+  として解釈される
 - エポック形式: `epochMs`（エポックミリ秒）または `epochSec`（エポック秒。
   任意の `ms` グループで小数部を指定可能）
 

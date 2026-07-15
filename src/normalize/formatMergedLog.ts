@@ -1,11 +1,17 @@
 import { computeMaxLineNumber, formatGutter } from "./gutter";
 import type { MergedEntry } from "./mergeLogFiles";
+import { formatTimestampForDisplay, type DisplayTimezone } from "./timezone";
 
 /** セベリティが認識できなかったエントリの見出しに表示するプレースホルダー。 */
 const SEVERITY_PLACEHOLDER = "-";
 
-function formatTimestamp(timestampMs: number): string {
-  return new Date(timestampMs).toISOString();
+/** {@link formatMergedLog} の挙動を調整するオプション。 */
+export interface FormatMergedLogOptions {
+  /**
+   * タイムスタンプの表示タイムゾーン。省略時は UTC（従来どおり `Z` サフィックス
+   * 表示）。指定するとその壁時計時刻＋オフセットサフィックスで表示する（issue #13）。
+   */
+  readonly displayTimezone?: DisplayTimezone;
 }
 
 function computeColumnWidth(
@@ -25,7 +31,11 @@ function computeColumnWidth(
  * 空白で埋め、見出し情報が1エントリにつき1回だけ表示されるようにする
  * （行番号ガターは {@link formatNormalizedLog} と同様に継続行でも表示する）。
  */
-export function formatMergedLog(mergedEntries: readonly MergedEntry[]): string {
+export function formatMergedLog(
+  mergedEntries: readonly MergedEntry[],
+  options: FormatMergedLogOptions = {}
+): string {
+  const displayTimezone = options.displayTimezone ?? 0;
   const fileNameWidth = computeColumnWidth(mergedEntries, (m) => m.fileName);
   const kindWidth = computeColumnWidth(mergedEntries, (m) => m.kind);
   const gutterWidth = String(
@@ -40,7 +50,7 @@ export function formatMergedLog(mergedEntries: readonly MergedEntry[]): string {
     const headerPrefix = `${fileName.padEnd(fileNameWidth)} | ${kind.padEnd(kindWidth)} | `;
 
     const headerText = entry.matched && entry.timestampMs !== undefined
-      ? `${formatTimestamp(entry.timestampMs)} ${entry.severity ?? SEVERITY_PLACEHOLDER} ${messageLines[0]}`
+      ? `${formatTimestampForDisplay(entry.timestampMs, displayTimezone)} ${entry.severity ?? SEVERITY_PLACEHOLDER} ${messageLines[0]}`
       : messageLines[0];
     outputLines.push(headerPrefix + formatGutter(entry.startLine, gutterWidth) + headerText);
 
