@@ -8,6 +8,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- Normalized/merged/compare views no longer silently render blank when
+  VSCode internally releases the underlying virtual document (which can
+  happen while a tab sits in the background, even without the user closing
+  it). Instead of a silent empty document, a visible placeholder message
+  now explains that the view's content was lost and that the command
+  should be re-run.
+
 ## [0.3.1] - 2026-07-13
 
 - No user-facing changes. Technical republish to retry a Marketplace

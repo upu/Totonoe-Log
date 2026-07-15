@@ -112,6 +112,7 @@ suite("Totonoe Log normalized view", () => {
     const { NormalizedViewContentProvider, NORMALIZED_VIEW_SCHEME } = await import(
       "../../normalizedView"
     );
+    const { CONTENT_LOST_PLACEHOLDER } = await import("../../virtualDocumentContentProvider");
     const provider = new NormalizedViewContentProvider();
     const uri = vscode.Uri.from({ scheme: NORMALIZED_VIEW_SCHEME, path: "/sample.normalized-1.log" });
 
@@ -121,9 +122,34 @@ suite("Totonoe Log normalized view", () => {
     provider.release(uri);
     assert.strictEqual(
       provider.provideTextDocumentContent(uri),
-      "",
+      CONTENT_LOST_PLACEHOLDER,
       "release() should drop the cached content for the given uri"
     );
+
+    provider.dispose();
+  });
+
+  test("provideTextDocumentContent returns a visible placeholder instead of a silent blank when content is missing (issue #92)", async () => {
+    // VSCode の onDidCloseTextDocument は、ユーザーがタブを閉じていなくても
+    // 内部的に TextDocument の参照を解放した際に発火しうる。その場合でも
+    // タブ自体は残り続けるため、再度 provideTextDocumentContent が呼ばれても
+    // register() は呼ばれない（= 保持内容が失われたまま）。この状況を
+    // register() を一度も呼ばずに provideTextDocumentContent を呼ぶことで
+    // 再現し、無言の空文字列ではなく分かる形のプレースホルダーが返ることを
+    // 確認する。
+    const { NormalizedViewContentProvider, NORMALIZED_VIEW_SCHEME } = await import(
+      "../../normalizedView"
+    );
+    const { CONTENT_LOST_PLACEHOLDER } = await import("../../virtualDocumentContentProvider");
+    const provider = new NormalizedViewContentProvider();
+    const uri = vscode.Uri.from({
+      scheme: NORMALIZED_VIEW_SCHEME,
+      path: "/never-registered.normalized-1.log",
+    });
+
+    const content = provider.provideTextDocumentContent(uri);
+    assert.strictEqual(content, CONTENT_LOST_PLACEHOLDER);
+    assert.notStrictEqual(content, "", "should not silently return a blank document");
 
     provider.dispose();
   });
