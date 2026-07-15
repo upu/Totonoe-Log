@@ -38,3 +38,9 @@ export type {
   CompileCustomTimestampFormatsResult,
 } from "./customTimestampFormats";
 export { compileCustomTimestampFormats } from "./customTimestampFormats";
+export type { TimestampRecognitionAssessment } from "./timestampCoverage";
+export {
+  LOW_RECOGNITION_MIN_LINE_COUNT,
+  LOW_RECOGNITION_RATIO_THRESHOLD,
+  assessTimestampRecognition,
+} from "./timestampCoverage";

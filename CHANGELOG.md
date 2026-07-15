@@ -21,6 +21,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   groups `y` `mo` `d` `h` `mi` `s` with optional `ms`/timezone groups, or
   epoch groups `epochMs`/`epochSec`). Custom formats are tried before the
   built-in ones; invalid entries are skipped with a warning.
+- Normalized/collapsed/filtered and merged views now show a warning
+  notification when a log's timestamp format is largely unrecognized
+  (half or more of the non-blank lines appear before any recognized
+  timestamp, in files of 10+ non-blank lines), with guidance to the
+  `totonoeLog.timestampFormats` setting. The warning is shown at most
+  once per file per session.
 
 ### Fixed
 

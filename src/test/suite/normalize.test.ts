@@ -18,6 +18,9 @@ import {
   filterEntriesByIgnorePattern,
   filterEntriesByCriteria,
   filterMergedEntriesByCriteria,
+  assessTimestampRecognition,
+  LOW_RECOGNITION_MIN_LINE_COUNT,
+  LOW_RECOGNITION_RATIO_THRESHOLD,
 } from "../../normalize";
 
 suite("normalize / parseLog", () => {
@@ -1543,5 +1546,104 @@ suite("normalize / filterMergedEntriesByCriteria", () => {
     if (!result.ok) {
       assert.strictEqual(result.reason, "timeout");
     }
+  });
+});
+
+suite("normalize / assessTimestampRecognition", () => {
+  /** タイムスタンプを含まないプレーンな行を count 行分生成する。 */
+  function plainLines(count: number): string {
+    return Array.from({ length: count }, (_, i) => `plain line ${i + 1}`).join("\n");
+  }
+
+  /** ISO 8601 タイムスタンプ付きの行を count 行分生成する。 */
+  function timestampedLines(count: number): string {
+    return Array.from(
+      { length: count },
+      (_, i) => `2024-01-02T03:04:${String(i % 60).padStart(2, "0")}Z INFO line ${i + 1}`
+    ).join("\n");
+  }
+
+  test("warns when no timestamp is recognized in a sufficiently large log", () => {
+    const result = assessTimestampRecognition(parseLog(plainLines(12)));
+
+    assert.strictEqual(result.totalLineCount, 12);
+    assert.strictEqual(result.unrecognizedLineCount, 12);
+    assert.strictEqual(result.unrecognizedRatio, 1);
+    assert.strictEqual(result.shouldWarn, true);
+  });
+
+  test("does not warn for a normal log where every line has a timestamp", () => {
+    const result = assessTimestampRecognition(parseLog(timestampedLines(12)));
+
+    assert.strictEqual(result.totalLineCount, 12);
+    assert.strictEqual(result.unrecognizedLineCount, 0);
+    assert.strictEqual(result.unrecognizedRatio, 0);
+    assert.strictEqual(result.shouldWarn, false);
+  });
+
+  test("does not count continuation lines (e.g. stack traces) of recognized entries as unrecognized", () => {
+    const stackTrace = Array.from(
+      { length: 20 },
+      (_, i) => `    at com.example.App.method${i}(App.java:${i + 1})`
+    ).join("\n");
+    const text = [
+      "2024-01-02T03:04:05Z ERROR boom",
+      stackTrace,
+      "2024-01-02T03:04:06Z ERROR boom again",
+      stackTrace,
+    ].join("\n");
+
+    const result = assessTimestampRecognition(parseLog(text));
+
+    assert.strictEqual(result.totalLineCount, 42);
+    assert.strictEqual(result.unrecognizedLineCount, 0);
+    assert.strictEqual(result.shouldWarn, false);
+  });
+
+  test("warns when at least half the lines precede the first recognized timestamp (boundary)", () => {
+    const text = [plainLines(6), timestampedLines(6)].join("\n");
+
+    const result = assessTimestampRecognition(parseLog(text));
+
+    assert.strictEqual(result.unrecognizedRatio, LOW_RECOGNITION_RATIO_THRESHOLD);
+    assert.strictEqual(result.shouldWarn, true);
+  });
+
+  test("does not warn when the unrecognized ratio is just below the threshold", () => {
+    const text = [plainLines(5), timestampedLines(7)].join("\n");
+
+    const result = assessTimestampRecognition(parseLog(text));
+
+    assert.strictEqual(result.totalLineCount, 12);
+    assert.strictEqual(result.unrecognizedLineCount, 5);
+    assert.strictEqual(result.shouldWarn, false);
+  });
+
+  test("does not warn for logs below the minimum line count", () => {
+    const result = assessTimestampRecognition(
+      parseLog(plainLines(LOW_RECOGNITION_MIN_LINE_COUNT - 1))
+    );
+
+    assert.strictEqual(result.unrecognizedRatio, 1);
+    assert.strictEqual(result.shouldWarn, false);
+  });
+
+  test("excludes blank lines from both the total and the unrecognized counts", () => {
+    const text = ["", plainLines(5), "", "   ", plainLines(5), ""].join("\n");
+
+    const result = assessTimestampRecognition(parseLog(text));
+
+    assert.strictEqual(result.totalLineCount, 10);
+    assert.strictEqual(result.unrecognizedLineCount, 10);
+    assert.strictEqual(result.shouldWarn, true);
+  });
+
+  test("returns zero counts and does not warn for empty input", () => {
+    const result = assessTimestampRecognition(parseLog(""));
+
+    assert.strictEqual(result.totalLineCount, 0);
+    assert.strictEqual(result.unrecognizedLineCount, 0);
+    assert.strictEqual(result.unrecognizedRatio, 0);
+    assert.strictEqual(result.shouldWarn, false);
   });
 });
