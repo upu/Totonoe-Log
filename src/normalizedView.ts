@@ -1,6 +1,5 @@
 import * as vscode from "vscode";
 import {
-  parseLog,
   formatNormalizedLog,
   filterEntriesBySeverity,
   filterEntriesByDateRange,
@@ -25,6 +24,7 @@ import {
   promptFilterKinds,
   countLines,
 } from "./filterPrompts";
+import { parseLogWithConfiguredFormats } from "./timestampFormatSettings";
 
 // スキーム定義は virtualDocumentContentProvider.ts に集約している
 // （既存の import 元を変えずに済むよう、ここから再エクスポートする）。
@@ -169,7 +169,7 @@ export function createShowNormalizedViewCommand(
       return;
     }
 
-    const entries = parseLog(sourceDocument.getText());
+    const entries = parseLogWithConfiguredFormats(sourceDocument.getText());
     const content = formatNormalizedWithGap(entries);
 
     await openVirtualNormalizedDocument(provider, sourceDocument, content, "normalized");
@@ -189,7 +189,7 @@ export function createShowNormalizedViewFilteredBySeverityCommand(
       return;
     }
 
-    const entries = parseLog(sourceDocument.getText());
+    const entries = parseLogWithConfiguredFormats(sourceDocument.getText());
 
     const selectedSeverities = await promptSeveritySelection(entries);
     // ユーザーがピッカーを Esc 等でキャンセルした場合は何もしない。
@@ -229,7 +229,7 @@ export function createShowNormalizedViewFilteredByDateRangeCommand(
       return;
     }
 
-    const entries = parseLog(sourceDocument.getText());
+    const entries = parseLogWithConfiguredFormats(sourceDocument.getText());
     const filteredEntries = filterEntriesByDateRange(entries, { startMs, endMs });
     const content = formatNormalizedWithGap(filteredEntries);
 
@@ -255,7 +255,7 @@ export function createShowNormalizedViewFilteredByDateRangeAndSeverityCommand(
       return;
     }
 
-    const entries = parseLog(sourceDocument.getText());
+    const entries = parseLogWithConfiguredFormats(sourceDocument.getText());
 
     const selectedSeverities = await promptSeveritySelection(entries);
     // ユーザーがピッカーを Esc 等でキャンセルした場合は何もしない。
@@ -312,7 +312,7 @@ export function createShowNormalizedViewFilteredByIgnorePatternCommand(
       return;
     }
 
-    const entries = parseLog(sourceDocument.getText());
+    const entries = parseLogWithConfiguredFormats(sourceDocument.getText());
     const filterResult = await filterEntriesByIgnorePattern(entries, pattern);
     if (!filterResult.ok) {
       // 破局的バックトラッキング等でマッチング処理がタイムアウトした場合。
@@ -361,7 +361,7 @@ export function createShowNormalizedViewFilteredCommand(
       return;
     }
 
-    const entries = parseLog(sourceDocument.getText());
+    const entries = parseLogWithConfiguredFormats(sourceDocument.getText());
 
     let severities: Set<string> | undefined;
     if (selectedKinds.has("severity")) {
@@ -441,7 +441,7 @@ export function createShowCollapsedViewCommand(
       .getConfiguration(COLLAPSE_CONFIG_SECTION)
       .get<number>("threshold", DEFAULT_COLLAPSE_THRESHOLD);
 
-    const entries = parseLog(sourceDocument.getText());
+    const entries = parseLogWithConfiguredFormats(sourceDocument.getText());
     const items = collapseRepeatedEntries(entries, { threshold });
     const content = formatCollapsedLog(entries, items);
 

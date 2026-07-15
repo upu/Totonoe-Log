@@ -27,6 +27,14 @@ export type { SyslogFormatOptions } from "./timestampFormats";
 export {
   ISO_8601_FORMAT,
   BRACKETED_ISO_8601_FORMAT,
+  SLASH_DATE_FORMAT,
+  APACHE_ACCESS_LOG_FORMAT,
+  EPOCH_FORMAT,
   createSyslogFormat,
   getDefaultTimestampFormats,
 } from "./timestampFormats";
+export type {
+  CustomTimestampFormatSetting,
+  CompileCustomTimestampFormatsResult,
+} from "./customTimestampFormats";
+export { compileCustomTimestampFormats } from "./customTimestampFormats";

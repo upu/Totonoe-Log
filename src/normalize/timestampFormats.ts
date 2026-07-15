@@ -24,8 +24,13 @@ const MONTH_ABBREVIATIONS: Record<string, number> = {
  * タイムゾーンオフセットがない場合は UTC として扱う。これにより、ホスト
  * マシンのローカルタイムゾーンに関わらず解析結果が一定になる（テスト時や
  * 異なるマシンで収集したログを比較する際に重要）。
+ *
+ * カスタムフォーマット（`customTimestampFormats.ts`）も同じグループ名を
+ * ユーザー向け仕様として採用しているため、モジュール外へ公開している。
  */
-function isoLikeGroupsToEpochMs(groups: Record<string, string | undefined>): number | undefined {
+export function isoLikeGroupsToEpochMs(
+  groups: Record<string, string | undefined>
+): number | undefined {
   const year = Number(groups.y);
   const month = Number(groups.mo) - 1;
   const day = Number(groups.d);
@@ -92,6 +97,77 @@ export const BRACKETED_ISO_8601_FORMAT: TimestampFormat = {
     /^\[(?<y>\d{4})-(?<mo>\d{2})-(?<d>\d{2})[T ](?<h>\d{2}):(?<mi>\d{2}):(?<s>\d{2})(?:[.,](?<ms>\d{1,9}))?(?:Z|(?<tzs>[+-])(?<tzh>\d{2}):?(?<tzm>\d{2}))?\]/,
   parse(match) {
     return isoLikeGroupsToEpochMs(match.groups ?? {});
+  },
+};
+
+/**
+ * スラッシュ区切り日付のタイムスタンプ。例:
+ * - `2024/01/02 03:04:05`
+ * - `2024/1/2 3:04:05.678`（月・日・時は1桁も許容）
+ *
+ * 日本語圏の Windows 系アプリ・業務システムのログで広く使われる形式。
+ * タイムゾーン表記を持たないログがほとんどのため、オフセットは受け付けず
+ * 常に UTC として解釈する（ISO 形式のタイムゾーンなしの場合と同じ扱い）。
+ */
+export const SLASH_DATE_FORMAT: TimestampFormat = {
+  name: "slash-date",
+  regex:
+    /^(?<y>\d{4})\/(?<mo>\d{1,2})\/(?<d>\d{1,2})[T ](?<h>\d{1,2}):(?<mi>\d{2}):(?<s>\d{2})(?:[.,](?<ms>\d{1,9}))?/,
+  parse(match) {
+    return isoLikeGroupsToEpochMs(match.groups ?? {});
+  },
+};
+
+/**
+ * Apache / Nginx アクセスログのタイムスタンプ。例: `[02/Jan/2024:03:04:05 +0900]`。
+ * Common Log Format の `%t` に相当する。オフセット部分は省略も許容し、
+ * その場合は UTC として解釈する。
+ *
+ * 注意: 実際のアクセスログ行では IP アドレス等がタイムスタンプより前に
+ * 置かれることが多いが、`parseLog` は行頭のタイムスタンプのみを認識する
+ * 設計のため、この形式は角括弧が行頭にあるログ（アプリが `%t` 形式だけを
+ * 先頭に出すケース）を対象とする。
+ */
+export const APACHE_ACCESS_LOG_FORMAT: TimestampFormat = {
+  name: "apache-access-log",
+  regex:
+    /^\[(?<d>\d{2})\/(?<mon>[A-Za-z]{3})\/(?<y>\d{4}):(?<h>\d{2}):(?<mi>\d{2}):(?<s>\d{2})(?: (?<tzs>[+-])(?<tzh>\d{2})(?<tzm>\d{2}))?\]/,
+  parse(match) {
+    const groups = match.groups ?? {};
+    const month = MONTH_ABBREVIATIONS[(groups.mon ?? "").toLowerCase()];
+    if (month === undefined) {
+      return undefined;
+    }
+    return isoLikeGroupsToEpochMs({
+      ...groups,
+      mo: String(month + 1),
+    });
+  },
+};
+
+/**
+ * 行頭のエポック秒（10桁、小数部つきも可）またはエポックミリ秒（13桁）。例:
+ * - `1704164645 INFO ...`
+ * - `1704164645.678 ...`
+ * - `1704164645678 ...`
+ *
+ * 桁数を 10 / 13 に固定しているのは、行頭の任意の数値をタイムスタンプと
+ * 誤認しないための安全策。10桁は 2001〜2286 年、13桁も同じ範囲をカバーする
+ * ため、実用上のログはこの範囲に収まる。直後にさらに数字が続く場合
+ * （11〜12桁・14桁以上の数値の一部だった場合）はマッチさせない。
+ */
+export const EPOCH_FORMAT: TimestampFormat = {
+  name: "epoch",
+  regex: /^(?:(?<epochMs>\d{13})|(?<epochSec>\d{10})(?:[.,](?<frac>\d{1,9}))?)(?!\d)/,
+  parse(match) {
+    const groups = match.groups ?? {};
+    if (groups.epochMs) {
+      return Number(groups.epochMs);
+    }
+    // 小数部はミリ秒3桁に切り捨てる（切り捨ての理由は isoLikeGroupsToEpochMs
+    // の ms 処理と同じ）。
+    const ms = groups.frac ? Number(groups.frac.padEnd(3, "0").slice(0, 3)) : 0;
+    return Number(groups.epochSec) * 1000 + ms;
   },
 };
 
@@ -178,9 +254,22 @@ export function createSyslogFormat(options: SyslogFormatOptions = {}): Timestamp
 /**
  * デフォルトの組み込みタイムスタンプフォーマット一覧を返す（試行順）。
  * 追加 / カスタムフォーマットは `parseLog` に直接渡すことができる。
+ *
+ * 試行順は「限定的な形式ほど先、曖昧な形式ほど後」を原則とする。特に
+ * エポック形式は行頭の数字列だけでマッチする最も曖昧な形式のため必ず
+ * 最後に置く（例: `2024...` で始まる行を先にエポックと誤認しないため。
+ * 現状 ISO 形式は4桁目にハイフンが来るため衝突しないが、順序で守る方が
+ * 将来の形式追加に対して頑健）。
  */
 export function getDefaultTimestampFormats(
   syslogOptions: SyslogFormatOptions = {}
 ): TimestampFormat[] {
-  return [BRACKETED_ISO_8601_FORMAT, ISO_8601_FORMAT, createSyslogFormat(syslogOptions)];
+  return [
+    BRACKETED_ISO_8601_FORMAT,
+    ISO_8601_FORMAT,
+    SLASH_DATE_FORMAT,
+    APACHE_ACCESS_LOG_FORMAT,
+    createSyslogFormat(syslogOptions),
+    EPOCH_FORMAT,
+  ];
 }

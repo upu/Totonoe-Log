@@ -56,6 +56,40 @@ for the current roadmap.
   so "silent" stretches stand out during an incident investigation. Applies
   to `Show Normalized View` and its filtered variants; threshold configurable
   via `totonoeLog.gap.thresholdSeconds` (default 30s, 0 disables it)
+- Recognize common timestamp formats out of the box: ISO 8601 (plain and
+  bracketed), classic syslog, slash-separated dates (`2024/01/02 03:04:05`),
+  Apache/Nginx access-log timestamps (`[02/Jan/2024:03:04:05 +0900]`), and
+  leading epoch seconds/milliseconds. Formats not covered by the built-ins
+  can be added via the `totonoeLog.timestampFormats` setting (see below)
+
+## Custom timestamp formats
+
+If your logs use a timestamp format the built-ins don't recognize, add it
+with the `totonoeLog.timestampFormats` setting. Each entry is a regular
+expression whose named capture groups tell Totonoe Log how to interpret the
+match. Custom formats are tried before the built-in ones, so they can also
+override a built-in interpretation. Patterns are automatically anchored to
+the start of the line.
+
+```jsonc
+"totonoeLog.timestampFormats": [
+  {
+    "name": "jp-date",
+    "pattern": "(?<y>\\d{4})年(?<mo>\\d{1,2})月(?<d>\\d{1,2})日 (?<h>\\d{1,2}):(?<mi>\\d{2}):(?<s>\\d{2})"
+  }
+]
+```
+
+Supported capture groups:
+
+- Calendar style: `y` `mo` `d` `h` `mi` `s` (all required), plus optional
+  `ms` (fractional seconds), and `tzs` `tzh` `tzm` (offset sign/hours/minutes).
+  Without an offset the timestamp is interpreted as UTC
+- Epoch style: `epochMs` (epoch milliseconds) or `epochSec` (epoch seconds,
+  with an optional `ms` group for the fractional part)
+
+Invalid entries (bad regex, missing groups) are skipped with a warning;
+the remaining formats keep working.
 
 ## Series
 
