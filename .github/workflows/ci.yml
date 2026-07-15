@@ -3,20 +3,56 @@ on:
   pull_request:
   push:
     branches: [main]
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 jobs:
-  test:
-    runs-on: windows-latest
+  lint:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
     permissions:
       contents: read
     steps:
-      - uses: actions/checkout@v5
-      - uses: actions/setup-node@v5
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v6
         with:
           node-version: 24.x
           cache: npm
       - run: npm ci
-      - run: npm run compile
       - run: npm run lint
+  test:
+    strategy:
+      matrix:
+        os: [windows-latest, ubuntu-latest]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 15
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 24.x
+          cache: npm
+      - run: npm ci
+      - name: Resolve latest stable VS Code version
+        id: vscode-version
+        shell: bash
+        continue-on-error: true
+        run: |
+          platform=$([ "${{ runner.os }}" = "Windows" ] && echo win32-x64-archive || echo linux-x64)
+          version=$(curl -fsSL "https://update.code.visualstudio.com/api/update/$platform/stable/latest" | jq -r .productVersion)
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+      - uses: actions/cache@v4
+        with:
+          path: .vscode-test
+          key: vscode-test-${{ runner.os }}-${{ steps.vscode-version.outputs.version }}
+          restore-keys: |
+            vscode-test-${{ runner.os }}-
+      - run: npm run compile
       - run: npm run build
       - run: npm test
+        if: runner.os != 'Linux'
+      - run: xvfb-run -a npm test
+        if: runner.os == 'Linux'
       - run: npm run check:package
