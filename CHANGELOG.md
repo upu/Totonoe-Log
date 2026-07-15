@@ -26,6 +26,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   bracketed thread name sits between the timestamp and the log level.
   Such lines used to fall into "(no severity)" and were missed by
   severity filters.
+- ISO 8601 timestamps with 7+ digit fractional seconds (.NET's 7-digit
+  format, Go's RFC3339Nano 9-digit format) no longer silently drop their
+  timezone offset. The offset used to be left unmatched and treated as
+  UTC, shifting timestamps by hours, and the unmatched leftover digits
+  leaked into the start of the log message.
 
 ## [0.3.1] - 2026-07-13
 
