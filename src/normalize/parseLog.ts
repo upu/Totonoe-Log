@@ -8,8 +8,13 @@ import type { LogEntry, TimestampFormat } from "./types";
 const SEVERITY_TOKENS = ["TRACE", "DEBUG", "INFO", "WARNING", "WARN", "ERROR", "FATAL", "CRITICAL"];
 
 // \b を付けることで "ERRORCODE" のような単語の前置部分に誤マッチするのを防ぐ。
+// log4j/logback の定番レイアウト `%d [%t] %-5p`（タイムスタンプの次にスレッド名、
+// その次にレベル）に対応するため、`[main]` のような角括弧トークンを最大2個まで
+// 読み飛ばすことを許容する。読み飛ばし対象を角括弧トークンに限定し、かつ2個までに
+// 制限することで、メッセージ本文中の偶然の一致（例: 本文に "INFO" という単語が
+// 含まれる）を誤ってセベリティと認識するリスクを抑える。
 const SEVERITY_REGEX = new RegExp(
-  `^[\\s\\-:|]*\\[?(${SEVERITY_TOKENS.join("|")})\\b\\]?[\\s\\-:|]*`,
+  `^[\\s\\-:|]*(?:\\[[^\\]\\r\\n]*\\][\\s\\-:|]*){0,2}\\[?(${SEVERITY_TOKENS.join("|")})\\b\\]?[\\s\\-:|]*`,
   "i"
 );
 

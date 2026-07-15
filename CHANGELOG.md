@@ -21,6 +21,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   It now completes to the last instant of that day (`23:59:59.999`)
   instead of midnight; the start boundary's `00:00:00` completion is
   unchanged.
+- Severity is now recognized in the common log4j/logback layout
+  `%d [%t] %-5p` (e.g. `2024-01-02 03:04:05 [main] INFO ...`), where a
+  bracketed thread name sits between the timestamp and the log level.
+  Such lines used to fall into "(no severity)" and were missed by
+  severity filters.
 
 ## [0.3.1] - 2026-07-13
 
