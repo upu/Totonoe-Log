@@ -54,6 +54,18 @@ export function guardAgainstVirtualDocumentSource(
 }
 
 /**
+ * 保持内容が見つからない URI に対して provideTextDocumentContent が返す
+ * プレースホルダー文言。`onDidCloseTextDocument` は、ユーザーがタブを
+ * 閉じていなくても VSCode が内部的に TextDocument の参照を解放した際に
+ * 発火しうる（issue #92）。タブ自体は残ったままなので、その状態で
+ * タブに戻ると再度 provideTextDocumentContent が呼ばれるが register() は
+ * 呼ばれない。従来は `?? ""` で無言の空白を返しており、ユーザーが内容消失に
+ * 気付けなかった。無言の空白より、何が起きたか分かる文言を返す方が安全。
+ */
+export const CONTENT_LOST_PLACEHOLDER =
+  "Totonoe Log: このビューの内容は失われました。コマンドを再実行して開き直してください。";
+
+/**
  * URIごとにテキスト内容を保持する読み取り専用の仮想ドキュメントプロバイダ。
  * 正規化ビュー・比較ビューなど、スキームだけが異なる複数の機能が共有する
  * 基底実装。ドキュメントが閉じられたら保持内容を解放し、コマンドを繰り返し
@@ -83,7 +95,7 @@ export class VirtualDocumentContentProvider
   }
 
   provideTextDocumentContent(uri: vscode.Uri): string {
-    return this.contentByUri.get(uri.toString()) ?? "";
+    return this.contentByUri.get(uri.toString()) ?? CONTENT_LOST_PLACEHOLDER;
   }
 
   dispose(): void {
