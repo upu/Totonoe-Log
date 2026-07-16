@@ -43,17 +43,27 @@ let mergedFilteredViewCounter = 0;
  * ファイルごとのソースオフセット（`totonoeLog.timezone.fileOffsets`、issue #13）
  * とクロックスキュー補正（`totonoeLog.clockSkew.fileOffsets`、issue #15）も
  * ここで解決して添付する。
+ *
+ * `vscode.workspace.openTextDocument` はエディタのドキュメント管理を経由する
+ * ため、VSCodeが拡張機能へ同期しない大容量ファイル（目安約50MB超）で
+ * 「Files above 50MB cannot be synchronized with extensions.」というエラーに
+ * なる（issue #98）。マージ対象になりやすい本番ログはこのサイズ帯に達し
+ * やすいため、`vscode.workspace.fs.readFile` でバイト列として直接読み、
+ * `TextDecoder` で文字列化する方式に切り替えてこの制限を回避する。副次効果
+ * として、マージのためだけに全対象ファイルがエディタ管理下に開かれるコストも
+ * 消える。
  */
 async function readLogFiles(fileUris: readonly vscode.Uri[]): Promise<LogFileInput[]> {
   const resolveSourceOffsetMinutes = createSourceOffsetResolver();
   const resolveClockSkewMs = createClockSkewResolver();
+  const decoder = new TextDecoder();
   return Promise.all(
     fileUris.map(async (fileUri) => {
-      const document = await vscode.workspace.openTextDocument(fileUri);
+      const bytes = await vscode.workspace.fs.readFile(fileUri);
       const fileName = fileUri.path.split("/").pop() ?? "log";
       return {
         fileName,
-        text: document.getText(),
+        text: decoder.decode(bytes),
         sourceUtcOffsetMinutes: resolveSourceOffsetMinutes(fileName),
         clockSkewMs: resolveClockSkewMs(fileName),
       };

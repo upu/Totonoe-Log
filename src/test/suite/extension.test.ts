@@ -1402,6 +1402,105 @@ suite("Totonoe Log merged view", () => {
     assert.ok(activeEditor, "the original editor should remain active");
     assert.notStrictEqual(activeEditor!.document.uri.scheme, "totonoe-log-merged");
   });
+
+  test("reads a source file that exceeds VSCode's ~50MB document sync limit without losing content (issue #98)", async function () {
+    // 巨大ファイルの生成・読み込み・マージ処理を含むため、既定の2000msでは
+    // 収まらない（他の実ファイル操作テストと同じ理由でissue #72の前例に倣う）。
+    this.timeout(60000);
+
+    const extension = vscode.extensions.getExtension("upu.totonoe-log");
+    await extension!.activate();
+
+    const fs = await import("node:fs/promises");
+    const os = await import("node:os");
+    const path = await import("node:path");
+
+    const tempDir = await fs.mkdtemp(path.join(os.tmpdir(), "totonoe-log-"));
+    try {
+      // VSCodeは `vscode.workspace.openTextDocument` 経由での拡張機能への
+      // ファイル同期を約50MB超で拒否する（バイナリのAPI制限であり設定では
+      // 緩められない、issue #98の本体）。この制限を確実に超えつつ、マージ
+      // 処理のコスト（エントリ数に比例）は抑えたいので、行数は少なく1行
+      // あたりを長くして総サイズを稼ぐ。
+      //
+      // マージ後の表示（仮想ドキュメントを開く処理）にも同じ50MB制限が
+      // 別途かかるため（このテストで検証する読み込み側の制限とは別レイヤー、
+      // issue #98のスコープ外）、ファイル選択ダイアログ→絞り込みコマンドを
+      // 通し、フィルタ後の表示内容自体は小さく保つ。巨大ファイルの末尾の
+      // 1行だけを ERROR にしてセベリティ絞り込みでその1行だけを残すことで、
+      // 「ファイル全体が末尾まで読み込まれたこと」を、表示側の制限を踏まずに
+      // 検証できる。
+      const oneMb = 1024 * 1024;
+      const targetSizeBytes = 52 * oneMb;
+      const bigLineCount = 60;
+      const lastIndex = bigLineCount - 1;
+      const linePrefix = (index: number): string => {
+        const severity = index === lastIndex ? "ERROR" : "INFO";
+        return `2024-01-02T03:00:${String(index).padStart(2, "0")}Z ${severity} line-${String(index).padStart(3, "0")} `;
+      };
+      const paddingLength = Math.ceil(targetSizeBytes / bigLineCount) - linePrefix(0).length;
+      const bigLogLines = Array.from(
+        { length: bigLineCount },
+        (_, i) => `${linePrefix(i)}${"x".repeat(paddingLength)}`
+      );
+      const bigLogPath = path.join(tempDir, "big.log");
+      await fs.writeFile(bigLogPath, bigLogLines.join("\n"));
+
+      const bigLogStats = await fs.stat(bigLogPath);
+      assert.ok(
+        bigLogStats.size > 50 * oneMb,
+        `test fixture should exceed VSCode's ~50MB sync limit (actual: ${bigLogStats.size} bytes)`
+      );
+
+      const smallLogPath = path.join(tempDir, "small.log");
+      await fs.writeFile(smallLogPath, "2024-01-02T02:59:59Z ERROR boom");
+
+      const originalShowOpenDialog = vscode.window.showOpenDialog;
+      (vscode.window as any).showOpenDialog = async () => [
+        vscode.Uri.file(bigLogPath),
+        vscode.Uri.file(smallLogPath),
+      ];
+
+      const originalShowQuickPick = vscode.window.showQuickPick;
+      (vscode.window as any).showQuickPick = async (items: vscode.QuickPickItem[]) => {
+        const isKindPicker = items.some((item) => item.label === "セベリティ");
+        // 条件種類ピッカーでは「セベリティ」だけを選び、セベリティ選択
+        // ピッカーでは ERROR だけを選ぶ。
+        return isKindPicker
+          ? items.filter((item) => item.label === "セベリティ")
+          : items.filter((item) => item.label === "ERROR");
+      };
+
+      try {
+        await vscode.commands.executeCommand("totonoeLog.showMergedViewFiltered");
+      } finally {
+        (vscode.window as any).showOpenDialog = originalShowOpenDialog;
+        (vscode.window as any).showQuickPick = originalShowQuickPick;
+      }
+
+      const activeEditor = vscode.window.activeTextEditor;
+      assert.ok(activeEditor, "a filtered merged view editor should be shown");
+      assert.strictEqual(activeEditor!.document.uri.scheme, "totonoe-log-merged");
+
+      const mergedLines = activeEditor!.document.getText().split("\n");
+      assert.strictEqual(
+        mergedLines.length,
+        2,
+        "only the two ERROR entries should remain after filtering"
+      );
+      assert.ok(
+        mergedLines[0].includes("small.log") && mergedLines[0].includes("ERROR boom"),
+        "the small file's earlier ERROR entry should sort first"
+      );
+      assert.ok(
+        mergedLines[1].includes(`line-${String(lastIndex).padStart(3, "0")}`),
+        "the big file's last line (only reachable by reading the whole ~52MB file) must be present"
+      );
+    } finally {
+      await vscode.commands.executeCommand("workbench.action.closeAllEditors");
+      await fs.rm(tempDir, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 });
+    }
+  });
 });
 
 suite("Totonoe Log merged view filtered (combined)", () => {
