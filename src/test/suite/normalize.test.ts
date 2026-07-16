@@ -29,6 +29,7 @@ import {
   resolveClockSkewMs,
   applyClockSkew,
 } from "../../normalize";
+import * as maskForCompare from "../../normalize/maskForCompare";
 
 suite("normalize / parseLog", () => {
   test("parses ISO 8601 timestamps with severity and message", () => {
@@ -1228,6 +1229,26 @@ suite("normalize / collapseRepeatedEntries", () => {
 
   test("returns an empty array for no entries", () => {
     assert.deepStrictEqual(collapseRepeatedEntries([]), []);
+  });
+
+  test("computes each entry's grouping key at most once regardless of run length", () => {
+    // groupingKey は maskHostAddresses を必ず1回呼ぶため、その呼び出し回数を
+    // 数えることでキー計算回数（ランの長さに依存して増えていないか）を検証する。
+    const entries = parseLog(repeatedEntriesText(50));
+    const original = maskForCompare.maskHostAddresses;
+    let callCount = 0;
+    (maskForCompare as any).maskHostAddresses = (text: string) => {
+      callCount++;
+      return original(text);
+    };
+
+    try {
+      collapseRepeatedEntries(entries, { threshold: 3 });
+    } finally {
+      (maskForCompare as any).maskHostAddresses = original;
+    }
+
+    assert.strictEqual(callCount, entries.length);
   });
 });
 

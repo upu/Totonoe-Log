@@ -27,7 +27,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   offset, `Z`, or epoch form — because the host clock itself is wrong.
   Merged and normalized/filtered/collapsed views sort, display, and
   filter by the corrected times; the raw log text is never rewritten.
-
 - New built-in timestamp formats: slash-separated dates
   (`2024/01/02 03:04:05`, common in Japanese Windows/business-system
   logs), Apache/Nginx access-log timestamps
@@ -45,6 +44,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   timestamp, in files of 10+ non-blank lines), with guidance to the
   `totonoeLog.timestampFormats` setting. The warning is shown at most
   once per file per session.
+
+### Changed
+
+- The collapsed view's repeat-detection now computes each entry's
+  grouping key once instead of recomputing it for every comparison
+  within a run, speeding up collapsing on large log files without
+  changing which entries get grouped (issue #97).
 
 ### Fixed
 
