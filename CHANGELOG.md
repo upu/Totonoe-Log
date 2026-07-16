@@ -44,6 +44,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   timestamp, in files of 10+ non-blank lines), with guidance to the
   `totonoeLog.timestampFormats` setting. The warning is shown at most
   once per file per session.
+- The collapsed view now shows the timestamp span (start and end) of
+  each collapsed group instead of only the representative entry's
+  timestamp, so a burst that happened in seconds can be told apart from
+  one spread over hours without expanding the group (issue #99). The
+  end timestamp is omitted when every entry in the group shares the
+  same timestamp.
 
 ### Changed
 
