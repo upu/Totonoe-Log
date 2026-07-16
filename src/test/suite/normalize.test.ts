@@ -1338,6 +1338,24 @@ suite("normalize / deriveLogKind", () => {
   test("keeps a leading dot intact for dotfiles with no other extension", () => {
     assert.strictEqual(deriveLogKind(".env"), ".env");
   });
+
+  test("strips a trailing logrotate-style numeric suffix", () => {
+    assert.strictEqual(deriveLogKind("app.log.1"), "app");
+  });
+
+  test("strips a trailing date suffix appended after logrotate, in addition to the extension", () => {
+    assert.strictEqual(deriveLogKind("app.log.2024-01-02"), "app");
+  });
+
+  test("derives the same kind for a file and its rotated variants", () => {
+    const kind = deriveLogKind("app.log");
+    assert.strictEqual(deriveLogKind("app.log.1"), kind);
+    assert.strictEqual(deriveLogKind("app.log.2024-01-02"), kind);
+  });
+
+  test("keeps unrelated file names with similar prefixes as distinct kinds", () => {
+    assert.notStrictEqual(deriveLogKind("error.log"), deriveLogKind("errors.log"));
+  });
 });
 
 suite("normalize / mergeLogFiles", () => {
@@ -1417,6 +1435,19 @@ suite("normalize / mergeLogFiles", () => {
 
   test("returns an empty array for no files", () => {
     assert.deepStrictEqual(mergeLogFiles([]), []);
+  });
+
+  test("groups a log file and its logrotate-style rotated variants under the same kind", () => {
+    const merged = mergeLogFiles([
+      { fileName: "app.log", text: "2024-01-02T03:04:05Z INFO current" },
+      { fileName: "app.log.1", text: "2024-01-01T03:04:05Z INFO numbered" },
+      { fileName: "app.log.2024-01-02", text: "2024-01-02T03:04:06Z INFO dated" },
+    ]);
+
+    assert.deepStrictEqual(
+      merged.map((m) => m.kind),
+      ["app", "app", "app"]
+    );
   });
 });
 

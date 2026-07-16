@@ -75,6 +75,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   timezone offset. The offset used to be left unmatched and treated as
   UTC, shifting timestamps by hours, and the unmatched leftover digits
   leaked into the start of the log message.
+- The merged view's "kind" grouping now recognizes logrotate-style
+  rotated file names (issue #96): `app.log`, `app.log.1`, and
+  `app.log.2024-01-02` all derive the same `app` kind, instead of the
+  numeric/date rotation suffix being treated as part of the kind.
 
 ## [0.3.1] - 2026-07-13
 
