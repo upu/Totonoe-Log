@@ -12,16 +12,48 @@ const EXTENSION_REGEX = /(?<=[^.])\.[^./]+$/;
 const DATE_LIKE_SUFFIX_REGEX =
   /[-_.]?\d{4}[-_]?\d{2}[-_]?\d{2}(?:[-_]?\d{2}[-_]?\d{2}(?:[-_]?\d{2})?)?[-_.]?$/;
 
+// logrotate が付与する末尾の連番（`.1`、`.2` 等）を取り除く。区切り文字を
+// 必須にして、`app2` のような偶然末尾が数字なだけの名前を巻き込まない
+// ようにする。
+const ROTATION_NUMBER_SUFFIX_REGEX = /[-_.]\d+$/;
+
 /**
- * ファイル名から、日付部分を取り除いた「種類」を導く。例:
- * `message_20240101.log` → `message`。日付を取り除くと空になってしまう
- * 場合（ファイル名自体が日付そのものの場合）は、拡張子だけ除いた名前を
- * そのまま返す。
+ * 末尾がローテーションマーカー（日付らしきサフィックス、または
+ * logrotate 風の連番）である間、繰り返し取り除く。取り除くと空文字列に
+ * なってしまう場合はその一回を行わずに打ち切る（例: ファイル名自体が
+ * 日付そのものの場合）。
+ */
+function stripRotationMarkers(name: string): string {
+  let current = name;
+  for (;;) {
+    const afterDate = current.replace(DATE_LIKE_SUFFIX_REGEX, "");
+    if (afterDate !== current && afterDate.length > 0) {
+      current = afterDate;
+      continue;
+    }
+    const afterNumber = current.replace(ROTATION_NUMBER_SUFFIX_REGEX, "");
+    if (afterNumber !== current && afterNumber.length > 0) {
+      current = afterNumber;
+      continue;
+    }
+    return current;
+  }
+}
+
+/**
+ * ファイル名から、ローテーションマーカーと拡張子を取り除いた「種類」を
+ * 導く。例: `message_20240101.log` → `message`、`app.log.1` /
+ * `app.log.2024-01-02` → `app`（`.1` や `.2024-01-02` は拡張子の後段に
+ * 付くため、拡張子除去の前後どちらでもローテーションマーカーの除去を
+ * 試みる。`app.log` のように拡張子しか無い名前を巻き込まないよう、
+ * 拡張子自体（`.log` 等）はローテーションマーカーとして扱わない）。
  */
 export function deriveLogKind(fileName: string): string {
-  const withoutExtension = fileName.replace(EXTENSION_REGEX, "");
-  const stripped = withoutExtension.replace(DATE_LIKE_SUFFIX_REGEX, "");
-  return stripped.length > 0 ? stripped : withoutExtension;
+  const preStripped = stripRotationMarkers(fileName);
+  const withoutExtension = preStripped.replace(EXTENSION_REGEX, "");
+  const base = withoutExtension.length > 0 ? withoutExtension : preStripped;
+  const stripped = stripRotationMarkers(base);
+  return stripped.length > 0 ? stripped : base;
 }
 
 /** {@link mergeLogFiles} に渡す、マージ対象のログファイル1件分。 */
