@@ -1264,7 +1264,37 @@ suite("normalize / formatCollapsedLog", () => {
 
     assert.strictEqual(
       formatCollapsedLog(entries, items),
+      "1-3 | 2024-01-02T03:04:05.000Z 〜 2024-01-02T03:04:07.000Z INFO connect ok (×3)"
+    );
+  });
+
+  test("omits the end timestamp when every entry in the group shares the same timestamp", () => {
+    const text = [
+      "2024-01-02T03:04:05Z INFO connect ok",
+      "2024-01-02T03:04:05Z INFO connect ok",
+      "2024-01-02T03:04:05Z INFO connect ok",
+    ].join("\n");
+    const entries = parseLog(text);
+    const items = collapseRepeatedEntries(entries, { threshold: 3 });
+
+    assert.strictEqual(
+      formatCollapsedLog(entries, items),
       "1-3 | 2024-01-02T03:04:05.000Z INFO connect ok (×3)"
+    );
+  });
+
+  test("renders the group's timestamp span in the requested display timezone", () => {
+    const text = [
+      "2024-01-02T03:04:05Z INFO connect ok",
+      "2024-01-02T03:04:06Z INFO connect ok",
+      "2024-01-02T03:04:07Z INFO connect ok",
+    ].join("\n");
+    const entries = parseLog(text);
+    const items = collapseRepeatedEntries(entries, { threshold: 3 });
+
+    assert.strictEqual(
+      formatCollapsedLog(entries, items, { displayTimezone: 540 }),
+      "1-3 | 2024-01-02T12:04:05.000+09:00 〜 2024-01-02T12:04:07.000+09:00 INFO connect ok (×3)"
     );
   });
 
@@ -1287,7 +1317,10 @@ suite("normalize / formatCollapsedLog", () => {
 
     assert.strictEqual(
       formatCollapsedLog(entries, items),
-      ["  1 | ==== banner ====", "2-4 | 2024-01-02T03:04:05.000Z INFO ok (×3)"].join("\n")
+      [
+        "  1 | ==== banner ====",
+        "2-4 | 2024-01-02T03:04:05.000Z 〜 2024-01-02T03:04:07.000Z INFO ok (×3)",
+      ].join("\n")
     );
   });
 
@@ -1305,7 +1338,10 @@ suite("normalize / formatCollapsedLog", () => {
 
     assert.strictEqual(
       formatCollapsedLog(entries, items),
-      ["1-6 | 2024-01-02T03:04:05.000Z ERROR boom (×3)", "  2 |   detail"].join("\n")
+      [
+        "1-6 | 2024-01-02T03:04:05.000Z 〜 2024-01-02T03:04:07.000Z ERROR boom (×3)",
+        "  2 |   detail",
+      ].join("\n")
     );
   });
 

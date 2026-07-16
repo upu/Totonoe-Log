@@ -44,7 +44,7 @@ Logs from servers in different timezones, or from a host whose clock is off, can
 
 ## Collapse repeated lines
 
-`Totonoe Log: Show Collapsed View` folds consecutive repeated patterns into a single line with a repeat count (e.g. "×5"), so repetitive noise stops burying the interesting entries (threshold configurable with `totonoeLog.collapse.threshold`).
+`Totonoe Log: Show Collapsed View` folds consecutive repeated patterns into a single line with a repeat count (e.g. "×5"), so repetitive noise stops burying the interesting entries (threshold configurable with `totonoeLog.collapse.threshold`). Each collapsed line also shows the group's timestamp span (start 〜 end), so you can tell a burst that happened in seconds from one spread over hours without expanding the group.
 
 ## Compare two logs
 

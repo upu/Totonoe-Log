@@ -1279,7 +1279,7 @@ suite("Totonoe Log collapsed view", () => {
     assert.strictEqual(activeEditor!.document.uri.scheme, "totonoe-log-normalized");
     assert.strictEqual(
       activeEditor!.document.getText(),
-      "1-3 | 2024-01-02T03:04:05.000Z INFO connect ok (×3)"
+      "1-3 | 2024-01-02T03:04:05.000Z 〜 2024-01-02T03:04:07.000Z INFO connect ok (×3)"
     );
   });
 
