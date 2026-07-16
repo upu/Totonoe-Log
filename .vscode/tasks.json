@@ -3,11 +3,29 @@
   "tasks": [
     {
       "type": "npm",
-      "script": "build",
-      "group": "build",
-      "problemMatcher": [],
+      "script": "watch",
+      "isBackground": true,
       "presentation": {
         "reveal": "silent"
+      },
+      "group": {
+        "kind": "build",
+        "isDefault": true
+      },
+      "problemMatcher": {
+        "owner": "esbuild",
+        "fileLocation": "absolute",
+        "pattern": [
+          {
+            "regexp": "^✘ \\[ERROR\\] (.+)$",
+            "message": 1
+          }
+        ],
+        "background": {
+          "activeOnStart": true,
+          "beginsPattern": "^\\[watch\\] build started$",
+          "endsPattern": "^\\[watch\\] build finished$"
+        }
       }
     }
   ]

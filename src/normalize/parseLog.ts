@@ -8,8 +8,13 @@ import type { LogEntry, TimestampFormat } from "./types";
 const SEVERITY_TOKENS = ["TRACE", "DEBUG", "INFO", "WARNING", "WARN", "ERROR", "FATAL", "CRITICAL"];
 
 // \b を付けることで "ERRORCODE" のような単語の前置部分に誤マッチするのを防ぐ。
+// log4j/logback の定番レイアウト `%d [%t] %-5p`（タイムスタンプの次にスレッド名、
+// その次にレベル）に対応するため、`[main]` のような角括弧トークンを最大2個まで
+// 読み飛ばすことを許容する。読み飛ばし対象を角括弧トークンに限定し、かつ2個までに
+// 制限することで、メッセージ本文中の偶然の一致（例: 本文に "INFO" という単語が
+// 含まれる）を誤ってセベリティと認識するリスクを抑える。
 const SEVERITY_REGEX = new RegExp(
-  `^[\\s\\-:|]*\\[?(${SEVERITY_TOKENS.join("|")})\\b\\]?[\\s\\-:|]*`,
+  `^[\\s\\-:|]*(?:\\[[^\\]\\r\\n]*\\][\\s\\-:|]*){0,2}\\[?(${SEVERITY_TOKENS.join("|")})\\b\\]?[\\s\\-:|]*`,
   "i"
 );
 
@@ -25,6 +30,13 @@ export interface ParseLogOptions {
    * このモジュールを変更せずに追加フォーマットを対応できる（プラガブル設計）。
    */
   readonly timestampFormats?: readonly TimestampFormat[];
+
+  /**
+   * タイムゾーン表記を持たないタイムスタンプに仮定する UTC オフセット（分）。
+   * 省略時は UTC（0）。明示的なオフセットや `Z` を持つタイムスタンプ、
+   * エポック形式には影響しない（issue #13）。
+   */
+  readonly sourceUtcOffsetMinutes?: number;
 }
 
 interface MutableEntry {
@@ -67,6 +79,7 @@ function finalizeEntry(entry: MutableEntry): LogEntry {
  */
 export function parseLog(text: string, options: ParseLogOptions = {}): LogEntry[] {
   const timestampFormats = options.timestampFormats ?? getDefaultTimestampFormats();
+  const parseContext = { fallbackUtcOffsetMinutes: options.sourceUtcOffsetMinutes };
   const lines = text.length === 0 ? [] : text.split(/\r\n|\r|\n/);
 
   const entries: LogEntry[] = [];
@@ -85,7 +98,7 @@ export function parseLog(text: string, options: ParseLogOptions = {}): LogEntry[
       format.regex.lastIndex = 0;
       const candidate = format.regex.exec(line);
       if (candidate && candidate.index === 0) {
-        const epochMs = format.parse(candidate);
+        const epochMs = format.parse(candidate, parseContext);
         if (epochMs !== undefined) {
           matchedFormat = format;
           match = candidate;

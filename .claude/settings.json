@@ -1,4 +1,37 @@
 {
+  "permissions": {
+    "allow": [
+      "Bash(npm test*)",
+      "Bash(npm run compile*)",
+      "Bash(npm run check:package*)",
+      "Bash(git pull *)",
+      "Bash(git fetch *)",
+      "Bash(git status)",
+      "Bash(git status *)",
+      "Bash(git log *)",
+      "Bash(git diff *)",
+      "Bash(git ls-files *)",
+      "Bash(git check-ignore *)",
+      "Bash(git branch --show-current)",
+      "Bash(git rev-parse HEAD)",
+      "Bash(git worktree list*)",
+      "Bash(set -o pipefail; gh pr checks * --watch --fail-fast 2>&1 | tail -5)",
+      "Bash(set -o pipefail; gh run watch * --exit-status 2>&1 | tail -20)",
+      "Bash(gh label list*)",
+      "Bash(gh issue view*)",
+      "Bash(gh issue list*)",
+      "Bash(gh pr view*)",
+      "Bash(gh pr list*)",
+      "Bash(gh run list*)",
+      "Bash(gh run view*)",
+      "Bash(gh api repos/:owner/:repo/milestones?state=open --jq '*')",
+      "Bash(gh api \"repos/:owner/:repo/milestones?state=open\" --jq '*')",
+      "Bash(gh api repos/:owner/:repo/pulls/*/comments --jq '*')",
+      "Bash(cat docs/coding-guidelines.md)",
+      "WebFetch(domain:keepachangelog.com)",
+      "WebFetch(domain:docs.claude.com)"
+    ]
+  },
   "enabledPlugins": {
     "dev-flow@upu-agent-marketplace": true,
     "vscode-ext@upu-agent-marketplace": true

@@ -4,6 +4,7 @@ import {
   formatMergedLog,
   filterMergedEntriesByCriteria,
   type LogFileInput,
+  type LogEntry,
   type MergedEntry,
   type FilterCriteria,
 } from "./normalize";
@@ -18,6 +19,10 @@ import {
   promptFilterKinds,
   countLines,
 } from "./filterPrompts";
+import { readConfiguredTimestampFormats } from "./timestampFormatSettings";
+import { createSourceOffsetResolver, readDisplayTimezone } from "./timezoneSettings";
+import { createClockSkewResolver } from "./clockSkewSettings";
+import { warnIfLowTimestampRecognition } from "./timestampRecognitionWarning";
 
 // スキーム定義は virtualDocumentContentProvider.ts に集約している
 // （既存の import 元を変えずに済むよう、ここから再エクスポートする）。
@@ -33,15 +38,55 @@ export class MergedViewContentProvider extends VirtualDocumentContentProvider {
 let mergedViewCounter = 0;
 let mergedFilteredViewCounter = 0;
 
-/** 選択されたファイル群を読み込み、{@link mergeLogFiles} に渡す入力へ変換する。 */
+/**
+ * 選択されたファイル群を読み込み、{@link mergeLogFiles} に渡す入力へ変換する。
+ * ファイルごとのソースオフセット（`totonoeLog.timezone.fileOffsets`、issue #13）
+ * とクロックスキュー補正（`totonoeLog.clockSkew.fileOffsets`、issue #15）も
+ * ここで解決して添付する。
+ */
 async function readLogFiles(fileUris: readonly vscode.Uri[]): Promise<LogFileInput[]> {
+  const resolveSourceOffsetMinutes = createSourceOffsetResolver();
+  const resolveClockSkewMs = createClockSkewResolver();
   return Promise.all(
     fileUris.map(async (fileUri) => {
       const document = await vscode.workspace.openTextDocument(fileUri);
       const fileName = fileUri.path.split("/").pop() ?? "log";
-      return { fileName, text: document.getText() };
+      return {
+        fileName,
+        text: document.getText(),
+        sourceUtcOffsetMinutes: resolveSourceOffsetMinutes(fileName),
+        clockSkewMs: resolveClockSkewMs(fileName),
+      };
     })
   );
+}
+
+/**
+ * マージ対象の各ファイルについて、タイムスタンプ認識率が低い場合の警告を
+ * ファイル単位で表示する（issue #101）。マージ結果はファイル横断で時系列に
+ * 並び替えられているため、`MergedEntry.fileName` でエントリを元ファイルごとに
+ * グループし直してから判定する。異なるフォルダの同名ファイルが混在する場合は
+ * 1グループにまとまるが、通知の目的（形式未対応への気づき）には支障がない
+ * ため許容する。
+ */
+function warnLowTimestampRecognitionPerFile(
+  fileUris: readonly vscode.Uri[],
+  mergedEntries: readonly MergedEntry[]
+): void {
+  const entriesByFileName = new Map<string, LogEntry[]>();
+  for (const merged of mergedEntries) {
+    const entries = entriesByFileName.get(merged.fileName);
+    if (entries) {
+      entries.push(merged.entry);
+    } else {
+      entriesByFileName.set(merged.fileName, [merged.entry]);
+    }
+  }
+
+  for (const fileUri of fileUris) {
+    const fileName = fileUri.path.split("/").pop() ?? "log";
+    warnIfLowTimestampRecognition(fileUri, entriesByFileName.get(fileName) ?? []);
+  }
 }
 
 /**
@@ -72,8 +117,11 @@ async function openMergedView(
   fileUris: readonly vscode.Uri[]
 ): Promise<void> {
   const files = await readLogFiles(fileUris);
-  const mergedEntries = mergeLogFiles(files);
-  const content = formatMergedLog(mergedEntries);
+  const mergedEntries = mergeLogFiles(files, {
+    timestampFormats: readConfiguredTimestampFormats(),
+  });
+  warnLowTimestampRecognitionPerFile(fileUris, mergedEntries);
+  const content = formatMergedLog(mergedEntries, { displayTimezone: readDisplayTimezone() });
 
   mergedViewCounter += 1;
   await openVirtualMergedDocument(provider, content, `/merged-${mergedViewCounter}.log`);
@@ -134,7 +182,10 @@ export function createShowMergedViewFilteredCommand(
     }
 
     const files = await readLogFiles(fileUris);
-    const mergedEntries: MergedEntry[] = mergeLogFiles(files);
+    const mergedEntries: MergedEntry[] = mergeLogFiles(files, {
+      timestampFormats: readConfiguredTimestampFormats(),
+    });
+    warnLowTimestampRecognitionPerFile(fileUris, mergedEntries);
 
     const selectedKinds = await promptFilterKinds();
     // ユーザーがピッカーを Esc 等でキャンセルした場合は何もしない。
@@ -154,13 +205,13 @@ export function createShowMergedViewFilteredCommand(
 
     let dateRange: FilterCriteria["dateRange"];
     if (selectedKinds.has("dateRange")) {
-      const startMs = await promptDateBoundary("開始日時");
+      const startMs = await promptDateBoundary("開始日時", "start");
       // null はキャンセル、または不正な入力による中断を表す。
       if (startMs === null) {
         return;
       }
 
-      const endMs = await promptDateBoundary("終了日時");
+      const endMs = await promptDateBoundary("終了日時", "end");
       if (endMs === null) {
         return;
       }
@@ -190,7 +241,9 @@ export function createShowMergedViewFilteredCommand(
       return;
     }
     const filteredMergedEntries = filterResult.entries;
-    const content = formatMergedLog(filteredMergedEntries);
+    const content = formatMergedLog(filteredMergedEntries, {
+      displayTimezone: readDisplayTimezone(),
+    });
 
     mergedFilteredViewCounter += 1;
     await openVirtualMergedDocument(

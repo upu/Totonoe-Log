@@ -1,6 +1,7 @@
 import type { LogEntry } from "./types";
 import type { ParseLogOptions } from "./parseLog";
 import { parseLog } from "./parseLog";
+import { applyClockSkew } from "./clockSkew";
 
 // 直前に別の文字がある最後の拡張子だけを除去する（`.env` 等のドット
 // ファイルは拡張子とみなさない）。他の仮想ドキュメント名生成箇所と同じ規約。
@@ -27,6 +28,19 @@ export function deriveLogKind(fileName: string): string {
 export interface LogFileInput {
   readonly fileName: string;
   readonly text: string;
+  /**
+   * このファイル専用のソースオフセット（分）。指定すると `parseOptions` の
+   * {@link ParseLogOptions.sourceUtcOffsetMinutes} より優先される。サーバごとに
+   * タイムゾーンが異なるログを正しい時系列へマージするために使う（issue #13）。
+   */
+  readonly sourceUtcOffsetMinutes?: number;
+  /**
+   * このファイルに適用するクロックスキュー補正（ミリ秒、issue #15）。
+   * 時計がずれているホストのログを正しい時系列へマージするために使う。
+   * ソースオフセットと違い、パース後の全認識済みタイムスタンプへ一律に
+   * 適用される（{@link applyClockSkew} 参照）。
+   */
+  readonly clockSkewMs?: number;
 }
 
 /**
@@ -85,7 +99,12 @@ export function mergeLogFiles(
 
   for (const file of files) {
     const kind = deriveLogKind(file.fileName);
-    for (const entry of parseLog(file.text, parseOptions)) {
+    const fileParseOptions =
+      file.sourceUtcOffsetMinutes !== undefined
+        ? { ...parseOptions, sourceUtcOffsetMinutes: file.sourceUtcOffsetMinutes }
+        : parseOptions;
+    const entries = applyClockSkew(parseLog(file.text, fileParseOptions), file.clockSkewMs ?? 0);
+    for (const entry of entries) {
       merged.push({ entry, fileName: file.fileName, kind });
     }
   }

@@ -1,6 +1,7 @@
 import * as vscode from "vscode";
-import { parseLog, maskLogTextForCopy, type MaskForCopyOptions } from "./normalize";
+import { maskLogTextForCopy, type MaskForCopyOptions } from "./normalize";
 import { guardAgainstVirtualDocumentSource } from "./virtualDocumentContentProvider";
+import { parseLogWithConfiguredFormats } from "./timestampFormatSettings";
 
 /** マスク対象のON/OFFを読み込むVSCode設定のセクション名。 */
 const CONFIG_SECTION = "totonoeLog.copyMasked";
@@ -37,7 +38,7 @@ export async function copyMaskedLogText(): Promise<void> {
   const selection = activeEditor.selection;
   const sourceText = selection.isEmpty ? document.getText() : document.getText(selection);
 
-  const entries = parseLog(sourceText);
+  const entries = parseLogWithConfiguredFormats(sourceText);
   const maskedText = maskLogTextForCopy(entries, readMaskOptions());
   await vscode.env.clipboard.writeText(maskedText);
 
