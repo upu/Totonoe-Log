@@ -23,6 +23,7 @@ import { readConfiguredTimestampFormats } from "./timestampFormatSettings";
 import { createSourceOffsetResolver, readDisplayTimezone } from "./timezoneSettings";
 import { createClockSkewResolver } from "./clockSkewSettings";
 import { warnIfLowTimestampRecognition } from "./timestampRecognitionWarning";
+import { readGapThresholdMs } from "./gapThresholdSetting";
 
 // スキーム定義は virtualDocumentContentProvider.ts に集約している
 // （既存の import 元を変えずに済むよう、ここから再エクスポートする）。
@@ -131,7 +132,10 @@ async function openMergedView(
     timestampFormats: readConfiguredTimestampFormats(),
   });
   warnLowTimestampRecognitionPerFile(fileUris, mergedEntries);
-  const content = formatMergedLog(mergedEntries, { displayTimezone: readDisplayTimezone() });
+  const content = formatMergedLog(mergedEntries, {
+    displayTimezone: readDisplayTimezone(),
+    gapThresholdMs: readGapThresholdMs(),
+  });
 
   mergedViewCounter += 1;
   await openVirtualMergedDocument(provider, content, `/merged-${mergedViewCounter}.log`);
@@ -253,6 +257,7 @@ export function createShowMergedViewFilteredCommand(
     const filteredMergedEntries = filterResult.entries;
     const content = formatMergedLog(filteredMergedEntries, {
       displayTimezone: readDisplayTimezone(),
+      gapThresholdMs: readGapThresholdMs(),
     });
 
     mergedFilteredViewCounter += 1;

@@ -2,7 +2,8 @@ export type { LogEntry, TimestampFormat, TimestampParseContext } from "./types";
 export type { ParseLogOptions } from "./parseLog";
 export { parseLog } from "./parseLog";
 export type { FormatNormalizedLogOptions } from "./formatNormalizedLog";
-export { formatNormalizedLog, DEFAULT_GAP_THRESHOLD_SECONDS } from "./formatNormalizedLog";
+export { formatNormalizedLog } from "./formatNormalizedLog";
+export { DEFAULT_GAP_THRESHOLD_SECONDS } from "./gapDetection";
 export type {
   DisplayTimezone,
   FileOffsetRuleSetting,
