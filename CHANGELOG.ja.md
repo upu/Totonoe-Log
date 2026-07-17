@@ -8,6 +8,8 @@
 
 ## [Unreleased]
 
+## [0.5.0] - 2026-07-17
+
 ### Added
 
 - これまで `Show Normalized View`（とその絞り込み系バリエーション）だけに
@@ -250,7 +252,8 @@
   ドットファイルの場合に名前全体が消えてしまい、`/.normalized-1.log`
   のようなパスになっていた問題を修正。先頭のドットは保持されるようにした。
 
-[Unreleased]: https://github.com/upu/Totonoe-Log/compare/v0.3.1...HEAD
+[Unreleased]: https://github.com/upu/Totonoe-Log/compare/v0.5.0...HEAD
+[0.5.0]: https://github.com/upu/Totonoe-Log/releases/tag/v0.5.0
 [0.3.1]: https://github.com/upu/Totonoe-Log/releases/tag/v0.3.1
 [0.3.0]: https://github.com/upu/Totonoe-Log/releases/tag/v0.3.0
 [0.2.1]: https://github.com/upu/Totonoe-Log/releases/tag/v0.2.1
