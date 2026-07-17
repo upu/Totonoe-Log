@@ -10,6 +10,13 @@
 
 ### Added
 
+- これまで `Show Normalized View`（とその絞り込み系バリエーション）だけに
+  あった「XX秒の空白」のギャップ検出区切り行を、`Show Merged View` /
+  `Show Merged View Filtered` にも追加した（issue #102）。同じ
+  `totonoeLog.gap.thresholdSeconds` 設定と同じ判定ロジックを共有するため、
+  複数ファイル由来のエントリ間や、絞り込み後に残ったエントリ間のギャップも
+  正規化ビューと同じ挙動で検出できる。区切り行はファイル名・種類列を
+  継続行と同様に空白で埋めて表示する。
 - タイムゾーン正規化の設定を追加（issue #13）:
   `totonoeLog.timezone.sourceOffset` で、タイムゾーン表記を持たない
   タイムスタンプに仮定する UTC オフセットを指定できる（オフセットや `Z` が

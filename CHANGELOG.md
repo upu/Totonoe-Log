@@ -10,6 +10,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- The "XX seconds of silence" gap-detection separator line, previously only
+  in `Show Normalized View` (and its filtered variants), now also applies
+  to `Show Merged View` and `Show Merged View Filtered` (issue #102). It
+  shares the same `totonoeLog.gap.thresholdSeconds` setting and the same
+  detection logic, so gaps between chronologically adjacent entries —
+  across source files, and after filtering — are found the same way in
+  both views. The gap marker line spans the fileName/kind columns blank,
+  the same way a continuation line does.
 - New timezone normalization settings (issue #13):
   `totonoeLog.timezone.sourceOffset` sets the UTC offset assumed for
   timestamps without explicit timezone information (timestamps with an

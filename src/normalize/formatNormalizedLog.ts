@@ -1,15 +1,10 @@
 import type { LogEntry } from "./types";
 import { computeMaxLineNumber, formatGutter } from "./gutter";
 import { formatTimestampForDisplay, type DisplayTimezone } from "./timezone";
+import { computeGapMs, formatGapMarkerText, GAP_MARKER_LABEL } from "./gapDetection";
 
 /** セベリティが認識できなかったエントリの見出しに表示するプレースホルダー。 */
 const SEVERITY_PLACEHOLDER = "-";
-
-/** ギャップ区切り行のガター欄に表示するラベル。特定の行番号に対応しないことを表す。 */
-const GAP_MARKER_LABEL = "...";
-
-/** 時間ギャップ検出しきい値の既定値（秒）。この秒数以上間が空いたら区切り行を挿入する。 */
-export const DEFAULT_GAP_THRESHOLD_SECONDS = 30;
 
 /** {@link formatNormalizedLog} の挙動を調整するオプション。 */
 export interface FormatNormalizedLogOptions {
@@ -26,15 +21,6 @@ export interface FormatNormalizedLogOptions {
    * 表示）。指定するとその壁時計時刻＋オフセットサフィックスで表示する（issue #13）。
    */
   readonly displayTimezone?: DisplayTimezone;
-}
-
-/**
- * ギャップの長さ（ミリ秒）を「XX秒の空白」表示用の秒数文字列に変換する。
- * 小数第1位までに丸め、整数秒であれば小数点以下を表示しない。
- */
-function formatGapSeconds(gapMs: number): string {
-  const rounded = Math.round(gapMs / 100) / 10;
-  return Number.isInteger(rounded) ? String(rounded) : rounded.toFixed(1);
 }
 
 /**
@@ -68,15 +54,10 @@ export function formatNormalizedLog(
   for (let i = 0; i < entries.length; i++) {
     const entry = entries[i];
 
-    if (i > 0 && gapThresholdMs !== undefined && gapThresholdMs > 0) {
-      const previous = entries[i - 1];
-      if (previous.timestampMs !== undefined && entry.timestampMs !== undefined) {
-        const gapMs = entry.timestampMs - previous.timestampMs;
-        if (gapMs >= gapThresholdMs) {
-          outputLines.push(
-            formatGutter(GAP_MARKER_LABEL, gutterWidth) + `${formatGapSeconds(gapMs)}秒の空白`
-          );
-        }
+    if (i > 0) {
+      const gapMs = computeGapMs(entries[i - 1].timestampMs, entry.timestampMs, gapThresholdMs);
+      if (gapMs !== undefined) {
+        outputLines.push(formatGutter(GAP_MARKER_LABEL, gutterWidth) + formatGapMarkerText(gapMs));
       }
     }
 

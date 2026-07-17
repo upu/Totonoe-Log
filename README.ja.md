@@ -20,7 +20,7 @@ Totonoe Log はログ調査のための VS Code 拡張機能です。実際の�
 
 一般的なタイムスタンプ形式は追加設定なしで認識します: ISO 8601（通常/角括弧付き）、従来型 syslog、スラッシュ区切り日付（`2024/01/02 03:04:05`）、Apache/Nginx アクセスログ形式（`[02/Jan/2024:03:04:05 +0900]`）、行頭のエポック秒/ミリ秒。組み込みでカバーしきれない形式は `totonoeLog.timestampFormats` 設定で追加できます（[カスタムタイムスタンプ形式](#カスタムタイムスタンプ形式) を参照）。
 
-長い「沈黙」も見逃しません。連続するエントリのタイムスタンプ差がしきい値を超えた箇所には「XX秒の空白」の区切り行が挿入され、障害調査で空白時間がひと目で分かります（正規化ビューとその絞り込み系バリエーションに適用。`totonoeLog.gap.thresholdSeconds` で調整可能）。
+長い「沈黙」も見逃しません。連続するエントリのタイムスタンプ差がしきい値を超えた箇所には「XX秒の空白」の区切り行が挿入され、障害調査で空白時間がひと目で分かります（正規化ビューとマージビュー、およびそれぞれの絞り込み系バリエーションに適用。`totonoeLog.gap.thresholdSeconds` で調整可能）。
 
 ## ノイズを絞り込みで取り除く
 
@@ -39,6 +39,8 @@ Totonoe Log はログ調査のための VS Code 拡張機能です。実際の�
 エクスプローラで2つ以上のファイルを選択し、右クリックのコンテキストメニューから直接マージすることもできます（`Totonoe Log: Merge Selected Files`）。
 
 マージビューも絞り込みできます。`Totonoe Log: Show Merged View Filtered` は、マージ対象のファイルを選んでから、上記と同じ複数選択の絞り込みフローを適用します。
+
+上で説明した「XX秒の空白」のギャップ検出はこちらにも適用され、マージした複数ファイルを横断した沈黙時間を見つけられます（[1本のタイムラインに正規化する](#1本のタイムラインに正規化する) を参照）。
 
 タイムゾーンが異なるサーバのログや、時計がずれているホストのログも、ファイルごとに補正して正しい時系列にマージできます（[タイムゾーンの正規化](#タイムゾーンの正規化) と [クロックスキューの補正](#クロックスキューの補正) を参照）。
 
@@ -149,7 +151,7 @@ code --install-extension totonoe-log.vsix
 
 | 設定 | 型 | 既定値 | 説明 |
 | --- | --- | --- | --- |
-| `totonoeLog.gap.thresholdSeconds` | number | `30` | `Show Normalized View`（とその絞り込み系コマンド）で、連続するエントリのタイムスタンプ差がこの秒数以上のときに「XX秒の空白」の区切り行を挿入する。`0` で無効化。 |
+| `totonoeLog.gap.thresholdSeconds` | number | `30` | `Show Normalized View` と `Show Merged View`（とそれぞれの絞り込み系コマンド）で、連続するエントリのタイムスタンプ差がこの秒数以上のときに「XX秒の空白」の区切り行を挿入する。`0` で無効化。 |
 | `totonoeLog.collapse.threshold` | number | `3` | `Show Collapsed View` で、何回以上連続で繰り返されたら1行に折りたたむかのしきい値。 |
 | `totonoeLog.copyMasked.maskTimestamp` | boolean | `true` | `Copy Masked Text` 実行時にタイムスタンプをマスクする。 |
 | `totonoeLog.copyMasked.maskHost` | boolean | `true` | `Copy Masked Text` 実行時に IPv4/IPv6 アドレスと、syslog 形式として認識できた行のホスト名トークンをマスクする（任意の形式のホスト名全般ではない）。 |

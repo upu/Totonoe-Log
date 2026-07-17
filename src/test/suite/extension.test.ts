@@ -1483,17 +1483,24 @@ suite("Totonoe Log merged view", () => {
       assert.strictEqual(activeEditor!.document.uri.scheme, "totonoe-log-merged");
 
       const mergedLines = activeEditor!.document.getText().split("\n");
+      // small.log (02:59:59) と big.log の末尾行（03:00:59）の間は60秒空いており、
+      // 既定のギャップ検出しきい値（30秒）を超えるため「XX秒の空白」の区切り行が
+      // 間に挿入される（issue #102、マージビューへのギャップ検出追加）。
       assert.strictEqual(
         mergedLines.length,
-        2,
-        "only the two ERROR entries should remain after filtering"
+        3,
+        "the two ERROR entries plus a gap marker line should remain after filtering"
       );
       assert.ok(
         mergedLines[0].includes("small.log") && mergedLines[0].includes("ERROR boom"),
         "the small file's earlier ERROR entry should sort first"
       );
       assert.ok(
-        mergedLines[1].includes(`line-${String(lastIndex).padStart(3, "0")}`),
+        mergedLines[1].includes("秒の空白"),
+        "a gap marker should separate the two entries (60s gap exceeds the default 30s threshold)"
+      );
+      assert.ok(
+        mergedLines[2].includes(`line-${String(lastIndex).padStart(3, "0")}`),
         "the big file's last line (only reachable by reading the whole ~52MB file) must be present"
       );
     } finally {
@@ -2477,8 +2484,12 @@ suite("Totonoe Log timezone settings (#13)", () => {
 
       const activeEditor = vscode.window.activeTextEditor;
       assert.ok(activeEditor, "a merged view editor should be shown");
+      // オフセット適用後、両エントリの間は3時間空いており、既定のギャップ検出
+      // しきい値（30秒）を超えるため「XX秒の空白」の区切り行が挿入される
+      // （issue #102、マージビューへのギャップ検出追加）。
       const expected = [
         "tokyo.log | tokyo | 1 | 2024-01-02T00:00:00.000Z INFO tokyo-entry",
+        "          |       | ... | 10800秒の空白",
         "utc.log   | utc   | 1 | 2024-01-02T03:00:00.000Z INFO utc-entry",
       ].join("\n");
       assert.strictEqual(activeEditor!.document.getText(), expected);

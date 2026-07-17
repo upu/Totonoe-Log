@@ -9,7 +9,6 @@ import {
   formatCollapsedLog,
   applyClockSkew,
   DEFAULT_COLLAPSE_THRESHOLD,
-  DEFAULT_GAP_THRESHOLD_SECONDS,
   type FilterCriteria,
   type LogEntry,
 } from "./normalize";
@@ -29,6 +28,7 @@ import { parseLogWithConfiguredFormats } from "./timestampFormatSettings";
 import { createSourceOffsetResolver, readDisplayTimezone } from "./timezoneSettings";
 import { createClockSkewResolver } from "./clockSkewSettings";
 import { warnIfLowTimestampRecognition } from "./timestampRecognitionWarning";
+import { readGapThresholdMs } from "./gapThresholdSetting";
 
 // スキーム定義は virtualDocumentContentProvider.ts に集約している
 // （既存の import 元を変えずに済むよう、ここから再エクスポートする）。
@@ -60,22 +60,6 @@ function nextViewCounter(fileTag: string): number {
   const nextCounter = (viewCounters.get(fileTag) ?? 0) + 1;
   viewCounters.set(fileTag, nextCounter);
   return nextCounter;
-}
-
-/** 時間ギャップ検出のしきい値（秒）を読み込むVSCode設定のセクション名。 */
-const GAP_CONFIG_SECTION = "totonoeLog.gap";
-
-/**
- * `totonoeLog.gap.thresholdSeconds` 設定を読み込み、{@link formatNormalizedLog}
- * が受け取るミリ秒単位のしきい値に変換する。0以下を指定した場合は無効化を
- * 意味するため、そのまま {@link formatNormalizedLog} 側の「0以下なら挿入
- * しない」判定に委ねる。
- */
-function readGapThresholdMs(): number {
-  const thresholdSeconds = vscode.workspace
-    .getConfiguration(GAP_CONFIG_SECTION)
-    .get<number>("thresholdSeconds", DEFAULT_GAP_THRESHOLD_SECONDS);
-  return thresholdSeconds * 1000;
 }
 
 /**

@@ -1529,6 +1529,104 @@ suite("normalize / formatMergedLog", () => {
   test("returns an empty string for no entries", () => {
     assert.strictEqual(formatMergedLog([]), "");
   });
+
+  test("does not insert a gap marker when gapThresholdMs is not specified", () => {
+    const merged = mergeLogFiles([
+      { fileName: "app.log", text: "2024-01-02T03:04:05Z INFO before" },
+      { fileName: "database.log", text: "2024-01-02T03:05:05Z ERROR after (60s later)" },
+    ]);
+
+    const output = formatMergedLog(merged);
+
+    assert.ok(!output.includes("空白"));
+  });
+
+  test("inserts a gap marker between merged entries from different files, blanking the fileName/kind columns", () => {
+    const merged = mergeLogFiles([
+      { fileName: "app.log", text: "2024-01-02T03:04:05Z INFO before" },
+      { fileName: "database.log", text: "2024-01-02T03:04:35Z ERROR after" },
+    ]);
+
+    const output = formatMergedLog(merged, { gapThresholdMs: 30_000 });
+
+    const fileNameWidth = "database.log".length;
+    const kindWidth = "database".length;
+    const expected = [
+      `${"app.log".padEnd(fileNameWidth)} | ${"app".padEnd(kindWidth)} | 1 | 2024-01-02T03:04:05.000Z INFO before`,
+      `${" ".repeat(fileNameWidth)} | ${" ".repeat(kindWidth)} | ... | 30秒の空白`,
+      `${"database.log".padEnd(fileNameWidth)} | ${"database".padEnd(kindWidth)} | 1 | 2024-01-02T03:04:35.000Z ERROR after`,
+    ].join("\n");
+
+    assert.strictEqual(output, expected);
+  });
+
+  test("does not insert a gap marker when the gap is below the threshold", () => {
+    const merged = mergeLogFiles([
+      { fileName: "app.log", text: "2024-01-02T03:04:05Z INFO before" },
+      { fileName: "database.log", text: "2024-01-02T03:04:34Z ERROR after (29s later)" },
+    ]);
+
+    const output = formatMergedLog(merged, { gapThresholdMs: 30_000 });
+
+    assert.ok(!output.includes("空白"));
+  });
+
+  test("treats a gapThresholdMs of 0 as disabled", () => {
+    const merged = mergeLogFiles([
+      { fileName: "app.log", text: "2024-01-02T03:04:05Z INFO before" },
+      { fileName: "database.log", text: "2024-01-02T03:04:06Z ERROR after" },
+    ]);
+
+    const output = formatMergedLog(merged, { gapThresholdMs: 0 });
+
+    assert.ok(!output.includes("空白"));
+  });
+
+  test("inserts multiple gap markers for multiple qualifying gaps", () => {
+    const merged = mergeLogFiles([
+      { fileName: "app.log", text: "2024-01-02T03:04:05Z INFO a" },
+      { fileName: "database.log", text: "2024-01-02T03:04:35Z INFO b" },
+      { fileName: "app.log", text: "2024-01-02T03:05:05Z INFO c" },
+    ]);
+
+    const output = formatMergedLog(merged, { gapThresholdMs: 30_000 });
+
+    assert.strictEqual((output.match(/秒の空白/g) ?? []).length, 2);
+  });
+
+  test("skips the gap check for a pair where an entry lacks a recognized timestamp", () => {
+    // タイムスタンプ未認識のエントリは mergeLogFiles により末尾へ回るため、
+    // 直前の認識済みエントリとの組でギャップ判定がスキップされることを確認する。
+    const merged = mergeLogFiles([
+      { fileName: "app.log", text: "2024-01-02T03:04:05Z INFO matched entry" },
+      { fileName: "other.log", text: "totally unrecognized line" },
+    ]);
+
+    const output = formatMergedLog(merged, { gapThresholdMs: 30_000 });
+
+    assert.ok(!output.includes("空白"));
+  });
+
+  test("detects a gap on the filtered entry list, matching the normalized view's existing behavior", async () => {
+    const merged = mergeLogFiles([
+      { fileName: "app.log", text: "2024-01-02T03:04:05Z INFO kept before" },
+      { fileName: "app.log", text: "2024-01-02T03:04:15Z DEBUG dropped by filter" },
+      { fileName: "database.log", text: "2024-01-02T03:04:45Z ERROR kept after" },
+    ]);
+
+    const filterResult = await filterMergedEntriesByCriteria(merged, {
+      severities: new Set(["INFO", "ERROR"]),
+    });
+    assert.strictEqual(filterResult.ok, true);
+    if (!filterResult.ok) {
+      throw new Error("unreachable");
+    }
+
+    const output = formatMergedLog(filterResult.entries, { gapThresholdMs: 30_000 });
+
+    assert.strictEqual((output.match(/秒の空白/g) ?? []).length, 1);
+    assert.ok(output.includes("40秒の空白"));
+  });
 });
 
 suite("normalize / filterMergedEntriesByCriteria", () => {

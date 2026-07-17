@@ -20,7 +20,7 @@ Every view opens as a regular read-only editor tab, so VS Code's built-in search
 
 Common timestamp formats are recognized out of the box: ISO 8601 (plain and bracketed), classic syslog, slash-separated dates (`2024/01/02 03:04:05`), Apache/Nginx access-log timestamps (`[02/Jan/2024:03:04:05 +0900]`), and leading epoch seconds/milliseconds. Formats not covered by the built-ins can be added via the `totonoeLog.timestampFormats` setting (see [Custom timestamp formats](#custom-timestamp-formats)).
 
-Long silent stretches are marked, too: when the timestamp gap between consecutive entries exceeds a threshold, a "XX seconds of silence" separator line is inserted so the quiet periods stand out during an incident investigation (applies to the normalized view and its filtered variants; configure with `totonoeLog.gap.thresholdSeconds`).
+Long silent stretches are marked, too: when the timestamp gap between consecutive entries exceeds a threshold, a "XX seconds of silence" separator line is inserted so the quiet periods stand out during an incident investigation (applies to the normalized view and the merged view, and their filtered variants; configure with `totonoeLog.gap.thresholdSeconds`).
 
 ## Filter out the noise
 
@@ -39,6 +39,8 @@ Each condition is also available as its own command (`... Filtered by Severity`,
 You can also select two or more files in the Explorer and merge them straight from the right-click context menu (`Totonoe Log: Merge Selected Files`).
 
 The merged view can be filtered too: `Totonoe Log: Show Merged View Filtered` picks the files to merge, then applies the same multi-select filter flow described above.
+
+The same "XX seconds of silence" gap detection described above applies here too, spotting silent stretches across all merged source files (see [Normalize into one timeline](#normalize-into-one-timeline)).
 
 Logs from servers in different timezones, or from a host whose clock is off, can be corrected per file so they still merge into the true chronological order (see [Timezone normalization](#timezone-normalization) and [Clock skew correction](#clock-skew-correction)).
 
@@ -151,7 +153,7 @@ All settings live under the `totonoeLog` namespace.
 
 | Setting | Type | Default | Description |
 | --- | --- | --- | --- |
-| `totonoeLog.gap.thresholdSeconds` | number | `30` | Insert a "XX seconds of silence" separator line in `Show Normalized View` (and its filtered variants) when the timestamp gap between consecutive entries is at least this many seconds. `0` disables it. |
+| `totonoeLog.gap.thresholdSeconds` | number | `30` | Insert a "XX seconds of silence" separator line in `Show Normalized View` and `Show Merged View` (and their filtered variants) when the timestamp gap between consecutive entries is at least this many seconds. `0` disables it. |
 | `totonoeLog.collapse.threshold` | number | `3` | How many consecutive repeats it takes before `Show Collapsed View` folds them into one line. |
 | `totonoeLog.copyMasked.maskTimestamp` | boolean | `true` | Mask timestamps when running `Copy Masked Text`. |
 | `totonoeLog.copyMasked.maskHost` | boolean | `true` | Mask IPv4/IPv6 addresses — and the hostname token of lines recognized as syslog format (not arbitrary hostnames in general) — when running `Copy Masked Text`. |
