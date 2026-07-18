@@ -8,6 +8,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- Out-of-range time components and UTC offsets in built-in and custom
+  calendar timestamp formats are no longer normalized into a different
+  valid instant (issue #135).
+
 ## [0.5.0] - 2026-07-17
 
 ### Added
