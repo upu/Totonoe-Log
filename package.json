@@ -97,6 +97,13 @@
           "when": "listMultiSelection",
           "group": "totonoeLog@1"
         }
+      ],
+      "editor/context": [
+        {
+          "command": "totonoeLog.goToSourceLine",
+          "when": "resourceScheme == totonoe-log-normalized || resourceScheme == totonoe-log-merged",
+          "group": "totonoeLog@1"
+        }
       ]
     },
     "configuration": {

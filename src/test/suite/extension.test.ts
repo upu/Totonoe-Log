@@ -3095,6 +3095,23 @@ suite("Totonoe Log go to source line (#137)", () => {
     );
   });
 
+  test("registers an editor/context menu entry limited to normalized/merged views (#149)", async () => {
+    const extension = vscode.extensions.getExtension("upu.totonoe-log");
+    await extension!.activate();
+
+    const editorContextMenu: Array<{ command: string; when?: string }> =
+      extension!.packageJSON.contributes.menus["editor/context"];
+    const entry = editorContextMenu.find((item) => item.command === "totonoeLog.goToSourceLine");
+    assert.ok(entry, "editor/context should have a totonoeLog.goToSourceLine entry");
+    assert.strictEqual(
+      entry!.when,
+      "resourceScheme == totonoe-log-normalized || resourceScheme == totonoe-log-merged",
+      // 比較ビュー（totonoe-log-compare）は #149 の対象外のため、正規化・
+      // マージビューのスキームのみを明示的に指定する。
+      "the menu entry should only appear on normalized/merged views, not the compare view"
+    );
+  });
+
   test("jumps from a normalized view continuation line to its physical source line", async function () {
     this.timeout(10000);
     const extension = vscode.extensions.getExtension("upu.totonoe-log");

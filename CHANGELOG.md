@@ -16,6 +16,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   correct file even when same-named files live in different folders. A
   collapsed group header jumps to the first line of its range; generated
   lines such as gap markers show an explanatory message instead (issue #137).
+- `Totonoe Log: Go to Source Line` is now also available from the editor
+  right-click menu on normalized and merged views (issue #149).
 
 ### Fixed
 
