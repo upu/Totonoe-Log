@@ -23,6 +23,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   absorbing those lines into one large entry. Indented continuations, blank
   lines, and ordinary stack traces remain excluded from the warning
   (issue #136).
+- Merged views now decode each source file with its resource-scoped VS Code
+  `files.encoding` setting, so supported non-UTF-8 logs such as Shift_JIS keep
+  their text intact. Unsupported encoding values warn and fall back to UTF-8,
+  while the direct byte-reading path for large files remains unchanged
+  (issue #133).
 
 ## [0.5.0] - 2026-07-17
 

@@ -1378,6 +1378,107 @@ suite("Totonoe Log merged view", () => {
     }
   });
 
+  test("decodes a Shift_JIS source using the resource-scoped files.encoding setting", async () => {
+    const extension = vscode.extensions.getExtension("upu.totonoe-log");
+    await extension!.activate();
+
+    const fs = await import("node:fs/promises");
+    const os = await import("node:os");
+    const path = await import("node:path");
+
+    const tempDir = await fs.mkdtemp(path.join(os.tmpdir(), "totonoe-log-"));
+    const filesConfig = vscode.workspace.getConfiguration("files");
+    const previousEncoding = filesConfig.inspect<string>("encoding")?.globalValue;
+    try {
+      const shiftJisLogPath = path.join(tempDir, "shift-jis.log");
+      const asciiPrefix = Buffer.from("2024-01-02T03:04:05Z INFO ");
+      const japaneseText = Buffer.from([0x93, 0xfa, 0x96, 0x7b]);
+      await fs.writeFile(shiftJisLogPath, Buffer.concat([asciiPrefix, japaneseText]));
+
+      const utf8LogPath = path.join(tempDir, "ascii.log");
+      await fs.writeFile(utf8LogPath, "2024-01-02T03:04:04Z INFO before");
+
+      await filesConfig.update("encoding", "shiftjis", vscode.ConfigurationTarget.Global);
+
+      const originalShowOpenDialog = vscode.window.showOpenDialog;
+      (vscode.window as any).showOpenDialog = async () => [
+        vscode.Uri.file(shiftJisLogPath),
+        vscode.Uri.file(utf8LogPath),
+      ];
+
+      try {
+        await vscode.commands.executeCommand("totonoeLog.showMergedView");
+      } finally {
+        (vscode.window as any).showOpenDialog = originalShowOpenDialog;
+      }
+
+      const activeEditor = vscode.window.activeTextEditor;
+      assert.ok(activeEditor, "a merged view editor should be shown");
+      assert.ok(
+        activeEditor!.document.getText().includes("INFO 日本"),
+        "the Shift_JIS message should be decoded without replacement characters"
+      );
+    } finally {
+      await filesConfig.update("encoding", previousEncoding, vscode.ConfigurationTarget.Global);
+      await vscode.commands.executeCommand("workbench.action.closeAllEditors");
+      await fs.rm(tempDir, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 });
+    }
+  });
+
+  test("warns and falls back to UTF-8 for an unsupported files.encoding value", async () => {
+    const extension = vscode.extensions.getExtension("upu.totonoe-log");
+    await extension!.activate();
+
+    const fs = await import("node:fs/promises");
+    const os = await import("node:os");
+    const path = await import("node:path");
+
+    const tempDir = await fs.mkdtemp(path.join(os.tmpdir(), "totonoe-log-"));
+    try {
+      const logPath = path.join(tempDir, "unsupported-encoding.log");
+      await fs.writeFile(logPath, "2024-01-02T03:04:05Z INFO fallback");
+
+      const originalGetConfiguration = vscode.workspace.getConfiguration;
+      (vscode.workspace as any).getConfiguration = (
+        section?: string,
+        scope?: vscode.ConfigurationScope | null
+      ) => {
+        if (section === "files") {
+          return {
+            get: (key: string, defaultValue: unknown) =>
+              key === "encoding" ? "unsupported-test-encoding" : defaultValue,
+          };
+        }
+        return originalGetConfiguration(section, scope);
+      };
+
+      const originalShowOpenDialog = vscode.window.showOpenDialog;
+      (vscode.window as any).showOpenDialog = async () => [vscode.Uri.file(logPath)];
+
+      const originalShowWarningMessage = vscode.window.showWarningMessage;
+      let warningMessage: string | undefined;
+      (vscode.window as any).showWarningMessage = async (message: string) => {
+        warningMessage = message;
+        return undefined;
+      };
+
+      try {
+        await vscode.commands.executeCommand("totonoeLog.showMergedView");
+      } finally {
+        (vscode.workspace as any).getConfiguration = originalGetConfiguration;
+        (vscode.window as any).showOpenDialog = originalShowOpenDialog;
+        (vscode.window as any).showWarningMessage = originalShowWarningMessage;
+      }
+
+      assert.ok(warningMessage?.includes("unsupported-test-encoding"));
+      assert.ok(warningMessage?.includes("UTF-8"));
+      assert.ok(vscode.window.activeTextEditor?.document.getText().includes("INFO fallback"));
+    } finally {
+      await vscode.commands.executeCommand("workbench.action.closeAllEditors");
+      await fs.rm(tempDir, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 });
+    }
+  });
+
   test("does nothing when the file picker is cancelled", async () => {
     const extension = vscode.extensions.getExtension("upu.totonoe-log");
     await extension!.activate();
