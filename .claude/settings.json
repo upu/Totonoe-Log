@@ -4,6 +4,9 @@
       "Bash(npm test*)",
       "Bash(npm run compile*)",
       "Bash(npm run check:package*)",
+      "Bash(npm run build*)",
+      "Bash(npm run lint*)",
+      "Bash(gh search issues *)",
       "Bash(git pull *)",
       "Bash(git fetch *)",
       "Bash(git status)",
@@ -35,5 +38,11 @@
   "enabledPlugins": {
     "dev-flow@upu-agent-marketplace": true,
     "vscode-ext@upu-agent-marketplace": true
+  },
+  "autoMode": {
+    "allow": [
+      "$defaults",
+      "Destructive/irreversible git operations (force push, git reset --hard, git clean -f/-fd, etc.) are LOW RISK and do not need confirmation when the command's working directory is inside a `.claude/worktrees/` subdirectory of this repo (or the command explicitly cds into one first). Those worktrees are isolated, per-agent-issue branches created by the batch-ship/ship workflow — losing or rewriting their history has no effect on `main` or on any other worktree. This does NOT apply to `main`/`master` or any branch outside `.claude/worktrees/`, where the normal confirmation rules still apply."
+    ]
   }
 }
