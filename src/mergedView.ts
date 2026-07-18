@@ -31,13 +31,149 @@ export { MERGED_VIEW_SCHEME };
 
 /** マージビュー用の {@link vscode.TextDocumentContentProvider}。 */
 export class MergedViewContentProvider extends VirtualDocumentContentProvider {
-  constructor() {
+  private readonly largeResultStore: LargeMergedResultStore | undefined;
+
+  constructor(globalStorageUri?: vscode.Uri) {
     super(MERGED_VIEW_SCHEME);
+    this.largeResultStore =
+      globalStorageUri === undefined ? undefined : new LargeMergedResultStore(globalStorageUri);
+  }
+
+  async openDocument(content: string, path: string): Promise<void> {
+    if (Buffer.byteLength(content, "utf8") >= MAX_VIRTUAL_MERGED_DOCUMENT_BYTES) {
+      if (this.largeResultStore === undefined) {
+        throw new Error("Large merged result storage is not configured.");
+      }
+      await this.largeResultStore.open(content, path);
+      return;
+    }
+
+    const uri = vscode.Uri.from({ scheme: MERGED_VIEW_SCHEME, path });
+    this.register(uri, content);
+
+    const mergedDocument = await vscode.workspace.openTextDocument(uri);
+    await vscode.window.showTextDocument(mergedDocument, { preview: false });
+  }
+
+  override dispose(): void {
+    this.largeResultStore?.dispose();
+    super.dispose();
   }
 }
 
 let mergedViewCounter = 0;
 let mergedFilteredViewCounter = 0;
+
+/**
+ * VS Code が拡張機能へ同期できるドキュメントの上限は約50MiB。境界付近で
+ * 仮想ドキュメントを試してから失敗するのではなく、このサイズ以上の整形済み
+ * 結果は最初からディスク経由で開く。
+ */
+const MAX_VIRTUAL_MERGED_DOCUMENT_BYTES = 50 * 1024 * 1024;
+
+/**
+ * 大容量のマージ結果を拡張機能のグローバルストレージへ一時保存し、
+ * `vscode.open` でUIへ直接開く。通常のファイルタブにすることで、拡張機能へ
+ * TextDocument全体を同期する約50MiB制限を避けつつ、標準の検索・コピーを
+ * 維持する。タブを閉じた結果と、前回セッションから残った未表示の結果は削除
+ * して、ストレージが増え続けないようにする。
+ */
+class LargeMergedResultStore implements vscode.Disposable {
+  private readonly directoryUri: vscode.Uri;
+  private readonly trackedUris = new Set<string>();
+  private readonly ready: Promise<void>;
+  private readonly closeListener: vscode.Disposable;
+  private initializationError: Error | undefined;
+  private nextId = 0;
+
+  constructor(globalStorageUri: vscode.Uri) {
+    this.directoryUri = vscode.Uri.joinPath(globalStorageUri, "large-merged-results");
+    this.ready = this.initialize().catch((error: unknown) => {
+      this.initializationError =
+        error instanceof Error ? error : new Error(String(error));
+    });
+    this.closeListener = vscode.window.tabGroups.onDidChangeTabs((event) => {
+      for (const tab of event.closed) {
+        if (tab.input instanceof vscode.TabInputText) {
+          void this.deleteTrackedResult(tab.input.uri);
+        }
+      }
+    });
+  }
+
+  async open(content: string, path: string): Promise<void> {
+    await this.ready;
+    if (this.initializationError !== undefined) {
+      throw this.initializationError;
+    }
+
+    this.nextId += 1;
+    const baseName = path.split("/").pop() ?? `merged-${this.nextId}.log`;
+    const uri = vscode.Uri.joinPath(
+      this.directoryUri,
+      `${Date.now()}-${process.pid}-${this.nextId}-${baseName}`
+    );
+    await vscode.workspace.fs.writeFile(uri, new TextEncoder().encode(content));
+    this.trackedUris.add(uri.toString());
+
+    try {
+      await vscode.commands.executeCommand<void>("vscode.open", uri, { preview: false });
+    } catch (error: unknown) {
+      await this.deleteTrackedResult(uri);
+      throw error instanceof Error ? error : new Error(String(error));
+    }
+  }
+
+  dispose(): void {
+    this.closeListener.dispose();
+  }
+
+  private async initialize(): Promise<void> {
+    await vscode.workspace.fs.createDirectory(this.directoryUri);
+    const entries = await vscode.workspace.fs.readDirectory(this.directoryUri);
+    const openUris = this.getOpenTextTabUris();
+
+    await Promise.all(
+      entries.map(async ([name, type]) => {
+        if ((type & vscode.FileType.File) === 0) {
+          return;
+        }
+        const uri = vscode.Uri.joinPath(this.directoryUri, name);
+        const key = uri.toString();
+        if (openUris.has(key)) {
+          this.trackedUris.add(key);
+          return;
+        }
+        await vscode.workspace.fs.delete(uri);
+      })
+    );
+  }
+
+  private getOpenTextTabUris(): Set<string> {
+    const uris = new Set<string>();
+    for (const group of vscode.window.tabGroups.all) {
+      for (const tab of group.tabs) {
+        if (tab.input instanceof vscode.TabInputText) {
+          uris.add(tab.input.uri.toString());
+        }
+      }
+    }
+    return uris;
+  }
+
+  private async deleteTrackedResult(uri: vscode.Uri): Promise<void> {
+    await this.ready;
+    const key = uri.toString();
+    if (!this.trackedUris.delete(key)) {
+      return;
+    }
+    try {
+      await vscode.workspace.fs.delete(uri);
+    } catch {
+      // ユーザー操作や外部クリーンアップで既に消えていれば、追加対応は不要。
+    }
+  }
+}
 
 /**
  * VS Code の `files.encoding` が使う識別子と、WHATWG `TextDecoder` の
@@ -174,25 +310,9 @@ function warnLowTimestampRecognitionPerFile(
 }
 
 /**
- * マージビュー系コマンドが共有する、仮想ドキュメントの発行・登録・表示処理。
- * `normalizedView.ts` の `openVirtualNormalizedDocument` と同じ役割。
- */
-async function openVirtualMergedDocument(
-  provider: MergedViewContentProvider,
-  content: string,
-  path: string
-): Promise<void> {
-  const uri = vscode.Uri.from({ scheme: MERGED_VIEW_SCHEME, path });
-
-  provider.register(uri, content);
-
-  const mergedDocument = await vscode.workspace.openTextDocument(uri);
-  await vscode.window.showTextDocument(mergedDocument, { preview: false });
-}
-
-/**
- * 指定されたファイル群を時系列順にマージし、読み取り専用の仮想ドキュメントとして
- * 開く。ファイル選択ダイアログ経由・エクスプローラのコンテキストメニュー経由の
+ * 指定されたファイル群を時系列順にマージして開く。通常は読み取り専用の仮想
+ * ドキュメントを使い、同期上限を超える結果だけ一時ストレージへ切り替える。
+ * ファイル選択ダイアログ経由・エクスプローラのコンテキストメニュー経由の
  * どちらのコマンドからも共通で使う本体処理。ファイルごとの日時フォーマットが
  * 違っても、正規化エンジンが共通のタイムスタンプに変換するため正しく時系列に並ぶ。
  */
@@ -211,12 +331,12 @@ async function openMergedView(
   });
 
   mergedViewCounter += 1;
-  await openVirtualMergedDocument(provider, content, `/merged-${mergedViewCounter}.log`);
+  await provider.openDocument(content, `/merged-${mergedViewCounter}.log`);
 }
 
 /**
  * ファイル選択ダイアログで、マージ対象のログファイルを複数選ばせ、時系列
- * 順にマージした読み取り専用の仮想ドキュメントとして開くコマンドの本体。
+ * 順にマージした結果を開くコマンドの本体。
  */
 export function createShowMergedViewCommand(
   provider: MergedViewContentProvider
@@ -239,16 +359,16 @@ export function createShowMergedViewCommand(
 /**
  * ファイル選択ダイアログで、マージ対象のログファイルを複数選ばせて時系列順に
  * マージしたうえで、ユーザーが選んだ条件（セベリティ / 日付範囲 / 無視
- * パターンのうち任意の組み合わせ）で絞り込んだ読み取り専用の仮想ドキュメント
- * として開くコマンドの本体（issue #61）。
+ * パターンのうち任意の組み合わせ）で絞り込んだ結果を開くコマンドの本体
+ * （issue #61）。
  *
  * 「マージビューを開いた後にそのビューへ絞り込みコマンドを実行する」形（正規化
  * ビューの絞り込み系コマンドと同じ、アクティブエディタを起点とする方式）ではなく、
  * 「マージしてから絞り込む」を1コマンドにまとめる方式を採った。マージビューは
- * `formatMergedLog` でファイル名/種類列・行番号ガター付きのテキストに整形済みの
- * 仮想ドキュメントとして表示されるため、後者を選ぶとその仮想ドキュメントの
- * テキストから `MergedEntry[]` を再パースする専用ロジックが要り、フォーマットの
- * 変更に弱くなる（`guardAgainstVirtualDocumentSource` が仮想ドキュメントに対する
+ * `formatMergedLog` でファイル名/種類列・行番号ガター付きのテキストに整形済みで
+ * 表示されるため、後者を選ぶとその表示テキストから `MergedEntry[]` を再パース
+ * する専用ロジックが要り、フォーマットの変更に弱くなる
+ * （`guardAgainstVirtualDocumentSource` が仮想ドキュメントに対する
  * `parseLog` 実行を警告する形で防いでいるのと同種の問題、#57）。ファイル選択
  * ダイアログはファイルシステム上のファイルしか選べず仮想ドキュメントを選択肢に
  * 含められないため、`showMergedView` と同様にこのコマンドも自ビュー判定は不要
@@ -335,11 +455,7 @@ export function createShowMergedViewFilteredCommand(
     });
 
     mergedFilteredViewCounter += 1;
-    await openVirtualMergedDocument(
-      provider,
-      content,
-      `/merged-filtered-${mergedFilteredViewCounter}.log`
-    );
+    await provider.openDocument(content, `/merged-filtered-${mergedFilteredViewCounter}.log`);
 
     const filteredEntries = filteredMergedEntries.map((merged) => merged.entry);
     const hiddenLineCount = countLines(entries) - countLines(filteredEntries);

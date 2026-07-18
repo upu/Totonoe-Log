@@ -27,7 +27,7 @@ import {
 export function activate(context: vscode.ExtensionContext): void {
   const normalizedViewProvider = new NormalizedViewContentProvider();
   const compareViewProvider = new CompareViewContentProvider();
-  const mergedViewProvider = new MergedViewContentProvider();
+  const mergedViewProvider = new MergedViewContentProvider(context.globalStorageUri);
 
   context.subscriptions.push(
     vscode.workspace.registerTextDocumentContentProvider(
