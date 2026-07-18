@@ -40,6 +40,80 @@ let mergedViewCounter = 0;
 let mergedFilteredViewCounter = 0;
 
 /**
+ * VS Code の `files.encoding` が使う識別子と、WHATWG `TextDecoder` の
+ * ラベルが異なるものを対応付ける。TextDecoder が対応しないコードページは
+ * あえて含めず、黙って文字化けさせずに警告＋UTF-8フォールバックへ回す。
+ */
+const FILE_ENCODING_DECODER_LABELS: Readonly<Record<string, string>> = {
+  utf8: "utf-8",
+  utf8bom: "utf-8",
+  utf16le: "utf-16le",
+  utf16be: "utf-16be",
+  windows1252: "windows-1252",
+  iso88591: "iso-8859-1",
+  iso88593: "iso-8859-3",
+  iso885915: "iso-8859-15",
+  macroman: "macintosh",
+  windows1256: "windows-1256",
+  iso88596: "iso-8859-6",
+  windows1257: "windows-1257",
+  iso88594: "iso-8859-4",
+  iso885914: "iso-8859-14",
+  windows1250: "windows-1250",
+  iso88592: "iso-8859-2",
+  windows1251: "windows-1251",
+  cp866: "ibm866",
+  iso88595: "iso-8859-5",
+  koi8r: "koi8-r",
+  koi8u: "koi8-u",
+  iso885913: "iso-8859-13",
+  windows1253: "windows-1253",
+  iso88597: "iso-8859-7",
+  windows1255: "windows-1255",
+  iso88598: "iso-8859-8",
+  windows1254: "windows-1254",
+  iso88599: "iso-8859-9",
+  windows1258: "windows-1258",
+  gbk: "gbk",
+  gb18030: "gb18030",
+  cp950: "big5",
+  big5hkscs: "big5",
+  shiftjis: "shift_jis",
+  eucjp: "euc-jp",
+  iso2022jp: "iso-2022-jp",
+  euckr: "euc-kr",
+  windows874: "windows-874",
+  iso885910: "iso-8859-10",
+  iso885916: "iso-8859-16",
+};
+
+/**
+ * URIスコープの `files.encoding` でログをデコードする。VS Code が認識しても
+ * TextDecoder が扱えないコードページや、不正な手動設定では、ファイル名と
+ * 設定値を警告してUTF-8へ明示的にフォールバックする。
+ */
+function decodeLogFile(bytes: Uint8Array, fileUri: vscode.Uri): string {
+  const configuredEncoding = vscode.workspace
+    .getConfiguration("files", fileUri)
+    .get<string>("encoding", "utf8");
+  const decoderLabel = FILE_ENCODING_DECODER_LABELS[configuredEncoding.toLowerCase()];
+
+  if (decoderLabel !== undefined) {
+    try {
+      return new TextDecoder(decoderLabel).decode(bytes);
+    } catch {
+      // 実行環境のICU構成によって特定ラベルを扱えない場合も、下の共通警告へ進む。
+    }
+  }
+
+  const fileName = fileUri.path.split("/").pop() ?? fileUri.toString();
+  vscode.window.showWarningMessage(
+    `Totonoe Log: ${fileName} の files.encoding「${configuredEncoding}」はマージ時のデコードに対応していないため、UTF-8として読み込みます。`
+  );
+  return new TextDecoder("utf-8").decode(bytes);
+}
+
+/**
  * 選択されたファイル群を読み込み、{@link mergeLogFiles} に渡す入力へ変換する。
  * ファイルごとのソースオフセット（`totonoeLog.timezone.fileOffsets`、issue #13）
  * とクロックスキュー補正（`totonoeLog.clockSkew.fileOffsets`、issue #15）も
@@ -50,21 +124,20 @@ let mergedFilteredViewCounter = 0;
  * 「Files above 50MB cannot be synchronized with extensions.」というエラーに
  * なる（issue #98）。マージ対象になりやすい本番ログはこのサイズ帯に達し
  * やすいため、`vscode.workspace.fs.readFile` でバイト列として直接読み、
- * `TextDecoder` で文字列化する方式に切り替えてこの制限を回避する。副次効果
- * として、マージのためだけに全対象ファイルがエディタ管理下に開かれるコストも
- * 消える。
+ * URIスコープの `files.encoding` に対応する `TextDecoder` で文字列化する
+ * 方式に切り替えてこの制限を回避する。副次効果として、マージのためだけに
+ * 全対象ファイルがエディタ管理下に開かれるコストも消える。
  */
 async function readLogFiles(fileUris: readonly vscode.Uri[]): Promise<LogFileInput[]> {
   const resolveSourceOffsetMinutes = createSourceOffsetResolver();
   const resolveClockSkewMs = createClockSkewResolver();
-  const decoder = new TextDecoder();
   return Promise.all(
     fileUris.map(async (fileUri) => {
       const bytes = await vscode.workspace.fs.readFile(fileUri);
       const fileName = fileUri.path.split("/").pop() ?? "log";
       return {
         fileName,
-        text: decoder.decode(bytes),
+        text: decodeLogFile(bytes, fileUri),
         sourceUtcOffsetMinutes: resolveSourceOffsetMinutes(fileName),
         clockSkewMs: resolveClockSkewMs(fileName),
       };
