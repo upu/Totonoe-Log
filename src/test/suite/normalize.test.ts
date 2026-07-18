@@ -1916,6 +1916,56 @@ suite("normalize / assessTimestampRecognition", () => {
     assert.strictEqual(result.shouldWarn, false);
   });
 
+  test("warns when timestamp-like lines in an unsupported format are absorbed as continuations", () => {
+    const unsupportedTimestampLines = Array.from(
+      { length: 11 },
+      (_, i) => `02.01.2024 03:04:${String(i).padStart(2, "0")} INFO switched format`
+    ).join("\n");
+    const text = ["2024-01-02T03:04:00Z INFO recognized", unsupportedTimestampLines].join("\n");
+
+    const result = assessTimestampRecognition(parseLog(text));
+
+    assert.strictEqual(result.totalLineCount, 12);
+    assert.strictEqual(result.unrecognizedLineCount, 0);
+    assert.strictEqual(result.suspiciousContinuationLineCount, 11);
+    assert.strictEqual(result.shouldWarn, true);
+  });
+
+  test("does not warn for indented timestamp-like continuation text or blank lines", () => {
+    const continuationLines = Array.from(
+      { length: 12 },
+      (_, i) =>
+        i % 3 === 0
+          ? ""
+          : `    02.01.2024 03:04:${String(i).padStart(2, "0")} diagnostic detail`
+    ).join("\n");
+    const text = [
+      "2024-01-02T03:04:00Z INFO recognized",
+      continuationLines,
+      "2024-01-02T03:05:00Z INFO recognized again",
+    ].join("\n");
+
+    const result = assessTimestampRecognition(parseLog(text));
+
+    assert.strictEqual(result.unrecognizedLineCount, 0);
+    assert.strictEqual(result.suspiciousContinuationLineCount, 0);
+    assert.strictEqual(result.shouldWarn, false);
+  });
+
+  test("does not combine isolated timestamp-like continuations across recognized entries", () => {
+    const text = Array.from(
+      { length: 10 },
+      (_, i) =>
+        `2024-01-02T03:${String(i).padStart(2, "0")}:00Z INFO recognized\n` +
+        `02.01.2024 03:${String(i).padStart(2, "0")}:30 diagnostic detail`
+    ).join("\n");
+
+    const result = assessTimestampRecognition(parseLog(text));
+
+    assert.strictEqual(result.suspiciousContinuationLineCount, 1);
+    assert.strictEqual(result.shouldWarn, false);
+  });
+
   test("warns when at least half the lines precede the first recognized timestamp (boundary)", () => {
     const text = [plainLines(6), timestampedLines(6)].join("\n");
 

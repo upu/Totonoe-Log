@@ -2734,7 +2734,8 @@ suite("Totonoe Log low timestamp recognition warning", () => {
   ).join("\n");
 
   /** 認識率警告の通知本文を判定するパターン。 */
-  const WARNING_PATTERN = /タイムスタンプ形式を認識できませんでした/;
+  const WARNING_PATTERN =
+    /タイムスタンプ形式(?:を認識できませんでした|で始まっている可能性があります)/;
 
   /**
    * showWarningMessage をモックして action 実行中に表示された警告本文を集める。
@@ -2799,6 +2800,33 @@ suite("Totonoe Log low timestamp recognition warning", () => {
         warnings[0].includes("totonoeLog.timestampFormats"),
         "the warning should point to the custom format setting"
       );
+    });
+  });
+
+  test("warns when an unsupported timestamp format takes over after a recognized line", async () => {
+    const extension = vscode.extensions.getExtension("upu.totonoe-log");
+    await extension!.activate();
+
+    const unsupportedTimestampLines = Array.from(
+      { length: 11 },
+      (_, i) => `02.01.2024 03:04:${String(i).padStart(2, "0")} INFO switched format`
+    ).join("\n");
+    const mixedLog = [
+      "2024-01-02T03:04:00Z INFO recognized",
+      unsupportedTimestampLines,
+    ].join("\n");
+
+    await withTempLogFiles([{ name: "switched-format.log", content: mixedLog }], async (uris) => {
+      const source = await vscode.workspace.openTextDocument(uris[0]);
+      await vscode.window.showTextDocument(source);
+
+      const warnings = await collectRecognitionWarningsWhile(async () => {
+        await vscode.commands.executeCommand("totonoeLog.showNormalizedView");
+      });
+
+      assert.strictEqual(warnings.length, 1);
+      assert.ok(warnings[0].includes("switched-format.log"));
+      assert.ok(warnings[0].includes("totonoeLog.timestampFormats"));
     });
   });
 

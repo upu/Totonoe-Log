@@ -17,14 +17,33 @@ export const LOW_RECOGNITION_MIN_LINE_COUNT = 10;
  */
 export const LOW_RECOGNITION_RATIO_THRESHOLD = 0.5;
 
+/**
+ * 認識済みエントリへ吸収された、日付・時刻らしい継続行を形式切替の兆候と
+ * みなす最低行数。少数の日時入りメッセージでは通知せず、巨大な1エントリに
+ * なる規模の連続した未対応形式だけを拾う。
+ */
+const SUSPICIOUS_CONTINUATION_MIN_LINE_COUNT = 10;
+
+/**
+ * 行頭にインデントを許さないことで、スタックトレースや整形済みの複数行
+ * メッセージを候補から外す。区切り文字や年月日の順序は決め打ちしすぎず、
+ * 未対応形式へ切り替わった可能性を診断するための軽量な判定に留める。
+ */
+const TIMESTAMP_LIKE_CONTINUATION_REGEX =
+  /^(?:\[|\()?(?:(?:\d{4}[-/.]\d{1,2}[-/.]\d{1,2}|\d{1,2}[-/.]\d{1,2}[-/.]\d{2,4})[T ]|\d{4}年\d{1,2}月\d{1,2}日\s+)\d{1,2}:\d{2}(?::\d{2}(?:[.,]\d+)?)?(?:\s|$)/;
+
 /** {@link assessTimestampRecognition} が返す、タイムスタンプ認識率の評価結果。 */
 export interface TimestampRecognitionAssessment {
   /** 空行を除いた全行数。 */
   readonly totalLineCount: number;
   /** タイムスタンプ未認識と判定した行数（空行を除く）。 */
   readonly unrecognizedLineCount: number;
+  /** 日付・時刻らしい継続行が連続した最長区間の行数。 */
+  readonly suspiciousContinuationLineCount: number;
   /** `unrecognizedLineCount / totalLineCount`。全行が空行の場合は 0。 */
   readonly unrecognizedRatio: number;
+  /** 未対応形式への切替が疑われる継続行が十分に多い場合は true。 */
+  readonly hasSuspiciousTimestampSwitch: boolean;
   /** 認識率が低く、ユーザーへ警告すべきなら true。 */
   readonly shouldWarn: boolean;
 }
@@ -36,31 +55,55 @@ export interface TimestampRecognitionAssessment {
  * タイムスタンプより前に現れた行、または1行も認識できなかった場合の全行）に
  * 属する行だけに限定する。認識済みエントリの継続行（スタックトレース等）は
  * 正常な複数行エントリの一部であって形式未対応の兆候ではないため、未認識行に
- * 含めない（継続行の多いログでの誤検知を避ける）。空行は形式未対応の証拠に
- * ならないため、分母・分子のどちらからも除外する。
+ * 含めない（継続行の多いログでの誤検知を避ける）。ただし、インデントなしで
+ * 日付・時刻らしい行頭を持つ継続行が多数ある場合は、途中で未対応形式へ切り
+ * 替わった兆候として別集計する。空行は形式未対応の証拠にならないため、
+ * 分母・分子のどちらからも除外する。
  */
 export function assessTimestampRecognition(
   entries: readonly LogEntry[]
 ): TimestampRecognitionAssessment {
   let totalLineCount = 0;
   let unrecognizedLineCount = 0;
+  let suspiciousContinuationLineCount = 0;
+  let currentSuspiciousContinuationLineCount = 0;
 
   for (const entry of entries) {
-    for (const line of entry.lines) {
+    for (let lineIndex = 0; lineIndex < entry.lines.length; lineIndex++) {
+      const line = entry.lines[lineIndex];
       if (line.trim().length === 0) {
         continue;
       }
       totalLineCount += 1;
       if (!entry.matched) {
         unrecognizedLineCount += 1;
+        currentSuspiciousContinuationLineCount = 0;
+      } else if (lineIndex > 0 && TIMESTAMP_LIKE_CONTINUATION_REGEX.test(line)) {
+        currentSuspiciousContinuationLineCount += 1;
+        suspiciousContinuationLineCount = Math.max(
+          suspiciousContinuationLineCount,
+          currentSuspiciousContinuationLineCount
+        );
+      } else {
+        currentSuspiciousContinuationLineCount = 0;
       }
     }
   }
 
   const unrecognizedRatio = totalLineCount === 0 ? 0 : unrecognizedLineCount / totalLineCount;
-  const shouldWarn =
+  const hasLowRecognition =
     totalLineCount >= LOW_RECOGNITION_MIN_LINE_COUNT &&
     unrecognizedRatio >= LOW_RECOGNITION_RATIO_THRESHOLD;
+  const hasSuspiciousTimestampSwitch =
+    suspiciousContinuationLineCount >= SUSPICIOUS_CONTINUATION_MIN_LINE_COUNT;
+  const shouldWarn = hasLowRecognition || hasSuspiciousTimestampSwitch;
 
-  return { totalLineCount, unrecognizedLineCount, unrecognizedRatio, shouldWarn };
+  return {
+    totalLineCount,
+    unrecognizedLineCount,
+    suspiciousContinuationLineCount,
+    unrecognizedRatio,
+    hasSuspiciousTimestampSwitch,
+    shouldWarn,
+  };
 }

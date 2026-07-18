@@ -18,6 +18,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Out-of-range time components and UTC offsets in built-in and custom
   calendar timestamp formats are no longer normalized into a different
   valid instant (issue #135).
+- Logs that switch from a recognized timestamp format to many unsupported
+  timestamp-like lines now show the custom-format warning instead of silently
+  absorbing those lines into one large entry. Indented continuations, blank
+  lines, and ordinary stack traces remain excluded from the warning
+  (issue #136).
 
 ## [0.5.0] - 2026-07-17
 

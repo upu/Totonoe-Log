@@ -33,6 +33,13 @@ export function warnIfLowTimestampRecognition(
   warnedSourceKeys.add(sourceKey);
 
   const fileName = sourceUri.path.split("/").pop() ?? sourceUri.toString();
+  if (assessment.hasSuspiciousTimestampSwitch) {
+    vscode.window.showWarningMessage(
+      `Totonoe Log: ${fileName} の${assessment.suspiciousContinuationLineCount}行が、未対応のタイムスタンプ形式で始まっている可能性があります。設定「totonoeLog.timestampFormats」でカスタム形式を追加すると認識できます。`
+    );
+    return;
+  }
+
   const percent = Math.round(assessment.unrecognizedRatio * 100);
   vscode.window.showWarningMessage(
     `Totonoe Log: ${fileName} の行の約${percent}%でタイムスタンプ形式を認識できませんでした。組み込み形式に合わないログは、設定「totonoeLog.timestampFormats」でカスタム形式を追加すると認識できます。`
