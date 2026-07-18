@@ -223,6 +223,49 @@ suite("normalize / parseLog", () => {
     assert.strictEqual(entry.matched, false);
     assert.strictEqual(entry.raw, "2024-02-30T03:04:05Z ERROR impossible date");
   });
+
+  test("rejects out-of-range time components and UTC offsets across built-in formats", () => {
+    const invalidLines = [
+      "2024-01-02T24:04:05Z invalid ISO hour",
+      "[2024-01-02 03:60:05] invalid bracketed minute",
+      "2024/01/02 03:04:60 invalid slash-date second",
+      "[02/Jan/2024:03:60:05 +0900] invalid Apache minute",
+      "[02/Jan/2024:03:04:05 +9999] invalid Apache offset",
+    ];
+
+    for (const line of invalidLines) {
+      const [entry] = parseLog(line);
+      assert.strictEqual(entry.matched, false, line);
+      assert.strictEqual(entry.timestampMs, undefined, line);
+    }
+
+    const [syslogEntry] = parseLog("Jan  2 03:04:60 invalid syslog second", {
+      timestampFormats: [createSyslogFormat({ assumedYear: 2024 })],
+    });
+    assert.strictEqual(syslogEntry.matched, false);
+    assert.strictEqual(syslogEntry.timestampMs, undefined);
+  });
+
+  test("recognizes valid time and UTC-offset boundary values across built-in formats", () => {
+    const validLines = [
+      "2024-01-02T23:59:59.999999999Z valid ISO boundary",
+      "[2024-01-02 23:59:59,5+14:00] valid bracketed boundary",
+      "2024/01/02 23:59:59.5 valid slash-date boundary",
+      "[02/Jan/2024:23:59:59 +1400] valid Apache boundary",
+    ];
+
+    for (const line of validLines) {
+      const [entry] = parseLog(line);
+      assert.strictEqual(entry.matched, true, line);
+      assert.notStrictEqual(entry.timestampMs, undefined, line);
+    }
+
+    const [syslogEntry] = parseLog("Jan  2 23:59:59 valid syslog boundary", {
+      timestampFormats: [createSyslogFormat({ assumedYear: 2024 })],
+    });
+    assert.strictEqual(syslogEntry.matched, true);
+    assert.strictEqual(syslogEntry.timestampMs, Date.UTC(2024, 0, 2, 23, 59, 59));
+  });
 });
 
 suite("normalize / timestampFormats (built-in additions, #100)", () => {
@@ -383,6 +426,32 @@ suite("normalize / compileCustomTimestampFormats", () => {
 
     const [entry] = parseLog("2024年13月2日 3:04:05 boom", { timestampFormats: formats });
     assert.strictEqual(entry.matched, false);
+  });
+
+  test("rejects out-of-range time components and UTC offsets in custom calendar formats", () => {
+    const { formats } = compileCustomTimestampFormats([
+      {
+        name: "custom-calendar",
+        pattern:
+          "(?<y>\\d{4})\\.(?<mo>\\d{2})\\.(?<d>\\d{2}) (?<h>\\d{2}):(?<mi>\\d{2}):(?<s>\\d{2})\\.(?<ms>\\d+) (?<tzs>[+-])(?<tzh>\\d{2}):(?<tzm>\\d{2})",
+      },
+    ]);
+
+    for (const line of [
+      "2024.01.02 03:60:00.123 +09:00 invalid minute",
+      "2024.01.02 03:04:60.123 +09:00 invalid second",
+      "2024.01.02 03:04:05.123 +99:99 invalid offset",
+    ]) {
+      const [entry] = parseLog(line, { timestampFormats: formats });
+      assert.strictEqual(entry.matched, false, line);
+      assert.strictEqual(entry.timestampMs, undefined, line);
+    }
+
+    const [boundary] = parseLog("2024.01.02 23:59:59.9999 +14:00 valid boundary", {
+      timestampFormats: formats,
+    });
+    assert.strictEqual(boundary.matched, true);
+    assert.strictEqual(boundary.timestampMs, Date.UTC(2024, 0, 2, 9, 59, 59, 999));
   });
 
   test("uses a positional fallback name when name is omitted", () => {
@@ -1626,6 +1695,35 @@ suite("normalize / formatMergedLog", () => {
 
     assert.strictEqual((output.match(/秒の空白/g) ?? []).length, 1);
     assert.ok(output.includes("40秒の空白"));
+  });
+
+  test("does not pass an out-of-range timestamp into merge order, date filtering, or gap detection", async () => {
+    const merged = mergeLogFiles([
+      { fileName: "before.log", text: "2024-01-02T03:00:00Z INFO before" },
+      { fileName: "invalid.log", text: "2024-01-02T03:60:00Z WARN invalid" },
+      { fileName: "after.log", text: "2024-01-02T04:30:00Z ERROR after" },
+    ]);
+
+    assert.deepStrictEqual(
+      merged.map(({ entry }) => entry.message),
+      ["before", "after", "2024-01-02T03:60:00Z WARN invalid"]
+    );
+
+    const filterResult = await filterMergedEntriesByCriteria(merged, {
+      dateRange: {
+        startMs: Date.UTC(2024, 0, 2, 3, 59),
+        endMs: Date.UTC(2024, 0, 2, 4, 1),
+      },
+    });
+    assert.strictEqual(filterResult.ok, true);
+    if (!filterResult.ok) {
+      throw new Error("unreachable");
+    }
+    assert.deepStrictEqual(filterResult.entries, []);
+
+    const output = formatMergedLog(merged, { gapThresholdMs: 30 * 60 * 1000 });
+    assert.strictEqual((output.match(/秒の空白/g) ?? []).length, 1);
+    assert.ok(output.includes("5400秒の空白"));
   });
 });
 

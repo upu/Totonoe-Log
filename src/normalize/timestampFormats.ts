@@ -1,4 +1,5 @@
 import type { TimestampFormat } from "./types";
+import { parseUtcOffsetMinutes } from "./timezone";
 
 /** syslog 形式のタイムスタンプで使う月の3文字略称。 */
 const MONTH_ABBREVIATIONS: Record<string, number> = {
@@ -18,8 +19,8 @@ const MONTH_ABBREVIATIONS: Record<string, number> = {
 
 /**
  * 以下の ISO 8601 系フォーマットが共有する名前付きキャプチャグループを
- * エポックミリ秒に変換する。範囲外の値（月が 13 など）は `undefined` を返し、
- * 不正な日付をサイレントに受け入れないようにする。
+ * エポックミリ秒に変換する。範囲外の日時や UTC オフセットは `undefined` を
+ * 返し、不正な値を別の有効日時へ繰り上げて受け入れないようにする。
  *
  * タイムゾーン表記がない場合は `fallbackUtcOffsetMinutes`（既定 0 = UTC）を
  * 仮定する。既定を UTC にすることで、ホストマシンのローカルタイムゾーンに
@@ -47,6 +48,21 @@ export function isoLikeGroupsToEpochMs(
   // 「実際より前」より誤解を招きやすいと判断したため。
   const ms = groups.ms ? Number(groups.ms.padEnd(3, "0").slice(0, 3)) : 0;
 
+  if (
+    !Number.isInteger(hour) ||
+    hour < 0 ||
+    hour > 23 ||
+    !Number.isInteger(minute) ||
+    minute < 0 ||
+    minute > 59 ||
+    !Number.isInteger(second) ||
+    second < 0 ||
+    second > 59 ||
+    (groups.ms !== undefined && !/^\d+$/.test(groups.ms))
+  ) {
+    return undefined;
+  }
+
   const epochMs = Date.UTC(year, month, day, hour, minute, second, ms);
 
   // Date.UTC は範囲外の値を繰り上げ処理するため（月12 → 翌年など）、
@@ -62,10 +78,14 @@ export function isoLikeGroupsToEpochMs(
   }
 
   if (groups.tzs) {
-    const tzSign = groups.tzs === "-" ? -1 : 1;
-    const tzHours = Number(groups.tzh);
-    const tzMinutes = Number(groups.tzm ?? "0");
-    return epochMs - tzSign * (tzHours * 60 + tzMinutes) * 60 * 1000;
+    const offsetText =
+      `${groups.tzs}${groups.tzh ?? ""}` +
+      (groups.tzm === undefined ? "" : `:${groups.tzm}`);
+    const offsetMinutes = parseUtcOffsetMinutes(offsetText);
+    if (offsetMinutes === undefined) {
+      return undefined;
+    }
+    return epochMs - offsetMinutes * 60 * 1000;
   }
 
   if (groups.tzz) {
