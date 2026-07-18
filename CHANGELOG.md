@@ -8,6 +8,66 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.5.0] - 2026-07-17
+
+### Added
+
+- The "XX seconds of silence" gap-detection separator line, previously only
+  in `Show Normalized View` (and its filtered variants), now also applies
+  to `Show Merged View` and `Show Merged View Filtered` (issue #102). It
+  shares the same `totonoeLog.gap.thresholdSeconds` setting and the same
+  detection logic, so gaps between chronologically adjacent entries —
+  across source files, and after filtering — are found the same way in
+  both views. The gap marker line spans the fileName/kind columns blank,
+  the same way a continuation line does.
+- New timezone normalization settings (issue #13):
+  `totonoeLog.timezone.sourceOffset` sets the UTC offset assumed for
+  timestamps without explicit timezone information (timestamps with an
+  explicit offset or `Z`, and epoch timestamps, are never shifted), and
+  `totonoeLog.timezone.fileOffsets` overrides it per file-name pattern so
+  logs from servers in different timezones merge into the true
+  chronological order. `totonoeLog.timezone.display` selects the timezone
+  every view renders timestamps in (`UTC` by default, `local`, or a fixed
+  offset like `+09:00`). Custom calendar-style timestamp formats can now
+  also capture a literal `Z` with the new `tzz` group to mark explicit UTC.
+- New `totonoeLog.clockSkew.fileOffsets` setting to correct logs from
+  hosts whose clock is off by ±N seconds, per file-name pattern
+  (issue #15). Unlike the timezone source offset, the correction applies
+  to every recognized timestamp — including those with an explicit
+  offset, `Z`, or epoch form — because the host clock itself is wrong.
+  Merged and normalized/filtered/collapsed views sort, display, and
+  filter by the corrected times; the raw log text is never rewritten.
+- New built-in timestamp formats: slash-separated dates
+  (`2024/01/02 03:04:05`, common in Japanese Windows/business-system
+  logs), Apache/Nginx access-log timestamps
+  (`[02/Jan/2024:03:04:05 +0900]`), and leading epoch
+  seconds/milliseconds. Lines in these formats used to be silently
+  absorbed as continuation lines of the preceding entry.
+- New `totonoeLog.timestampFormats` setting to add custom timestamp
+  formats as regular expressions with named capture groups (calendar
+  groups `y` `mo` `d` `h` `mi` `s` with optional `ms`/timezone groups, or
+  epoch groups `epochMs`/`epochSec`). Custom formats are tried before the
+  built-in ones; invalid entries are skipped with a warning.
+- Normalized/collapsed/filtered and merged views now show a warning
+  notification when a log's timestamp format is largely unrecognized
+  (half or more of the non-blank lines appear before any recognized
+  timestamp, in files of 10+ non-blank lines), with guidance to the
+  `totonoeLog.timestampFormats` setting. The warning is shown at most
+  once per file per session.
+- The collapsed view now shows the timestamp span (start and end) of
+  each collapsed group instead of only the representative entry's
+  timestamp, so a burst that happened in seconds can be told apart from
+  one spread over hours without expanding the group (issue #99). The
+  end timestamp is omitted when every entry in the group shares the
+  same timestamp.
+
+### Changed
+
+- The collapsed view's repeat-detection now computes each entry's
+  grouping key once instead of recomputing it for every comparison
+  within a run, speeding up collapsing on large log files without
+  changing which entries get grouped (issue #97).
+
 ### Fixed
 
 - Normalized/merged/compare views no longer silently render blank when
@@ -16,6 +76,29 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   it). Instead of a silent empty document, a visible placeholder message
   now explains that the view's content was lost and that the command
   should be re-run.
+- Entering a date-only value (e.g. `2024-01-02`) as the end boundary of a
+  date range filter no longer excludes almost all of that day's entries.
+  It now completes to the last instant of that day (`23:59:59.999`)
+  instead of midnight; the start boundary's `00:00:00` completion is
+  unchanged.
+- Severity is now recognized in the common log4j/logback layout
+  `%d [%t] %-5p` (e.g. `2024-01-02 03:04:05 [main] INFO ...`), where a
+  bracketed thread name sits between the timestamp and the log level.
+  Such lines used to fall into "(no severity)" and were missed by
+  severity filters.
+- ISO 8601 timestamps with 7+ digit fractional seconds (.NET's 7-digit
+  format, Go's RFC3339Nano 9-digit format) no longer silently drop their
+  timezone offset. The offset used to be left unmatched and treated as
+  UTC, shifting timestamps by hours, and the unmatched leftover digits
+  leaked into the start of the log message.
+- The merged view's "kind" grouping now recognizes logrotate-style
+  rotated file names (issue #96): `app.log`, `app.log.1`, and
+  `app.log.2024-01-02` all derive the same `app` kind, instead of the
+  numeric/date rotation suffix being treated as part of the kind.
+- The merged view now reads files via `vscode.workspace.fs.readFile`
+  instead of `vscode.workspace.openTextDocument` (issue #98), so log
+  files larger than VSCode's ~50MB extension-host document sync limit no
+  longer fail to load into the merge.
 
 ## [0.3.1] - 2026-07-13
 
@@ -186,7 +269,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   entire base name for dotfiles with no other extension (e.g. `.env`),
   producing a path like `/.normalized-1.log`. Leading dots are now preserved.
 
-[Unreleased]: https://github.com/upu/Totonoe-Log/compare/v0.3.1...HEAD
+[Unreleased]: https://github.com/upu/Totonoe-Log/compare/v0.5.0...HEAD
+[0.5.0]: https://github.com/upu/Totonoe-Log/releases/tag/v0.5.0
 [0.3.1]: https://github.com/upu/Totonoe-Log/releases/tag/v0.3.1
 [0.3.0]: https://github.com/upu/Totonoe-Log/releases/tag/v0.3.0
 [0.2.1]: https://github.com/upu/Totonoe-Log/releases/tag/v0.2.1

@@ -1,75 +1,169 @@
+<!--
+  このファイルは VS Code Marketplace の拡張機能ページとして公開されます（利用者向け）。
+  開発・ビルド・コントリビュートの手順は AGENTS.md に書き、
+  ここには利用者向けの内容だけを置いてください（開発者向けの記述を追加しないこと）。
+-->
+
+🇬🇧 [English](README.md)
+
 # Totonoe Log
 
-バラバラなログを、調査しやすい時系列に整える VSCode 拡張機能。
+> バラバラなログを、調査しやすい時系列に整える。
 
-Normalize, merge, filter, collapse, and compare messy logs.
+Totonoe Log はログ調査のための VS Code 拡張機能です。実際のトラブル調査では、フォーマットもタイムスタンプもバラバラで、ノイズだらけの複数のログファイルとにらめっこすることになりがちです。Totonoe Log は、そんな散らかったログを一貫した読みやすいタイムラインに整え、フォーマットとの戦いではなく本来の調査に集中できるようにします。
 
-[English README is here](./README.md)
+どのビューも通常の読み取り専用エディタタブとして開くので、VS Code 標準の検索・コピー・diff がそのまま使えます。各コマンドはコマンドパレット（`Ctrl+Shift+P`）から実行します。
 
-## コンセプト
+## 1本のタイムラインに正規化する
 
-実際のトラブル調査では、フォーマットもタイムスタンプもバラバラで、ノイズだらけの
-複数のログファイルとにらめっこすることになりがちです。Totonoe Log は、そんな
-散らかったログを一貫した読みやすいタイムラインに整え、フォーマットとの戦いでは
-なく本来の調査に集中できるようにします。
+`Totonoe Log: Show Normalized View` は、アクティブなエディタのログファイルをパースし、行ごとの形式の違いによらず、すべてのエントリを共通の構造で表示し直します。
 
-## ステータス
+一般的なタイムスタンプ形式は追加設定なしで認識します: ISO 8601（通常/角括弧付き）、従来型 syslog、スラッシュ区切り日付（`2024/01/02 03:04:05`）、Apache/Nginx アクセスログ形式（`[02/Jan/2024:03:04:05 +0900]`）、行頭のエポック秒/ミリ秒。組み込みでカバーしきれない形式は `totonoeLog.timestampFormats` 設定で追加できます（[カスタムタイムスタンプ形式](#カスタムタイムスタンプ形式) を参照）。
 
-🚧 骨組みを作った段階です。機能は GitHub の issue / PR を1つずつ進める形で、
-順次実装していきます。現在のロードマップは
-[issue 一覧](https://github.com/upu/Totonoe-Log/issues) を参照してください。
+長い「沈黙」も見逃しません。連続するエントリのタイムスタンプ差がしきい値を超えた箇所には「XX秒の空白」の区切り行が挿入され、障害調査で空白時間がひと目で分かります（正規化ビューとマージビュー、およびそれぞれの絞り込み系バリエーションに適用。`totonoeLog.gap.thresholdSeconds` で調整可能）。
 
-## 実装済みの機能
+## ノイズを絞り込みで取り除く
 
-- 多様なログ形式を共通の構造に正規化
-  （`Totonoe Log: Show Normalized View`）
-- 日付/時刻範囲での絞り込み
-  （`Totonoe Log: Show Normalized View Filtered by Date Range`）
-- セベリティ（error / warn / info など）での絞り込み
-  （`Totonoe Log: Show Normalized View Filtered by Severity`）
-- 日付/時刻範囲とセベリティを組み合わせた絞り込み
-  （`Totonoe Log: Show Normalized View Filtered by Date Range and Severity`）
-- セベリティ・日付/時刻範囲・無視パターンを1つのフローで自由に組み合わせて
-  絞り込み。複数選択可能な QuickPick でどの条件を使うか選び、選んだ条件に
-  ついてだけプロンプトが順に表示される（`Totonoe Log: Show Normalized View
-  Filtered`）
-- 日付やホストが異なる2つのログを、それらの違いを diff ノイズとして出さずに比較
-  （`Totonoe Log: Compare Logs`）
-- タイムスタンプ/ホスト情報をマスクしたテキストをコピーし、外部の diff
-  ツールに貼り付けやすくする（`Totonoe Log: Copy Masked Text`）
-- 繰り返しパターンの折りたたみ（例: 「×5」）
-  （`Totonoe Log: Show Collapsed View`）
-- 複数のログファイルを日時ベースでマージし、ファイルを横断した調査を可能に。
-  ファイル名・ファイル「種類」列付き（例: `message_20240101.log` → 種類
-  `message`）（`Totonoe Log: Show Merged View`）。エクスプローラで2つ以上の
-  ファイルを選択し、右クリックのコンテキストメニューから直接マージすることも
-  できる（`Totonoe Log: Merge Selected Files`）
-- マージビューも絞り込み可能。マージ対象のファイルを選んでから、
-  `Show Normalized View Filtered` と同じ複数選択フローでセベリティ・
-  日付/時刻範囲・無視パターンを組み合わせて絞り込める
-  （`Totonoe Log: Show Merged View Filtered`）
-- パターン（常に正規表現として解釈される。メタ文字を含まない文字列は
-  部分一致の検索として動作）にマッチするエントリを非表示にし、ノイズと
-  なる行を調査の邪魔にならないようにする
-  （`Totonoe Log: Show Normalized View Filtered by Ignore Pattern`）
-- 連続するエントリのタイムスタンプ差が大きく開いた箇所に「XX秒の空白」の
-  区切り行を挿入し、障害調査での「沈黙時間」を見つけやすくする。
-  `Show Normalized View` とその絞り込み系バリエーションに適用され、しきい値は
-  `totonoeLog.gap.thresholdSeconds` で調整可能（既定30秒、0で無効化）
+`Totonoe Log: Show Normalized View Filtered` では、複数の絞り込み条件を1つのフローで自由に組み合わせられます。複数選択リストから使いたい条件を選ぶと、選んだ条件のプロンプトだけが順に表示されます。
 
-## シリーズ構想
+- **セベリティ** — error / warn / info などだけを残す
+- **日付/時刻範囲** — 見たい時間帯だけに絞る
+- **無視パターン** — パターンにマッチするエントリを非表示に。パターンは常に正規表現として解釈されますが、メタ文字を含まない文字列はそのまま部分一致として動作します
 
-Totonoe Log は「Totonoe シリーズ」という、何かを「整える」というコンセプトの
-小さな VSCode 拡張機能群の第一弾として位置づけています。
+各条件は単独のコマンドとしても使えます（`... Filtered by Severity` / `... Filtered by Date Range` / `... Filtered by Date Range and Severity` / `... Filtered by Ignore Pattern`）。
 
-## 開発
+## 複数ファイルをマージする
+
+`Totonoe Log: Show Merged View` は、複数のログファイルを日時ベースで1本のタイムラインにマージし、ファイルを横断した調査を可能にします。ファイル名と、ファイルの「種類」列付きです（例: `message_20240101.log` → 種類 `message`）。
+
+エクスプローラで2つ以上のファイルを選択し、右クリックのコンテキストメニューから直接マージすることもできます（`Totonoe Log: Merge Selected Files`）。
+
+マージビューも絞り込みできます。`Totonoe Log: Show Merged View Filtered` は、マージ対象のファイルを選んでから、上記と同じ複数選択の絞り込みフローを適用します。
+
+上で説明した「XX秒の空白」のギャップ検出はこちらにも適用され、マージした複数ファイルを横断した沈黙時間を見つけられます（[1本のタイムラインに正規化する](#1本のタイムラインに正規化する) を参照）。
+
+タイムゾーンが異なるサーバのログや、時計がずれているホストのログも、ファイルごとに補正して正しい時系列にマージできます（[タイムゾーンの正規化](#タイムゾーンの正規化) と [クロックスキューの補正](#クロックスキューの補正) を参照）。
+
+## 繰り返しを折りたたむ
+
+`Totonoe Log: Show Collapsed View` は、連続する繰り返しパターンを繰り返し回数付きの1行（例: 「×5」）に折りたたみ、繰り返しのノイズが肝心のエントリを埋もれさせないようにします（しきい値は `totonoeLog.collapse.threshold` で調整可能）。折りたたんだ各行には、グループの開始〜終了タイムスタンプ（時間スパン）も表示されるため、グループを展開しなくても数秒間のバーストと数時間かけて起きた繰り返しを見分けられます。
+
+## 2つのログを比較する
+
+`Totonoe Log: Compare Logs` は、日付やホストが異なる2つのログを、それらの違いを diff のノイズとして出さずに比較し、本当の差分だけを浮かび上がらせます。
+
+`Totonoe Log: Copy Masked Text` は、アクティブなエディタのログテキストをタイムスタンプとホスト情報をマスクした形でコピーし、外部の diff ツールに貼り付けやすくします（マスク対象は設定で調整可能）。
+
+## タイムゾーンの正規化
+
+オフセットなしのローカル時刻で書かれたログ（例: `2024-01-02 03:04:05`）は、
+既定では UTC として解釈されます。タイムゾーンが異なるサーバのログが混ざると、
+マージ後の時系列がずれてしまいます。次の3つの設定でこれを補正できます。
+
+- `totonoeLog.timezone.sourceOffset` — タイムゾーン表記を持たない
+  タイムスタンプに仮定する UTC オフセット（既定は `UTC`）。オフセットや
+  `Z` が明示されたタイムスタンプ、エポック形式には適用されない
+  （ログに書かれている情報が常に優先される）
+- `totonoeLog.timezone.fileOffsets` — ファイル名にマッチさせる
+  パターンごとの上書き（最初にマッチした規則を使う）:
+
+  ```jsonc
+  "totonoeLog.timezone.fileOffsets": [
+    { "filePattern": "tokyo-.*\\.log", "offset": "+09:00" },
+    { "filePattern": "nyc-.*\\.log", "offset": "-05:00" }
+  ]
+  ```
+
+- `totonoeLog.timezone.display` — 各ビューでタイムスタンプを表示する
+  タイムゾーン。`UTC`（既定、`Z` サフィックス）、`local`（このマシンの
+  タイムゾーン。DST 対応）、または `+09:00` のような固定オフセット
+  （`2024-01-02T12:04:05.000+09:00` の形で表示される）
+
+タイムゾーンの自動検出は実装していません。オフセットのないタイムスタンプ
+にはタイムゾーンを判別できる確かな手がかりがなく、推測で決めると時系列を
+静かに壊してしまうためです。
+
+## クロックスキューの補正
+
+タイムゾーン設定では、ホストの時計そのものがずれている場合（例: NTP が
+壊れていて40秒進んでいるサーバ）を補正できません。
+`totonoeLog.clockSkew.fileOffsets` 設定は、そのようなログの時刻を
+ファイル名パターンごとに±N秒補正します（最初にマッチした規則を使う）:
+
+```jsonc
+"totonoeLog.clockSkew.fileOffsets": [
+  { "filePattern": "app-server\\.log", "offsetSeconds": -40 },
+  { "filePattern": "db-.*\\.log", "offsetSeconds": 2.5 }
+]
+```
+
+`totonoeLog.timezone.sourceOffset` と違い、この補正はオフセットや `Z` が
+明示されたタイムスタンプ・エポック形式を含む、全認識済みタイムスタンプに
+適用されます——時刻を刻んだ時計自体がずれていたためです。マージ・正規化・
+絞り込み・折りたたみの各ビューは補正後の時刻で並び替え・表示・日付範囲の
+絞り込みを行います。元のログテキストは決して書き換えられず、比較ビューは
+影響を受けません（タイムスタンプ全体をマスクするため）。不正な設定項目は
+警告を表示してスキップされ、残りの規則は機能し続けます。
+
+## カスタムタイムスタンプ形式
+
+組み込みで認識されないタイムスタンプ形式のログには、
+`totonoeLog.timestampFormats` 設定で形式を追加できます。各項目は正規表現で、
+名前付きキャプチャグループによってマッチ結果の解釈方法を指定します。
+カスタム形式は組み込み形式より先に試行されるため、組み込みの解釈を上書き
+することもできます。パターンは自動的に行頭へアンカーされます。
+
+```jsonc
+"totonoeLog.timestampFormats": [
+  {
+    "name": "jp-date",
+    "pattern": "(?<y>\\d{4})年(?<mo>\\d{1,2})月(?<d>\\d{1,2})日 (?<h>\\d{1,2}):(?<mi>\\d{2}):(?<s>\\d{2})"
+  }
+]
+```
+
+使用できるキャプチャグループ:
+
+- カレンダー形式: `y` `mo` `d` `h` `mi` `s`（すべて必須）に加え、任意で
+  `ms`（小数秒）、`tzs` `tzh` `tzm`（オフセットの符号/時/分）、`tzz`
+  （UTC の明示を表すリテラル `Z`）。オフセットがない場合は UTC、
+  `totonoeLog.timezone.sourceOffset` を設定している場合はそのオフセット
+  として解釈される
+- エポック形式: `epochMs`（エポックミリ秒）または `epochSec`（エポック秒。
+  任意の `ms` グループで小数部を指定可能）
+
+不正な項目（正規表現の誤り・グループ不足）は警告を表示してスキップされ、
+残りの形式はそのまま機能します。
+
+## インストール
+
+[GitHub Releases ページ](https://github.com/upu/Totonoe-Log/releases) から `totonoe-log.vsix` をダウンロードしてインストールします:
 
 ```bash
-npm install
-npm run compile   # 型チェック
-npm test          # 拡張機能のテストを実行
-npm run build     # esbuild でバンドル
+code --install-extension totonoe-log.vsix
 ```
+
+コマンドパレットの **Extensions: Install from VSIX...**（VSIX からのインストール）からもインストールできます。
+
+## 設定
+
+設定はすべて `totonoeLog` 名前空間にあります。
+
+| 設定 | 型 | 既定値 | 説明 |
+| --- | --- | --- | --- |
+| `totonoeLog.gap.thresholdSeconds` | number | `30` | `Show Normalized View` と `Show Merged View`（とそれぞれの絞り込み系コマンド）で、連続するエントリのタイムスタンプ差がこの秒数以上のときに「XX秒の空白」の区切り行を挿入する。`0` で無効化。 |
+| `totonoeLog.collapse.threshold` | number | `3` | `Show Collapsed View` で、何回以上連続で繰り返されたら1行に折りたたむかのしきい値。 |
+| `totonoeLog.copyMasked.maskTimestamp` | boolean | `true` | `Copy Masked Text` 実行時にタイムスタンプをマスクする。 |
+| `totonoeLog.copyMasked.maskHost` | boolean | `true` | `Copy Masked Text` 実行時に IPv4/IPv6 アドレスと、syslog 形式として認識できた行のホスト名トークンをマスクする（任意の形式のホスト名全般ではない）。 |
+| `totonoeLog.timezone.sourceOffset` | string | `"UTC"` | タイムゾーン表記を持たないタイムスタンプに仮定する UTC オフセット（例: `+09:00`）。オフセットや `Z` が明示されたタイムスタンプ、エポック形式には影響しない。[タイムゾーンの正規化](#タイムゾーンの正規化) を参照。 |
+| `totonoeLog.timezone.fileOffsets` | array | `[]` | ファイル名パターンごとに `totonoeLog.timezone.sourceOffset` を上書きする。マージ時にサーバごとのタイムゾーン違いを補正する用途。上から順に評価し、最初にマッチした規則を使う。 |
+| `totonoeLog.timezone.display` | string | `"UTC"` | 各ビューでタイムスタンプを表示するタイムゾーン。`UTC`、`local`（このマシンのタイムゾーン）、または `+09:00` のような UTC オフセット（`2024-01-02T12:04:05.000+09:00` の形で表示される）。 |
+| `totonoeLog.clockSkew.fileOffsets` | array | `[]` | 時計がずれているホストのログの時刻を、ファイル名パターンごとに±N秒補正する。タイムゾーン表記の有無にかかわらず全認識済みタイムスタンプに適用され、マージ・正規化ビューは補正後の時刻を使う。最初にマッチした規則を使う。[クロックスキューの補正](#クロックスキューの補正) を参照。 |
+| `totonoeLog.timestampFormats` | array | `[]` | 組み込みで認識されないタイムスタンプ形式を、正規表現＋名前付きキャプチャグループで追加する。組み込み形式より先に試行される。[カスタムタイムスタンプ形式](#カスタムタイムスタンプ形式) を参照。 |
+
+## Totonoe シリーズ
+
+Totonoe Log は「Totonoe シリーズ」— 何かを「整える」というコンセプトの小さな VS Code 拡張機能群 — の第一弾として位置づけています。
 
 ## ライセンス
 

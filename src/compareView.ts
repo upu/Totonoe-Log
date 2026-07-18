@@ -1,9 +1,10 @@
 import * as vscode from "vscode";
-import { parseLog, formatMaskedLogForCompare } from "./normalize";
+import { formatMaskedLogForCompare } from "./normalize";
 import {
   VirtualDocumentContentProvider,
   COMPARE_VIEW_SCHEME,
 } from "./virtualDocumentContentProvider";
+import { parseLogWithConfiguredFormats } from "./timestampFormatSettings";
 
 // スキーム定義は virtualDocumentContentProvider.ts に集約している
 // （既存の import 元を変えずに済むよう、ここから再エクスポートする）。
@@ -40,7 +41,7 @@ async function buildMaskedVirtualDocument(
   sideTag: string
 ): Promise<vscode.Uri> {
   const sourceDocument = await vscode.workspace.openTextDocument(fileUri);
-  const entries = parseLog(sourceDocument.getText());
+  const entries = parseLogWithConfiguredFormats(sourceDocument.getText());
   const content = formatMaskedLogForCompare(entries);
 
   const baseName = fileUri.path.split("/").pop() ?? "log";

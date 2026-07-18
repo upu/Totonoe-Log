@@ -47,6 +47,9 @@ export function collapseRepeatedEntries(
   const threshold = Math.max(2, options.threshold ?? DEFAULT_COLLAPSE_THRESHOLD);
   const items: CollapsedItem[] = [];
   let run: LogEntry[] = [];
+  // 現在のラン先頭のキー。ラン内の全エントリと比較する代表値として使い回し、
+  // ラン先頭のキーがランの長さ分だけ再計算されるのを避ける。
+  let runKey: string | undefined;
 
   function flushRun(): void {
     if (run.length === 0) {
@@ -63,11 +66,15 @@ export function collapseRepeatedEntries(
   }
 
   for (const entry of entries) {
-    if (run.length > 0 && groupingKey(run[0]) === groupingKey(entry)) {
+    // 各エントリのキーはここで1回だけ計算し、ラン継続判定と次ランの代表値
+    // 更新の両方に使い回す。
+    const key = groupingKey(entry);
+    if (run.length > 0 && key === runKey) {
       run.push(entry);
     } else {
       flushRun();
       run = [entry];
+      runKey = key;
     }
   }
   flushRun();

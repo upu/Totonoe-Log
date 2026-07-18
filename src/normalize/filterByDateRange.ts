@@ -1,15 +1,30 @@
 import type { LogEntry } from "./types";
 
 /**
+ * 日付範囲の境界を開始境界として使うか終了境界として使うかの区別。
+ * 時刻を省略した日付のみの入力を補完する際、開始境界なら「その日の
+ * 始まり」（`00:00:00.000`）、終了境界なら「その日の終わり」
+ * （`23:59:59.999`）に補完する（issue #93）。時刻を明示した入力には
+ * 影響しない。
+ */
+export type DateBoundaryKind = "start" | "end";
+
+/**
  * 日付範囲の境界（開始・終了いずれか一方）として使う入力文字列を解析する。
  *
  * `YYYY-MM-DD` または `YYYY-MM-DD HH:mm[:ss]`（`T` 区切りも可）を受け付ける。
  * タイムゾーン表記は持たず、他のタイムスタンプ形式（{@link ISO_8601_FORMAT} 等）
- * と同様に常に UTC として解釈する。時刻を省略した場合は `00:00:00` を補う。
+ * と同様に常に UTC として解釈する。時刻を省略した場合、`boundaryKind` に
+ * 応じて開始境界なら `00:00:00.000`、終了境界なら `23:59:59.999` を補う
+ * （終了境界に開始境界と同じ `00:00:00` を補うと、その日のエントリが
+ * `timestampMs > endMs` の判定でほぼ除外されてしまうため）。
  * 形式に一致しない、または存在しない日付（例: 2024-02-30）の場合は
  * `undefined` を返す。
  */
-export function parseDateBoundary(input: string): number | undefined {
+export function parseDateBoundary(
+  input: string,
+  boundaryKind: DateBoundaryKind
+): number | undefined {
   const match = /^(\d{4})-(\d{2})-(\d{2})(?:[T ](\d{2}):(\d{2})(?::(\d{2}))?)?$/.exec(
     input.trim()
   );
@@ -20,9 +35,12 @@ export function parseDateBoundary(input: string): number | undefined {
   const year = Number(match[1]);
   const month = Number(match[2]) - 1;
   const day = Number(match[3]);
-  const hour = Number(match[4] ?? "0");
-  const minute = Number(match[5] ?? "0");
-  const second = Number(match[6] ?? "0");
+  const hasTime = match[4] !== undefined;
+  const isEndOfDayDefault = boundaryKind === "end" && !hasTime;
+  const hour = Number(match[4] ?? (isEndOfDayDefault ? "23" : "0"));
+  const minute = Number(match[5] ?? (isEndOfDayDefault ? "59" : "0"));
+  const second = Number(match[6] ?? (isEndOfDayDefault ? "59" : "0"));
+  const millisecond = isEndOfDayDefault ? 999 : 0;
 
   // Date.UTC は時刻の範囲外値（24:00 や 03:60 等）も繰り上げてしまうため、
   // 日付だけでなく時刻の各要素も事前に範囲チェックし、不正な入力を
@@ -31,7 +49,7 @@ export function parseDateBoundary(input: string): number | undefined {
     return undefined;
   }
 
-  const epochMs = Date.UTC(year, month, day, hour, minute, second);
+  const epochMs = Date.UTC(year, month, day, hour, minute, second, millisecond);
 
   // Date.UTC は範囲外の値を繰り上げ処理するため（例: 2024-02-30 → 2024-03-01）、
   // 逆算して比較することで不正な日付をサイレントに受け入れないようにする。

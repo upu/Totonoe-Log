@@ -1,6 +1,5 @@
 import * as vscode from "vscode";
 import {
-  parseLog,
   formatNormalizedLog,
   filterEntriesBySeverity,
   filterEntriesByDateRange,
@@ -8,9 +7,10 @@ import {
   filterEntriesByCriteria,
   collapseRepeatedEntries,
   formatCollapsedLog,
+  applyClockSkew,
   DEFAULT_COLLAPSE_THRESHOLD,
-  DEFAULT_GAP_THRESHOLD_SECONDS,
   type FilterCriteria,
+  type LogEntry,
 } from "./normalize";
 import {
   VirtualDocumentContentProvider,
@@ -24,6 +24,11 @@ import {
   promptFilterKinds,
   countLines,
 } from "./filterPrompts";
+import { parseLogWithConfiguredFormats } from "./timestampFormatSettings";
+import { createSourceOffsetResolver, readDisplayTimezone } from "./timezoneSettings";
+import { createClockSkewResolver } from "./clockSkewSettings";
+import { warnIfLowTimestampRecognition } from "./timestampRecognitionWarning";
+import { readGapThresholdMs } from "./gapThresholdSetting";
 
 // スキーム定義は virtualDocumentContentProvider.ts に集約している
 // （既存の import 元を変えずに済むよう、ここから再エクスポートする）。
@@ -42,28 +47,76 @@ export class NormalizedViewContentProvider extends VirtualDocumentContentProvide
   }
 }
 
-let normalizedViewCounter = 0;
-let severityFilteredViewCounter = 0;
-let dateRangeFilteredViewCounter = 0;
-let dateRangeAndSeverityFilteredViewCounter = 0;
-let ignorePatternFilteredViewCounter = 0;
-let combinedFilteredViewCounter = 0;
-let collapsedViewCounter = 0;
+/**
+ * 仮想ドキュメントURIの連番を fileTag（ビュー種別を表すタグ文字列）ごとに
+ * 管理する。以前はビュー種別ごとに専用のモジュール変数（`normalizedViewCounter`
+ * 等）を持っていたが、絞り込みビューを追加するたびにカウンタ変数を増やす
+ * 必要が生じるため、fileTag をキーにした1つの Map に集約した（issue #77）。
+ */
+const viewCounters = new Map<string, number>();
 
-/** 時間ギャップ検出のしきい値（秒）を読み込むVSCode設定のセクション名。 */
-const GAP_CONFIG_SECTION = "totonoeLog.gap";
+/** 指定した fileTag の連番を1つ進めて返す。 */
+function nextViewCounter(fileTag: string): number {
+  const nextCounter = (viewCounters.get(fileTag) ?? 0) + 1;
+  viewCounters.set(fileTag, nextCounter);
+  return nextCounter;
+}
 
 /**
- * `totonoeLog.gap.thresholdSeconds` 設定を読み込み、{@link formatNormalizedLog}
- * が受け取るミリ秒単位のしきい値に変換する。0以下を指定した場合は無効化を
- * 意味するため、そのまま {@link formatNormalizedLog} 側の「0以下なら挿入
- * しない」判定に委ねる。
+ * 時間ギャップ設定・表示タイムゾーン設定込みで正規化ログ本文を組み立てる。
+ * 折りたたみビュー以外の全コマンドがこのオプション組み立てを共有するため
+ * 一箇所にまとめる。
  */
-function readGapThresholdMs(): number {
-  const thresholdSeconds = vscode.workspace
-    .getConfiguration(GAP_CONFIG_SECTION)
-    .get<number>("thresholdSeconds", DEFAULT_GAP_THRESHOLD_SECONDS);
-  return thresholdSeconds * 1000;
+function formatNormalizedWithGap(entries: readonly LogEntry[]): string {
+  return formatNormalizedLog(entries, {
+    gapThresholdMs: readGapThresholdMs(),
+    displayTimezone: readDisplayTimezone(),
+  });
+}
+
+/**
+ * アクティブなエディタ上のログファイルを取得する。エディタが無い場合、または
+ * 対象が Totonoe Log 自身の仮想ドキュメントである場合（`guardAgainstVirtualDocumentSource`
+ * が判定）は警告を表示し、呼び出し側に処理を中断させるため `undefined` を返す。
+ * 正規化・フィルタ系・折りたたみの全コマンドが冒頭で行う同一の手順を集約した。
+ *
+ * `actionLabel` は「正規化する」「絞り込む」「折りたたむ」等、警告文の
+ * 「〜ログファイルが開かれていません。」に前置する動詞句。
+ */
+function getSourceDocumentOrWarn(actionLabel: string): vscode.TextDocument | undefined {
+  const activeEditor = vscode.window.activeTextEditor;
+  if (!activeEditor) {
+    vscode.window.showWarningMessage(
+      `Totonoe Log: ${actionLabel}ログファイルが開かれていません。`
+    );
+    return undefined;
+  }
+
+  const sourceDocument = activeEditor.document;
+  if (guardAgainstVirtualDocumentSource(sourceDocument)) {
+    return undefined;
+  }
+
+  return sourceDocument;
+}
+
+/**
+ * 元ドキュメントを設定反映済みのフォーマット一覧・ソースオフセット
+ * （issue #13）でパースし、クロックスキュー補正（issue #15）と、タイム
+ * スタンプ認識率が低い場合の警告通知（issue #101）まで済ませる。正規化
+ * ビュー系の全コマンドがパース直後に同じ判定を必要とするため一箇所に
+ * まとめる。
+ */
+function parseSourceLog(sourceDocument: vscode.TextDocument): LogEntry[] {
+  const fileName = sourceDocument.uri.path.split("/").pop() ?? "";
+  const sourceUtcOffsetMinutes = createSourceOffsetResolver()(fileName);
+  const parsedEntries = parseLogWithConfiguredFormats(
+    sourceDocument.getText(),
+    sourceUtcOffsetMinutes
+  );
+  const entries = applyClockSkew(parsedEntries, createClockSkewResolver()(fileName));
+  warnIfLowTimestampRecognition(sourceDocument.uri, entries);
+  return entries;
 }
 
 /**
@@ -75,8 +128,7 @@ async function openVirtualNormalizedDocument(
   provider: NormalizedViewContentProvider,
   sourceDocument: vscode.TextDocument,
   content: string,
-  fileTag: string,
-  counter: number
+  fileTag: string
 ): Promise<void> {
   const sourceBaseName = sourceDocument.uri.path.split("/").pop() ?? "log";
   // 先頭のドット（`.env` などのドットファイル）は拡張子とみなさず、
@@ -84,13 +136,34 @@ async function openVirtualNormalizedDocument(
   const sourceNameWithoutExtension = sourceBaseName.replace(/(?<=[^.])\.[^./]+$/, "");
   const uri = vscode.Uri.from({
     scheme: NORMALIZED_VIEW_SCHEME,
-    path: `/${sourceNameWithoutExtension}.${fileTag}-${counter}.log`,
+    path: `/${sourceNameWithoutExtension}.${fileTag}-${nextViewCounter(fileTag)}.log`,
   });
 
   provider.register(uri, content);
 
   const normalizedDocument = await vscode.workspace.openTextDocument(uri);
   await vscode.window.showTextDocument(normalizedDocument, { preview: false });
+}
+
+/**
+ * 絞り込みで非表示にした行数を通知として表示する。表示前後の行数をそれぞれ
+ * 1回だけ数え、通知本文（非表示行数と「表示中/全体」の分母・分子）の算出で
+ * 重複計算しないようにする。
+ *
+ * `reasonPhrase` は「指定範囲外の」「条件に合わない」等、通知文の
+ * 「〜 N 行を非表示にしました」に前置する語句。
+ */
+function reportHiddenLineCount(
+  reasonPhrase: string,
+  totalEntries: readonly LogEntry[],
+  visibleEntries: readonly LogEntry[]
+): void {
+  const totalLineCount = countLines(totalEntries);
+  const visibleLineCount = countLines(visibleEntries);
+  const hiddenLineCount = totalLineCount - visibleLineCount;
+  vscode.window.showInformationMessage(
+    `Totonoe Log: ${reasonPhrase} ${hiddenLineCount} 行を非表示にしました（${visibleLineCount}/${totalLineCount} 行を表示）。`
+  );
 }
 
 /**
@@ -102,30 +175,15 @@ export function createShowNormalizedViewCommand(
   provider: NormalizedViewContentProvider
 ): () => Promise<void> {
   return async function showNormalizedView(): Promise<void> {
-    const activeEditor = vscode.window.activeTextEditor;
-    if (!activeEditor) {
-      vscode.window.showWarningMessage(
-        "Totonoe Log: 正規化するログファイルが開かれていません。"
-      );
+    const sourceDocument = getSourceDocumentOrWarn("正規化する");
+    if (!sourceDocument) {
       return;
     }
 
-    const sourceDocument = activeEditor.document;
-    if (guardAgainstVirtualDocumentSource(sourceDocument)) {
-      return;
-    }
+    const entries = parseSourceLog(sourceDocument);
+    const content = formatNormalizedWithGap(entries);
 
-    const entries = parseLog(sourceDocument.getText());
-    const content = formatNormalizedLog(entries, { gapThresholdMs: readGapThresholdMs() });
-
-    normalizedViewCounter += 1;
-    await openVirtualNormalizedDocument(
-      provider,
-      sourceDocument,
-      content,
-      "normalized",
-      normalizedViewCounter
-    );
+    await openVirtualNormalizedDocument(provider, sourceDocument, content, "normalized");
   };
 }
 
@@ -137,20 +195,12 @@ export function createShowNormalizedViewFilteredBySeverityCommand(
   provider: NormalizedViewContentProvider
 ): () => Promise<void> {
   return async function showNormalizedViewFilteredBySeverity(): Promise<void> {
-    const activeEditor = vscode.window.activeTextEditor;
-    if (!activeEditor) {
-      vscode.window.showWarningMessage(
-        "Totonoe Log: 絞り込むログファイルが開かれていません。"
-      );
+    const sourceDocument = getSourceDocumentOrWarn("絞り込む");
+    if (!sourceDocument) {
       return;
     }
 
-    const sourceDocument = activeEditor.document;
-    if (guardAgainstVirtualDocumentSource(sourceDocument)) {
-      return;
-    }
-
-    const entries = parseLog(sourceDocument.getText());
+    const entries = parseSourceLog(sourceDocument);
 
     const selectedSeverities = await promptSeveritySelection(entries);
     // ユーザーがピッカーを Esc 等でキャンセルした場合は何もしない。
@@ -159,16 +209,9 @@ export function createShowNormalizedViewFilteredBySeverityCommand(
     }
 
     const filteredEntries = filterEntriesBySeverity(entries, selectedSeverities);
-    const content = formatNormalizedLog(filteredEntries, { gapThresholdMs: readGapThresholdMs() });
+    const content = formatNormalizedWithGap(filteredEntries);
 
-    severityFilteredViewCounter += 1;
-    await openVirtualNormalizedDocument(
-      provider,
-      sourceDocument,
-      content,
-      "severity-filtered",
-      severityFilteredViewCounter
-    );
+    await openVirtualNormalizedDocument(provider, sourceDocument, content, "severity-filtered");
   };
 }
 
@@ -181,46 +224,29 @@ export function createShowNormalizedViewFilteredByDateRangeCommand(
   provider: NormalizedViewContentProvider
 ): () => Promise<void> {
   return async function showNormalizedViewFilteredByDateRange(): Promise<void> {
-    const activeEditor = vscode.window.activeTextEditor;
-    if (!activeEditor) {
-      vscode.window.showWarningMessage(
-        "Totonoe Log: 絞り込むログファイルが開かれていません。"
-      );
-      return;
-    }
-    if (guardAgainstVirtualDocumentSource(activeEditor.document)) {
+    const sourceDocument = getSourceDocumentOrWarn("絞り込む");
+    if (!sourceDocument) {
       return;
     }
 
-    const startMs = await promptDateBoundary("開始日時");
+    const startMs = await promptDateBoundary("開始日時", "start");
     // null はキャンセル、または不正な入力による中断を表す。
     if (startMs === null) {
       return;
     }
 
-    const endMs = await promptDateBoundary("終了日時");
+    const endMs = await promptDateBoundary("終了日時", "end");
     if (endMs === null) {
       return;
     }
 
-    const sourceDocument = activeEditor.document;
-    const entries = parseLog(sourceDocument.getText());
+    const entries = parseSourceLog(sourceDocument);
     const filteredEntries = filterEntriesByDateRange(entries, { startMs, endMs });
-    const content = formatNormalizedLog(filteredEntries, { gapThresholdMs: readGapThresholdMs() });
+    const content = formatNormalizedWithGap(filteredEntries);
 
-    dateRangeFilteredViewCounter += 1;
-    await openVirtualNormalizedDocument(
-      provider,
-      sourceDocument,
-      content,
-      "date-range-filtered",
-      dateRangeFilteredViewCounter
-    );
+    await openVirtualNormalizedDocument(provider, sourceDocument, content, "date-range-filtered");
 
-    const hiddenLineCount = countLines(entries) - countLines(filteredEntries);
-    vscode.window.showInformationMessage(
-      `Totonoe Log: 指定範囲外の ${hiddenLineCount} 行を非表示にしました（${countLines(filteredEntries)}/${countLines(entries)} 行を表示）。`
-    );
+    reportHiddenLineCount("指定範囲外の", entries, filteredEntries);
   };
 }
 
@@ -235,20 +261,12 @@ export function createShowNormalizedViewFilteredByDateRangeAndSeverityCommand(
   provider: NormalizedViewContentProvider
 ): () => Promise<void> {
   return async function showNormalizedViewFilteredByDateRangeAndSeverity(): Promise<void> {
-    const activeEditor = vscode.window.activeTextEditor;
-    if (!activeEditor) {
-      vscode.window.showWarningMessage(
-        "Totonoe Log: 絞り込むログファイルが開かれていません。"
-      );
+    const sourceDocument = getSourceDocumentOrWarn("絞り込む");
+    if (!sourceDocument) {
       return;
     }
 
-    const sourceDocument = activeEditor.document;
-    if (guardAgainstVirtualDocumentSource(sourceDocument)) {
-      return;
-    }
-
-    const entries = parseLog(sourceDocument.getText());
+    const entries = parseSourceLog(sourceDocument);
 
     const selectedSeverities = await promptSeveritySelection(entries);
     // ユーザーがピッカーを Esc 等でキャンセルした場合は何もしない。
@@ -256,13 +274,13 @@ export function createShowNormalizedViewFilteredByDateRangeAndSeverityCommand(
       return;
     }
 
-    const startMs = await promptDateBoundary("開始日時");
+    const startMs = await promptDateBoundary("開始日時", "start");
     // null はキャンセル、または不正な入力による中断を表す。
     if (startMs === null) {
       return;
     }
 
-    const endMs = await promptDateBoundary("終了日時");
+    const endMs = await promptDateBoundary("終了日時", "end");
     if (endMs === null) {
       return;
     }
@@ -272,21 +290,16 @@ export function createShowNormalizedViewFilteredByDateRangeAndSeverityCommand(
       filterEntriesBySeverity(entries, selectedSeverities),
       { startMs, endMs }
     );
-    const content = formatNormalizedLog(filteredEntries, { gapThresholdMs: readGapThresholdMs() });
+    const content = formatNormalizedWithGap(filteredEntries);
 
-    dateRangeAndSeverityFilteredViewCounter += 1;
     await openVirtualNormalizedDocument(
       provider,
       sourceDocument,
       content,
-      "date-range-severity-filtered",
-      dateRangeAndSeverityFilteredViewCounter
+      "date-range-severity-filtered"
     );
 
-    const hiddenLineCount = countLines(entries) - countLines(filteredEntries);
-    vscode.window.showInformationMessage(
-      `Totonoe Log: 条件に合わない ${hiddenLineCount} 行を非表示にしました（${countLines(filteredEntries)}/${countLines(entries)} 行を表示）。`
-    );
+    reportHiddenLineCount("条件に合わない", entries, filteredEntries);
   };
 }
 
@@ -299,14 +312,8 @@ export function createShowNormalizedViewFilteredByIgnorePatternCommand(
   provider: NormalizedViewContentProvider
 ): () => Promise<void> {
   return async function showNormalizedViewFilteredByIgnorePattern(): Promise<void> {
-    const activeEditor = vscode.window.activeTextEditor;
-    if (!activeEditor) {
-      vscode.window.showWarningMessage(
-        "Totonoe Log: 絞り込むログファイルが開かれていません。"
-      );
-      return;
-    }
-    if (guardAgainstVirtualDocumentSource(activeEditor.document)) {
+    const sourceDocument = getSourceDocumentOrWarn("絞り込む");
+    if (!sourceDocument) {
       return;
     }
 
@@ -316,8 +323,7 @@ export function createShowNormalizedViewFilteredByIgnorePatternCommand(
       return;
     }
 
-    const sourceDocument = activeEditor.document;
-    const entries = parseLog(sourceDocument.getText());
+    const entries = parseSourceLog(sourceDocument);
     const filterResult = await filterEntriesByIgnorePattern(entries, pattern);
     if (!filterResult.ok) {
       // 破局的バックトラッキング等でマッチング処理がタイムアウトした場合。
@@ -329,21 +335,16 @@ export function createShowNormalizedViewFilteredByIgnorePatternCommand(
       return;
     }
     const filteredEntries = filterResult.entries;
-    const content = formatNormalizedLog(filteredEntries, { gapThresholdMs: readGapThresholdMs() });
+    const content = formatNormalizedWithGap(filteredEntries);
 
-    ignorePatternFilteredViewCounter += 1;
     await openVirtualNormalizedDocument(
       provider,
       sourceDocument,
       content,
-      "ignore-pattern-filtered",
-      ignorePatternFilteredViewCounter
+      "ignore-pattern-filtered"
     );
 
-    const hiddenLineCount = countLines(entries) - countLines(filteredEntries);
-    vscode.window.showInformationMessage(
-      `Totonoe Log: パターンに一致したエントリの ${hiddenLineCount} 行を非表示にしました（${countLines(filteredEntries)}/${countLines(entries)} 行を表示）。`
-    );
+    reportHiddenLineCount("パターンに一致したエントリの", entries, filteredEntries);
   };
 }
 
@@ -360,16 +361,8 @@ export function createShowNormalizedViewFilteredCommand(
   provider: NormalizedViewContentProvider
 ): () => Promise<void> {
   return async function showNormalizedViewFiltered(): Promise<void> {
-    const activeEditor = vscode.window.activeTextEditor;
-    if (!activeEditor) {
-      vscode.window.showWarningMessage(
-        "Totonoe Log: 絞り込むログファイルが開かれていません。"
-      );
-      return;
-    }
-
-    const sourceDocument = activeEditor.document;
-    if (guardAgainstVirtualDocumentSource(sourceDocument)) {
+    const sourceDocument = getSourceDocumentOrWarn("絞り込む");
+    if (!sourceDocument) {
       return;
     }
 
@@ -379,7 +372,7 @@ export function createShowNormalizedViewFilteredCommand(
       return;
     }
 
-    const entries = parseLog(sourceDocument.getText());
+    const entries = parseSourceLog(sourceDocument);
 
     let severities: Set<string> | undefined;
     if (selectedKinds.has("severity")) {
@@ -391,13 +384,13 @@ export function createShowNormalizedViewFilteredCommand(
 
     let dateRange: FilterCriteria["dateRange"];
     if (selectedKinds.has("dateRange")) {
-      const startMs = await promptDateBoundary("開始日時");
+      const startMs = await promptDateBoundary("開始日時", "start");
       // null はキャンセル、または不正な入力による中断を表す。
       if (startMs === null) {
         return;
       }
 
-      const endMs = await promptDateBoundary("終了日時");
+      const endMs = await promptDateBoundary("終了日時", "end");
       if (endMs === null) {
         return;
       }
@@ -427,21 +420,11 @@ export function createShowNormalizedViewFilteredCommand(
       return;
     }
     const filteredEntries = filterResult.entries;
-    const content = formatNormalizedLog(filteredEntries, { gapThresholdMs: readGapThresholdMs() });
+    const content = formatNormalizedWithGap(filteredEntries);
 
-    combinedFilteredViewCounter += 1;
-    await openVirtualNormalizedDocument(
-      provider,
-      sourceDocument,
-      content,
-      "filtered",
-      combinedFilteredViewCounter
-    );
+    await openVirtualNormalizedDocument(provider, sourceDocument, content, "filtered");
 
-    const hiddenLineCount = countLines(entries) - countLines(filteredEntries);
-    vscode.window.showInformationMessage(
-      `Totonoe Log: 条件に合わない ${hiddenLineCount} 行を非表示にしました（${countLines(filteredEntries)}/${countLines(entries)} 行を表示）。`
-    );
+    reportHiddenLineCount("条件に合わない", entries, filteredEntries);
   };
 }
 
@@ -460,16 +443,8 @@ export function createShowCollapsedViewCommand(
   provider: NormalizedViewContentProvider
 ): () => Promise<void> {
   return async function showCollapsedView(): Promise<void> {
-    const activeEditor = vscode.window.activeTextEditor;
-    if (!activeEditor) {
-      vscode.window.showWarningMessage(
-        "Totonoe Log: 折りたたむログファイルが開かれていません。"
-      );
-      return;
-    }
-
-    const sourceDocument = activeEditor.document;
-    if (guardAgainstVirtualDocumentSource(sourceDocument)) {
+    const sourceDocument = getSourceDocumentOrWarn("折りたたむ");
+    if (!sourceDocument) {
       return;
     }
 
@@ -477,17 +452,12 @@ export function createShowCollapsedViewCommand(
       .getConfiguration(COLLAPSE_CONFIG_SECTION)
       .get<number>("threshold", DEFAULT_COLLAPSE_THRESHOLD);
 
-    const entries = parseLog(sourceDocument.getText());
+    const entries = parseSourceLog(sourceDocument);
     const items = collapseRepeatedEntries(entries, { threshold });
-    const content = formatCollapsedLog(entries, items);
+    const content = formatCollapsedLog(entries, items, {
+      displayTimezone: readDisplayTimezone(),
+    });
 
-    collapsedViewCounter += 1;
-    await openVirtualNormalizedDocument(
-      provider,
-      sourceDocument,
-      content,
-      "collapsed",
-      collapsedViewCounter
-    );
+    await openVirtualNormalizedDocument(provider, sourceDocument, content, "collapsed");
   };
 }

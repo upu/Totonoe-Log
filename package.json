@@ -2,7 +2,7 @@
   "name": "totonoe-log",
   "displayName": "Totonoe Log",
   "description": "Normalize, merge, filter, collapse, and compare messy logs.",
-  "version": "0.3.1",
+  "version": "0.5.0",
   "publisher": "upu",
   "icon": "media/icon.png",
   "license": "MIT",
@@ -119,6 +119,81 @@
           "default": 30,
           "minimum": 0,
           "description": "Totonoe Log: Show Normalized View とその絞り込み系コマンドで、連続するエントリのタイムスタンプ差がこの秒数以上のときに「XX秒の空白」の区切り行を挿入する。0 を指定すると無効化する。"
+        },
+        "totonoeLog.timezone.display": {
+          "type": "string",
+          "default": "UTC",
+          "description": "各ビューでタイムスタンプを表示するタイムゾーン。\"UTC\"、\"local\"（このマシンのローカルタイムゾーン）、または \"+09:00\" のような UTC オフセットを指定する。UTC 以外はオフセット付き（例: 2024-01-02T12:04:05.000+09:00）で表示される。"
+        },
+        "totonoeLog.timezone.sourceOffset": {
+          "type": "string",
+          "default": "UTC",
+          "description": "タイムゾーン表記を持たないタイムスタンプ（例: 2024-01-02 03:04:05）を解釈するときに仮定する UTC オフセット（例: \"+09:00\"）。明示的なオフセットや Z を持つタイムスタンプ、エポック形式には影響しない。"
+        },
+        "totonoeLog.timezone.fileOffsets": {
+          "type": "array",
+          "default": [],
+          "markdownDescription": "ファイル名パターンごとに `totonoeLog.timezone.sourceOffset` を上書きする。マージ時にサーバごとのタイムゾーン違いを補正する用途。上から順に評価し、最初にマッチした規則を使う。",
+          "items": {
+            "type": "object",
+            "required": [
+              "filePattern",
+              "offset"
+            ],
+            "properties": {
+              "filePattern": {
+                "type": "string",
+                "description": "ファイル名（パスを除いたベース名）にマッチさせる正規表現。"
+              },
+              "offset": {
+                "type": "string",
+                "description": "適用する UTC オフセット（例: \"+09:00\"）。"
+              }
+            }
+          }
+        },
+        "totonoeLog.clockSkew.fileOffsets": {
+          "type": "array",
+          "default": [],
+          "markdownDescription": "時計がずれているホストのログの時刻を、ファイル名パターンごとに±N秒補正する。タイムゾーン表記の有無にかかわらず全タイムスタンプに適用され、マージ・正規化ビューは補正後の時刻を使う。上から順に評価し、最初にマッチした規則を使う。",
+          "items": {
+            "type": "object",
+            "required": [
+              "filePattern",
+              "offsetSeconds"
+            ],
+            "properties": {
+              "filePattern": {
+                "type": "string",
+                "description": "ファイル名（パスを除いたベース名）にマッチさせる正規表現。"
+              },
+              "offsetSeconds": {
+                "type": "number",
+                "description": "適用する補正量（秒）。時計が進んでいるホストには負の値（例: -40）で戻す。"
+              }
+            }
+          }
+        },
+        "totonoeLog.timestampFormats": {
+          "type": "array",
+          "default": [],
+          "markdownDescription": "組み込みで認識されないタイムスタンプ形式を、正規表現＋名前付きキャプチャグループで追加する。組み込み形式より先に試行される。カレンダー形式はグループ `y` `mo` `d` `h` `mi` `s`（任意で `ms` `tzs` `tzh` `tzm`）、エポック形式はグループ `epochMs` または `epochSec`（任意で `ms`）を含めること。詳細は README の「Custom timestamp formats」参照。",
+          "items": {
+            "type": "object",
+            "required": [
+              "pattern"
+            ],
+            "properties": {
+              "name": {
+                "type": "string",
+                "description": "この形式の表示名。省略時は custom-<連番>。"
+              },
+              "pattern": {
+                "type": "string",
+                "description": "行頭のタイムスタンプにマッチする正規表現（自動的に行頭へアンカーされる）。名前付きキャプチャグループでパース方法を指定する。"
+              }
+            }
+          }
         }
       }
     }
