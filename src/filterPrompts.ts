@@ -4,6 +4,7 @@ import {
   parseDateBoundary,
   UNRECOGNIZED_SEVERITY_KEY,
   type DateBoundaryKind,
+  type DisplayTimezone,
   type LogEntry,
 } from "./normalize";
 
@@ -62,11 +63,18 @@ export async function promptSeveritySelection(
  */
 export async function promptDateBoundary(
   promptLabel: string,
-  boundaryKind: DateBoundaryKind
+  boundaryKind: DateBoundaryKind,
+  displayTimezone: DisplayTimezone
 ): Promise<number | undefined | null> {
   const timeHint = boundaryKind === "end" ? "終了 → 23:59:59.999" : "開始 → 00:00:00.000";
+  const timezoneHint =
+    displayTimezone === "local"
+      ? "local（このマシンのローカル時刻）"
+      : displayTimezone === 0
+        ? "UTC"
+        : formatOffset(displayTimezone);
   const input = await vscode.window.showInputBox({
-    prompt: `${promptLabel}（YYYY-MM-DD、または YYYY-MM-DD HH:mm[:ss]。省略可。時刻省略時は${timeHint}に補完）`,
+    prompt: `${promptLabel}（表示タイムゾーン ${timezoneHint} 基準。YYYY-MM-DD、または YYYY-MM-DD HH:mm[:ss]。省略可。時刻省略時は${timeHint}に補完）`,
     placeHolder: "例: 2024-01-02 or 2024-01-02T03:04:05",
   });
 
@@ -77,13 +85,22 @@ export async function promptDateBoundary(
     return undefined;
   }
 
-  const boundaryMs = parseDateBoundary(input, boundaryKind);
+  const boundaryMs = parseDateBoundary(input, boundaryKind, displayTimezone);
   if (boundaryMs === undefined) {
     vscode.window.showWarningMessage(`Totonoe Log: 日時を解釈できませんでした: "${input}"`);
     return null;
   }
 
   return boundaryMs;
+}
+
+/** 分単位の UTC オフセットを、設定と同じ `+09:00` 形式へ整形する。 */
+function formatOffset(offsetMinutes: number): string {
+  const sign = offsetMinutes < 0 ? "-" : "+";
+  const absoluteMinutes = Math.abs(offsetMinutes);
+  const hours = String(Math.floor(absoluteMinutes / 60)).padStart(2, "0");
+  const minutes = String(absoluteMinutes % 60).padStart(2, "0");
+  return `${sign}${hours}:${minutes}`;
 }
 
 /**

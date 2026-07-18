@@ -714,6 +714,31 @@ suite("normalize / filterEntriesByDateRange", () => {
     );
   });
 
+  test("parseDateBoundary interprets wall-clock input in a fixed display offset (issue #134)", () => {
+    assert.strictEqual(
+      parseDateBoundary("2024-01-02T12:04:05", "start", 9 * 60),
+      Date.UTC(2024, 0, 2, 3, 4, 5)
+    );
+  });
+
+  test("parseDateBoundary completes date-only bounds in the fixed display offset (issue #134)", () => {
+    assert.strictEqual(
+      parseDateBoundary("2024-01-02", "start", 9 * 60),
+      Date.UTC(2024, 0, 1, 15, 0, 0, 0)
+    );
+    assert.strictEqual(
+      parseDateBoundary("2024-01-02", "end", 9 * 60),
+      Date.UTC(2024, 0, 2, 14, 59, 59, 999)
+    );
+  });
+
+  test("parseDateBoundary interprets ordinary local wall-clock input in the host timezone (issue #134)", () => {
+    assert.strictEqual(
+      parseDateBoundary("2024-01-02T12:04:05", "start", "local"),
+      new Date(2024, 0, 2, 12, 4, 5, 0).getTime()
+    );
+  });
+
   test("parseDateBoundary returns undefined for an unrecognized or invalid string", () => {
     assert.strictEqual(parseDateBoundary("not a date", "start"), undefined);
     assert.strictEqual(parseDateBoundary("2024-02-30", "end"), undefined);

@@ -32,6 +32,14 @@ Long silent stretches are marked, too: when the timestamp gap between consecutiv
 
 Each condition is also available as its own command (`... Filtered by Severity`, `... Filtered by Date Range`, `... Filtered by Date Range and Severity`, `... Filtered by Ignore Pattern`).
 
+Date/time boundaries use the timezone selected by `totonoeLog.timezone.display`.
+You can therefore copy the wall-clock part of a timestamp shown in a view
+(for example, enter `2024-01-02 12:04:05` when the view shows
+`2024-01-02T12:04:05.000+09:00`). Date-only input covers that whole day in
+the selected timezone. With `local`, ordinary times use the machine's local
+timezone; a nonexistent time during a daylight-saving transition is rejected,
+and a repeated time selects its earlier occurrence.
+
 ## Merge multiple files
 
 `Totonoe Log: Show Merged View` merges multiple log files by timestamp into a single timeline for cross-file investigation, with source file name and file "kind" columns (e.g. `message_20240101.log` → kind `message`).
