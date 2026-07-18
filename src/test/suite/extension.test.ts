@@ -1504,6 +1504,75 @@ suite("Totonoe Log merged view", () => {
     assert.notStrictEqual(activeEditor!.document.uri.scheme, "totonoe-log-merged");
   });
 
+  test("opens the complete merged result when its formatted content exceeds 50MB", async function () {
+    this.timeout(60000);
+
+    const extension = vscode.extensions.getExtension("upu.totonoe-log");
+    await extension!.activate();
+
+    const fs = await import("node:fs/promises");
+    const os = await import("node:os");
+    const path = await import("node:path");
+
+    const tempDir = await fs.mkdtemp(path.join(os.tmpdir(), "totonoe-log-"));
+    try {
+      const oneMb = 1024 * 1024;
+      const targetSizeBytes = 52 * oneMb;
+      const lineCount = 60;
+      const linePrefix = (index: number): string =>
+        `2024-01-02T03:00:${String(index).padStart(2, "0")}Z INFO line-${String(index).padStart(3, "0")} `;
+      const paddingLength = Math.ceil(targetSizeBytes / lineCount) - linePrefix(0).length;
+      const bigLogPath = path.join(tempDir, "big.log");
+      await fs.writeFile(
+        bigLogPath,
+        Array.from(
+          { length: lineCount },
+          (_, i) => `${linePrefix(i)}${"x".repeat(paddingLength)}`
+        ).join("\n")
+      );
+
+      const originalShowOpenDialog = vscode.window.showOpenDialog;
+      (vscode.window as any).showOpenDialog = async () => [vscode.Uri.file(bigLogPath)];
+
+      try {
+        await vscode.commands.executeCommand("totonoeLog.showMergedView");
+      } finally {
+        (vscode.window as any).showOpenDialog = originalShowOpenDialog;
+      }
+
+      const activeTab = vscode.window.tabGroups.activeTabGroup.activeTab;
+      assert.ok(activeTab, "the large merged result should be opened in a tab");
+      assert.ok(
+        activeTab!.input instanceof vscode.TabInputText,
+        "the large merged result should use a text editor tab"
+      );
+
+      const resultUri = (activeTab!.input as vscode.TabInputText).uri;
+      assert.notStrictEqual(
+        resultUri.scheme,
+        "totonoe-log-merged",
+        "the large result should bypass virtual-document synchronization via extension storage"
+      );
+
+      const resultStat = await vscode.workspace.fs.stat(resultUri);
+      assert.ok(
+        resultStat.size > 50 * oneMb,
+        `the complete formatted result should exceed 50MB (actual: ${resultStat.size} bytes)`
+      );
+
+      const resultBytes = await vscode.workspace.fs.readFile(resultUri);
+      assert.ok(
+        Buffer.from(resultBytes.buffer, resultBytes.byteOffset, resultBytes.byteLength).includes(
+          "line-059"
+        ),
+        "the last source line should be present in the materialized merged result"
+      );
+    } finally {
+      await vscode.commands.executeCommand("workbench.action.closeAllEditors");
+      await fs.rm(tempDir, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 });
+    }
+  });
+
   test("reads a source file that exceeds VSCode's ~50MB document sync limit without losing content (issue #98)", async function () {
     // 巨大ファイルの生成・読み込み・マージ処理を含むため、既定の2000msでは
     // 収まらない（他の実ファイル操作テストと同じ理由でissue #72の前例に倣う）。

@@ -28,6 +28,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   their text intact. Unsupported encoding values warn and fall back to UTF-8,
   while the direct byte-reading path for large files remains unchanged
   (issue #133).
+- Formatted merged results at or above 50 MiB are now materialized in
+  extension-managed temporary storage and opened as regular text tabs, so the
+  complete result remains searchable and copyable instead of failing at VS
+  Code's extension-host document synchronization limit. Smaller results remain
+  read-only virtual documents (issue #130).
 
 ## [0.5.0] - 2026-07-17
 

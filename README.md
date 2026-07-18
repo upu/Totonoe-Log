@@ -51,6 +51,12 @@ Unsupported encoding values show a warning and explicitly fall back to UTF-8.
 The merge path still reads bytes directly, including for files above VS Code's
 document synchronization size limit.
 
+Formatted results below 50 MiB remain read-only virtual documents. Larger
+results are materialized in extension-managed temporary storage and opened as
+regular text tabs, bypassing the same synchronization limit while preserving
+VS Code's standard search and copy features. Editing that temporary copy never
+changes the source logs, and the stored result is removed after its tab closes.
+
 You can also select two or more files in the Explorer and merge them straight from the right-click context menu (`Totonoe Log: Merge Selected Files`).
 
 The merged view can be filtered too: `Totonoe Log: Show Merged View Filtered` picks the files to merge, then applies the same multi-select filter flow described above.
