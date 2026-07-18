@@ -1,12 +1,13 @@
 import * as vscode from "vscode";
 import {
   mergeLogFiles,
-  formatMergedLog,
+  formatMergedLogWithLineSources,
   filterMergedEntriesByCriteria,
   type LogFileInput,
   type LogEntry,
   type MergedEntry,
   type FilterCriteria,
+  type FormattedLogWithLineSources,
 } from "./normalize";
 import {
   VirtualDocumentContentProvider,
@@ -39,17 +40,31 @@ export class MergedViewContentProvider extends VirtualDocumentContentProvider {
       globalStorageUri === undefined ? undefined : new LargeMergedResultStore(globalStorageUri);
   }
 
-  async openDocument(content: string, path: string): Promise<void> {
-    if (Buffer.byteLength(content, "utf8") >= MAX_VIRTUAL_MERGED_DOCUMENT_BYTES) {
+  /**
+   * マージ結果を開く。仮想ドキュメントで開く場合は、表示行→元行の対応表
+   * （issue #137）を本文と一緒に登録する。`sourceUris` はマージ入力と同順の
+   * 元ファイル URI 一覧（`LineSource.fileIndex` はこの配列のインデックスを
+   * 指す）。同期上限を超える大容量結果は通常のファイルタブとして開くため
+   * （issue #130）、仮想ドキュメント前提の行対応情報は登録しない。
+   */
+  async openDocument(
+    formatted: FormattedLogWithLineSources,
+    sourceUris: readonly vscode.Uri[],
+    path: string
+  ): Promise<void> {
+    if (Buffer.byteLength(formatted.text, "utf8") >= MAX_VIRTUAL_MERGED_DOCUMENT_BYTES) {
       if (this.largeResultStore === undefined) {
         throw new Error("Large merged result storage is not configured.");
       }
-      await this.largeResultStore.open(content, path);
+      await this.largeResultStore.open(formatted.text, path);
       return;
     }
 
     const uri = vscode.Uri.from({ scheme: MERGED_VIEW_SCHEME, path });
-    this.register(uri, content);
+    this.register(uri, formatted.text, {
+      sourceUris,
+      lineSources: formatted.lineSources,
+    });
 
     const mergedDocument = await vscode.workspace.openTextDocument(uri);
     await vscode.window.showTextDocument(mergedDocument, { preview: false });
@@ -325,13 +340,13 @@ async function openMergedView(
     timestampFormats: readConfiguredTimestampFormats(),
   });
   warnLowTimestampRecognitionPerFile(fileUris, mergedEntries);
-  const content = formatMergedLog(mergedEntries, {
+  const formatted = formatMergedLogWithLineSources(mergedEntries, {
     displayTimezone: readDisplayTimezone(),
     gapThresholdMs: readGapThresholdMs(),
   });
 
   mergedViewCounter += 1;
-  await provider.openDocument(content, `/merged-${mergedViewCounter}.log`);
+  await provider.openDocument(formatted, fileUris, `/merged-${mergedViewCounter}.log`);
 }
 
 /**
@@ -449,13 +464,19 @@ export function createShowMergedViewFilteredCommand(
       return;
     }
     const filteredMergedEntries = filterResult.entries;
-    const content = formatMergedLog(filteredMergedEntries, {
+    // 絞り込みは MergedEntry の fileIndex を保持したまま行を間引くだけなので、
+    // 対応表の fileIndex は絞り込み前と同じ fileUris の並びで解決できる。
+    const formatted = formatMergedLogWithLineSources(filteredMergedEntries, {
       displayTimezone,
       gapThresholdMs: readGapThresholdMs(),
     });
 
     mergedFilteredViewCounter += 1;
-    await provider.openDocument(content, `/merged-filtered-${mergedFilteredViewCounter}.log`);
+    await provider.openDocument(
+      formatted,
+      fileUris,
+      `/merged-filtered-${mergedFilteredViewCounter}.log`
+    );
 
     const filteredEntries = filteredMergedEntries.map((merged) => merged.entry);
     const hiddenLineCount = countLines(entries) - countLines(filteredEntries);

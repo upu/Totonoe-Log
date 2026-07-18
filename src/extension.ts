@@ -16,6 +16,7 @@ import {
   createCompareLogsCommand,
 } from "./compareView";
 import { copyMaskedLogText } from "./copyMasked";
+import { createGoToSourceLineCommand } from "./goToSourceLine";
 import {
   MERGED_VIEW_SCHEME,
   MergedViewContentProvider,
@@ -89,7 +90,13 @@ export function activate(context: vscode.ExtensionContext): void {
       "totonoeLog.compareLogs",
       createCompareLogsCommand(compareViewProvider)
     ),
-    vscode.commands.registerCommand("totonoeLog.copyMaskedText", copyMaskedLogText)
+    vscode.commands.registerCommand("totonoeLog.copyMaskedText", copyMaskedLogText),
+    // 行対応情報を登録するのは正規化ビュー（絞り込み・折りたたみ含む）と
+    // マージビューの2プロバイダのみ。比較ビューは diff 表示専用のため対象外。
+    vscode.commands.registerCommand(
+      "totonoeLog.goToSourceLine",
+      createGoToSourceLineCommand([normalizedViewProvider, mergedViewProvider])
+    )
   );
 }
 

@@ -1,4 +1,5 @@
 import type { LogEntry } from "./types";
+import type { FormattedLogWithLineSources, LineSource } from "./lineSources";
 import { computeMaxLineNumber, formatGutter } from "./gutter";
 import type { CollapsedItem } from "./collapseRepeatedEntries";
 import { formatTimestampForDisplay, type DisplayTimezone } from "./timezone";
@@ -87,9 +88,26 @@ export function formatCollapsedLog(
   items: readonly CollapsedItem[],
   options: FormatCollapsedLogOptions = {}
 ): string {
+  return formatCollapsedLogWithLineSources(entries, items, options).text;
+}
+
+/**
+ * {@link formatCollapsedLog} と同じテキストに加えて、表示行ごとの元ログ
+ * 物理行の対応表を返す（issue #137）。折りたたみグループの見出し行は
+ * 「範囲開始行」（グループ先頭エントリの見出し行）へ対応づける——グループは
+ * 元ファイル上の連続した行範囲をまとめたものであり、その先頭が範囲全体の
+ * 入口として最も自然なため。対応表を別ロジックで再計算すると行構成と
+ * 食い違うリスクがあるため、同じループで本文と一緒に組み立てる。
+ */
+export function formatCollapsedLogWithLineSources(
+  entries: readonly LogEntry[],
+  items: readonly CollapsedItem[],
+  options: FormatCollapsedLogOptions = {}
+): FormattedLogWithLineSources {
   const displayTimezone = options.displayTimezone ?? 0;
   const gutterWidth = computeGutterWidth(entries, items);
   const outputLines: string[] = [];
+  const lineSources: (LineSource | undefined)[] = [];
 
   for (const item of items) {
     const representative = item.kind === "single" ? item.entry : item.entries[0];
@@ -102,11 +120,13 @@ export function formatCollapsedLog(
       : `${messageLines[0]}${suffix}`;
     const gutterLabel = item.kind === "single" ? representative.startLine : rangeLabel(item.entries);
     outputLines.push(formatGutter(gutterLabel, gutterWidth) + headerText);
+    lineSources.push({ fileIndex: 0, line: representative.startLine });
 
     for (let i = 1; i < messageLines.length; i++) {
       outputLines.push(formatGutter(representative.startLine + i, gutterWidth) + messageLines[i]);
+      lineSources.push({ fileIndex: 0, line: representative.startLine + i });
     }
   }
 
-  return outputLines.join("\n");
+  return { text: outputLines.join("\n"), lineSources };
 }

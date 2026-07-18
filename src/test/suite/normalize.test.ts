@@ -28,6 +28,9 @@ import {
   compileClockSkewRules,
   resolveClockSkewMs,
   applyClockSkew,
+  formatNormalizedLogWithLineSources,
+  formatMergedLogWithLineSources,
+  formatCollapsedLogWithLineSources,
 } from "../../normalize";
 import * as maskForCompare from "../../normalize/maskForCompare";
 
@@ -2380,5 +2383,177 @@ suite("normalize / mergeLogFiles per-file clock skew (#15)", () => {
       },
     ]);
     assert.strictEqual(merged[0].entry.timestampMs, Date.UTC(2024, 0, 2, 3, 4, 7));
+  });
+});
+
+suite("normalize / formatNormalizedLogWithLineSources (#137)", () => {
+  test("maps header and continuation lines to their physical source lines", () => {
+    const text = [
+      "2024-01-02T03:04:05Z ERROR boom",
+      "  at Foo.bar",
+      "2024-01-02T03:04:06Z INFO next",
+    ].join("\n");
+    const entries = parseLog(text);
+
+    const { text: output, lineSources } = formatNormalizedLogWithLineSources(entries);
+
+    assert.strictEqual(output, formatNormalizedLog(entries));
+    assert.deepStrictEqual(lineSources, [
+      { fileIndex: 0, line: 1 },
+      { fileIndex: 0, line: 2 },
+      { fileIndex: 0, line: 3 },
+    ]);
+  });
+
+  test("keeps original line numbers for a filtered subset of entries", () => {
+    const text = [
+      "2024-01-02T03:04:05Z INFO first",
+      "2024-01-02T03:04:06Z ERROR second",
+      "2024-01-02T03:04:07Z INFO third",
+    ].join("\n");
+    const filtered = filterEntriesBySeverity(parseLog(text), new Set(["ERROR"]));
+
+    const { lineSources } = formatNormalizedLogWithLineSources(filtered);
+
+    assert.deepStrictEqual(lineSources, [{ fileIndex: 0, line: 2 }]);
+  });
+
+  test("maps gap marker lines to undefined", () => {
+    const text = [
+      "2024-01-02T03:04:05Z INFO before",
+      "2024-01-02T03:05:05Z INFO after (60s later)",
+    ].join("\n");
+    const entries = parseLog(text);
+
+    const { lineSources } = formatNormalizedLogWithLineSources(entries, {
+      gapThresholdMs: 30_000,
+    });
+
+    assert.deepStrictEqual(lineSources, [
+      { fileIndex: 0, line: 1 },
+      undefined,
+      { fileIndex: 0, line: 2 },
+    ]);
+  });
+
+  test("returns empty results for no entries", () => {
+    const { text, lineSources } = formatNormalizedLogWithLineSources([]);
+
+    assert.strictEqual(text, "");
+    assert.deepStrictEqual(lineSources, []);
+  });
+});
+
+suite("normalize / mergeLogFiles fileIndex (#137)", () => {
+  test("assigns each merged entry the index of its input file, distinguishing same-named files", () => {
+    // 異なるフォルダの同名ファイル（fileName が同一）でも、入力配列の位置で
+    // 元ファイルを識別できることを確認する。
+    const merged = mergeLogFiles([
+      { fileName: "app.log", text: "2024-01-02T03:04:06Z INFO from-first" },
+      { fileName: "app.log", text: "2024-01-02T03:04:05Z INFO from-second" },
+    ]);
+
+    assert.deepStrictEqual(
+      merged.map((m) => ({ message: m.entry.message, fileIndex: m.fileIndex })),
+      [
+        { message: "from-second", fileIndex: 1 },
+        { message: "from-first", fileIndex: 0 },
+      ]
+    );
+  });
+});
+
+suite("normalize / formatMergedLogWithLineSources (#137)", () => {
+  test("maps each display line to its source file index and physical line", () => {
+    const merged = mergeLogFiles([
+      {
+        fileName: "app.log",
+        text: ["2024-01-02T03:04:05Z ERROR boom", "  at Foo.bar"].join("\n"),
+      },
+      { fileName: "db.log", text: "2024-01-02T03:04:04Z INFO earlier" },
+    ]);
+
+    const { text: output, lineSources } = formatMergedLogWithLineSources(merged);
+
+    assert.strictEqual(output, formatMergedLog(merged));
+    assert.deepStrictEqual(lineSources, [
+      { fileIndex: 1, line: 1 },
+      { fileIndex: 0, line: 1 },
+      { fileIndex: 0, line: 2 },
+    ]);
+  });
+
+  test("maps gap marker lines to undefined", () => {
+    const merged = mergeLogFiles([
+      { fileName: "app.log", text: "2024-01-02T03:04:05Z INFO before" },
+      { fileName: "db.log", text: "2024-01-02T03:04:35Z ERROR after" },
+    ]);
+
+    const { lineSources } = formatMergedLogWithLineSources(merged, {
+      gapThresholdMs: 30_000,
+    });
+
+    assert.deepStrictEqual(lineSources, [
+      { fileIndex: 0, line: 1 },
+      undefined,
+      { fileIndex: 1, line: 1 },
+    ]);
+  });
+
+  test("keeps the mapping after filtering merged entries", async () => {
+    const merged = mergeLogFiles([
+      { fileName: "app.log", text: "2024-01-02T03:04:05Z INFO keep-me" },
+      { fileName: "db.log", text: "2024-01-02T03:04:06Z ERROR drop-me" },
+    ]);
+    const result = await filterMergedEntriesByCriteria(merged, {
+      severities: new Set(["INFO"]),
+    });
+    assert.strictEqual(result.ok, true);
+    if (!result.ok) {
+      throw new Error("unreachable");
+    }
+
+    const { lineSources } = formatMergedLogWithLineSources(result.entries);
+
+    assert.deepStrictEqual(lineSources, [{ fileIndex: 0, line: 1 }]);
+  });
+});
+
+suite("normalize / formatCollapsedLogWithLineSources (#137)", () => {
+  test("maps single entries and their continuation lines like the normalized view", () => {
+    const text = [
+      "2024-01-02T03:04:05Z ERROR boom",
+      "  at Foo.bar",
+    ].join("\n");
+    const entries = parseLog(text);
+    const items = collapseRepeatedEntries(entries, { threshold: 3 });
+
+    const { text: output, lineSources } = formatCollapsedLogWithLineSources(entries, items);
+
+    assert.strictEqual(output, formatCollapsedLog(entries, items));
+    assert.deepStrictEqual(lineSources, [
+      { fileIndex: 0, line: 1 },
+      { fileIndex: 0, line: 2 },
+    ]);
+  });
+
+  test("maps a collapsed group header to the range start line", () => {
+    // 折りたたみグループの移動先は「範囲開始行」（グループ先頭エントリの
+    // 見出し行）とする仕様（issue #137 の設計メモ）。
+    const text = [
+      "2024-01-02T03:04:05Z INFO connect ok",
+      "2024-01-02T03:04:06Z INFO connect ok",
+      "2024-01-02T03:04:07Z INFO connect ok",
+      "2024-01-02T03:04:08Z ERROR tail",
+    ].join("\n");
+    const entries = parseLog(text);
+    const items = collapseRepeatedEntries(entries, { threshold: 3 });
+
+    const { lineSources } = formatCollapsedLogWithLineSources(entries, items);
+
+    assert.deepStrictEqual(lineSources, [
+      { fileIndex: 0, line: 1 },
+      { fileIndex: 0, line: 4 },
+    ]);
   });
 });

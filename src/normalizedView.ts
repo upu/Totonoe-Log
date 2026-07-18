@@ -1,16 +1,17 @@
 import * as vscode from "vscode";
 import {
-  formatNormalizedLog,
+  formatNormalizedLogWithLineSources,
+  formatCollapsedLogWithLineSources,
   filterEntriesBySeverity,
   filterEntriesByDateRange,
   filterEntriesByIgnorePattern,
   filterEntriesByCriteria,
   collapseRepeatedEntries,
-  formatCollapsedLog,
   applyClockSkew,
   DEFAULT_COLLAPSE_THRESHOLD,
   type DisplayTimezone,
   type FilterCriteria,
+  type FormattedLogWithLineSources,
   type LogEntry,
 } from "./normalize";
 import {
@@ -64,15 +65,15 @@ function nextViewCounter(fileTag: string): number {
 }
 
 /**
- * 時間ギャップ設定・表示タイムゾーン設定込みで正規化ログ本文を組み立てる。
- * 折りたたみビュー以外の全コマンドがこのオプション組み立てを共有するため
- * 一箇所にまとめる。
+ * 時間ギャップ設定・表示タイムゾーン設定込みで、正規化ログ本文と表示行→
+ * 元行の対応表（issue #137）を組み立てる。折りたたみビュー以外の全コマンドが
+ * このオプション組み立てを共有するため一箇所にまとめる。
  */
 function formatNormalizedWithGap(
   entries: readonly LogEntry[],
   displayTimezone: DisplayTimezone = readDisplayTimezone()
-): string {
-  return formatNormalizedLog(entries, {
+): FormattedLogWithLineSources {
+  return formatNormalizedLogWithLineSources(entries, {
     gapThresholdMs: readGapThresholdMs(),
     displayTimezone,
   });
@@ -131,7 +132,7 @@ function parseSourceLog(sourceDocument: vscode.TextDocument): LogEntry[] {
 async function openVirtualNormalizedDocument(
   provider: NormalizedViewContentProvider,
   sourceDocument: vscode.TextDocument,
-  content: string,
+  formatted: FormattedLogWithLineSources,
   fileTag: string
 ): Promise<void> {
   const sourceBaseName = sourceDocument.uri.path.split("/").pop() ?? "log";
@@ -143,7 +144,10 @@ async function openVirtualNormalizedDocument(
     path: `/${sourceNameWithoutExtension}.${fileTag}-${nextViewCounter(fileTag)}.log`,
   });
 
-  provider.register(uri, content);
+  provider.register(uri, formatted.text, {
+    sourceUris: [sourceDocument.uri],
+    lineSources: formatted.lineSources,
+  });
 
   const normalizedDocument = await vscode.workspace.openTextDocument(uri);
   await vscode.window.showTextDocument(normalizedDocument, { preview: false });
@@ -185,9 +189,9 @@ export function createShowNormalizedViewCommand(
     }
 
     const entries = parseSourceLog(sourceDocument);
-    const content = formatNormalizedWithGap(entries);
+    const formatted = formatNormalizedWithGap(entries);
 
-    await openVirtualNormalizedDocument(provider, sourceDocument, content, "normalized");
+    await openVirtualNormalizedDocument(provider, sourceDocument, formatted, "normalized");
   };
 }
 
@@ -213,9 +217,9 @@ export function createShowNormalizedViewFilteredBySeverityCommand(
     }
 
     const filteredEntries = filterEntriesBySeverity(entries, selectedSeverities);
-    const content = formatNormalizedWithGap(filteredEntries);
+    const formatted = formatNormalizedWithGap(filteredEntries);
 
-    await openVirtualNormalizedDocument(provider, sourceDocument, content, "severity-filtered");
+    await openVirtualNormalizedDocument(provider, sourceDocument, formatted, "severity-filtered");
   };
 }
 
@@ -247,9 +251,9 @@ export function createShowNormalizedViewFilteredByDateRangeCommand(
 
     const entries = parseSourceLog(sourceDocument);
     const filteredEntries = filterEntriesByDateRange(entries, { startMs, endMs });
-    const content = formatNormalizedWithGap(filteredEntries, displayTimezone);
+    const formatted = formatNormalizedWithGap(filteredEntries, displayTimezone);
 
-    await openVirtualNormalizedDocument(provider, sourceDocument, content, "date-range-filtered");
+    await openVirtualNormalizedDocument(provider, sourceDocument, formatted, "date-range-filtered");
 
     reportHiddenLineCount("指定範囲外の", entries, filteredEntries);
   };
@@ -296,12 +300,12 @@ export function createShowNormalizedViewFilteredByDateRangeAndSeverityCommand(
       filterEntriesBySeverity(entries, selectedSeverities),
       { startMs, endMs }
     );
-    const content = formatNormalizedWithGap(filteredEntries, displayTimezone);
+    const formatted = formatNormalizedWithGap(filteredEntries, displayTimezone);
 
     await openVirtualNormalizedDocument(
       provider,
       sourceDocument,
-      content,
+      formatted,
       "date-range-severity-filtered"
     );
 
@@ -341,12 +345,12 @@ export function createShowNormalizedViewFilteredByIgnorePatternCommand(
       return;
     }
     const filteredEntries = filterResult.entries;
-    const content = formatNormalizedWithGap(filteredEntries);
+    const formatted = formatNormalizedWithGap(filteredEntries);
 
     await openVirtualNormalizedDocument(
       provider,
       sourceDocument,
-      content,
+      formatted,
       "ignore-pattern-filtered"
     );
 
@@ -427,9 +431,9 @@ export function createShowNormalizedViewFilteredCommand(
       return;
     }
     const filteredEntries = filterResult.entries;
-    const content = formatNormalizedWithGap(filteredEntries, displayTimezone);
+    const formatted = formatNormalizedWithGap(filteredEntries, displayTimezone);
 
-    await openVirtualNormalizedDocument(provider, sourceDocument, content, "filtered");
+    await openVirtualNormalizedDocument(provider, sourceDocument, formatted, "filtered");
 
     reportHiddenLineCount("条件に合わない", entries, filteredEntries);
   };
@@ -461,10 +465,10 @@ export function createShowCollapsedViewCommand(
 
     const entries = parseSourceLog(sourceDocument);
     const items = collapseRepeatedEntries(entries, { threshold });
-    const content = formatCollapsedLog(entries, items, {
+    const formatted = formatCollapsedLogWithLineSources(entries, items, {
       displayTimezone: readDisplayTimezone(),
     });
 
-    await openVirtualNormalizedDocument(provider, sourceDocument, content, "collapsed");
+    await openVirtualNormalizedDocument(provider, sourceDocument, formatted, "collapsed");
   };
 }

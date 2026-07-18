@@ -84,6 +84,12 @@ export interface MergedEntry {
   readonly entry: LogEntry;
   readonly fileName: string;
   readonly kind: string;
+  /**
+   * 由来ファイルの、{@link mergeLogFiles} へ渡した入力配列上のインデックス。
+   * 同名ファイルが異なるフォルダに存在するケースでも元ファイルを一意に
+   * 識別するため、`fileName` ではなくこちらを使う（issue #137）。
+   */
+  readonly fileIndex: number;
 }
 
 /**
@@ -129,7 +135,8 @@ export function mergeLogFiles(
 ): MergedEntry[] {
   const merged: MergedEntry[] = [];
 
-  for (const file of files) {
+  for (let fileIndex = 0; fileIndex < files.length; fileIndex++) {
+    const file = files[fileIndex];
     const kind = deriveLogKind(file.fileName);
     const fileParseOptions =
       file.sourceUtcOffsetMinutes !== undefined
@@ -137,7 +144,7 @@ export function mergeLogFiles(
         : parseOptions;
     const entries = applyClockSkew(parseLog(file.text, fileParseOptions), file.clockSkewMs ?? 0);
     for (const entry of entries) {
-      merged.push({ entry, fileName: file.fileName, kind });
+      merged.push({ entry, fileName: file.fileName, kind, fileIndex });
     }
   }
 

@@ -1,4 +1,5 @@
 import type { LogEntry } from "./types";
+import type { FormattedLogWithLineSources, LineSource } from "./lineSources";
 import { computeMaxLineNumber, formatGutter } from "./gutter";
 import { formatTimestampForDisplay, type DisplayTimezone } from "./timezone";
 import { computeGapMs, formatGapMarkerText, GAP_MARKER_LABEL } from "./gapDetection";
@@ -46,8 +47,22 @@ export function formatNormalizedLog(
   entries: readonly LogEntry[],
   options: FormatNormalizedLogOptions = {}
 ): string {
+  return formatNormalizedLogWithLineSources(entries, options).text;
+}
+
+/**
+ * {@link formatNormalizedLog} と同じテキストに加えて、表示行ごとの元ログ
+ * 物理行の対応表を返す（issue #137）。対応表を別ロジックで再計算すると
+ * ギャップマーカー挿入等の行構成と食い違うリスクがあるため、同じループで
+ * 本文と一緒に組み立てる。
+ */
+export function formatNormalizedLogWithLineSources(
+  entries: readonly LogEntry[],
+  options: FormatNormalizedLogOptions = {}
+): FormattedLogWithLineSources {
   const gutterWidth = String(computeMaxLineNumber(entries)).length;
   const outputLines: string[] = [];
+  const lineSources: (LineSource | undefined)[] = [];
   const gapThresholdMs = options.gapThresholdMs;
   const displayTimezone = options.displayTimezone ?? 0;
 
@@ -58,6 +73,7 @@ export function formatNormalizedLog(
       const gapMs = computeGapMs(entries[i - 1].timestampMs, entry.timestampMs, gapThresholdMs);
       if (gapMs !== undefined) {
         outputLines.push(formatGutter(GAP_MARKER_LABEL, gutterWidth) + formatGapMarkerText(gapMs));
+        lineSources.push(undefined);
       }
     }
 
@@ -67,11 +83,13 @@ export function formatNormalizedLog(
       ? `${formatTimestampForDisplay(entry.timestampMs, displayTimezone)} ${entry.severity ?? SEVERITY_PLACEHOLDER} ${messageLines[0]}`
       : messageLines[0];
     outputLines.push(formatGutter(entry.startLine, gutterWidth) + headerText);
+    lineSources.push({ fileIndex: 0, line: entry.startLine });
 
     for (let j = 1; j < messageLines.length; j++) {
       outputLines.push(formatGutter(entry.startLine + j, gutterWidth) + messageLines[j]);
+      lineSources.push({ fileIndex: 0, line: entry.startLine + j });
     }
   }
 
-  return outputLines.join("\n");
+  return { text: outputLines.join("\n"), lineSources };
 }

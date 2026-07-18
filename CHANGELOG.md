@@ -8,6 +8,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- New `Totonoe Log: Go to Source Line` command jumps from the current line
+  of a normalized, filtered, collapsed, or merged view to the corresponding
+  physical line of the original log file. In merged views it resolves the
+  correct file even when same-named files live in different folders. A
+  collapsed group header jumps to the first line of its range; generated
+  lines such as gap markers show an explanatory message instead (issue #137).
+
 ### Fixed
 
 - Date/time range boundaries now use the timezone selected by

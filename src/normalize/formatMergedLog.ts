@@ -1,4 +1,5 @@
 import { computeMaxLineNumber, formatGutter } from "./gutter";
+import type { FormattedLogWithLineSources, LineSource } from "./lineSources";
 import type { MergedEntry } from "./mergeLogFiles";
 import { formatTimestampForDisplay, type DisplayTimezone } from "./timezone";
 import { computeGapMs, formatGapMarkerText, GAP_MARKER_LABEL } from "./gapDetection";
@@ -51,6 +52,21 @@ export function formatMergedLog(
   mergedEntries: readonly MergedEntry[],
   options: FormatMergedLogOptions = {}
 ): string {
+  return formatMergedLogWithLineSources(mergedEntries, options).text;
+}
+
+/**
+ * {@link formatMergedLog} と同じテキストに加えて、表示行ごとの元ログ物理行の
+ * 対応表を返す（issue #137）。元ファイルは {@link MergedEntry.fileIndex} で
+ * 表し、同名ファイルが異なるフォルダにあっても呼び出し側が入力ファイル配列
+ * から正しい URI を引けるようにする。対応表を別ロジックで再計算すると
+ * ギャップマーカー挿入等の行構成と食い違うリスクがあるため、同じループで
+ * 本文と一緒に組み立てる。
+ */
+export function formatMergedLogWithLineSources(
+  mergedEntries: readonly MergedEntry[],
+  options: FormatMergedLogOptions = {}
+): FormattedLogWithLineSources {
   const displayTimezone = options.displayTimezone ?? 0;
   const gapThresholdMs = options.gapThresholdMs;
   const fileNameWidth = computeColumnWidth(mergedEntries, (m) => m.fileName);
@@ -61,9 +77,10 @@ export function formatMergedLog(
   const blankPrefix = `${" ".repeat(fileNameWidth)} | ${" ".repeat(kindWidth)} | `;
 
   const outputLines: string[] = [];
+  const lineSources: (LineSource | undefined)[] = [];
 
   for (let i = 0; i < mergedEntries.length; i++) {
-    const { entry, fileName, kind } = mergedEntries[i];
+    const { entry, fileName, kind, fileIndex } = mergedEntries[i];
 
     if (i > 0) {
       const gapMs = computeGapMs(
@@ -75,6 +92,7 @@ export function formatMergedLog(
         outputLines.push(
           blankPrefix + formatGutter(GAP_MARKER_LABEL, gutterWidth) + formatGapMarkerText(gapMs)
         );
+        lineSources.push(undefined);
       }
     }
 
@@ -85,11 +103,13 @@ export function formatMergedLog(
       ? `${formatTimestampForDisplay(entry.timestampMs, displayTimezone)} ${entry.severity ?? SEVERITY_PLACEHOLDER} ${messageLines[0]}`
       : messageLines[0];
     outputLines.push(headerPrefix + formatGutter(entry.startLine, gutterWidth) + headerText);
+    lineSources.push({ fileIndex, line: entry.startLine });
 
     for (let j = 1; j < messageLines.length; j++) {
       outputLines.push(blankPrefix + formatGutter(entry.startLine + j, gutterWidth) + messageLines[j]);
+      lineSources.push({ fileIndex, line: entry.startLine + j });
     }
   }
 
-  return outputLines.join("\n");
+  return { text: outputLines.join("\n"), lineSources };
 }
