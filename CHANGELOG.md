@@ -10,6 +10,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- Date/time range boundaries now use the timezone selected by
+  `totonoeLog.timezone.display`, so entering a timestamp as shown in a
+  normalized or merged view no longer silently filters out the matching
+  entry. Date-only bounds also cover the selected timezone's whole day
+  (issue #134).
 - Out-of-range time components and UTC offsets in built-in and custom
   calendar timestamp formats are no longer normalized into a different
   valid instant (issue #135).

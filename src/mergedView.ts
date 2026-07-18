@@ -208,6 +208,7 @@ export function createShowMergedViewFilteredCommand(
     }
 
     const entries = mergedEntries.map((merged) => merged.entry);
+    const displayTimezone = readDisplayTimezone();
 
     let severities: Set<string> | undefined;
     if (selectedKinds.has("severity")) {
@@ -219,13 +220,13 @@ export function createShowMergedViewFilteredCommand(
 
     let dateRange: FilterCriteria["dateRange"];
     if (selectedKinds.has("dateRange")) {
-      const startMs = await promptDateBoundary("開始日時", "start");
+      const startMs = await promptDateBoundary("開始日時", "start", displayTimezone);
       // null はキャンセル、または不正な入力による中断を表す。
       if (startMs === null) {
         return;
       }
 
-      const endMs = await promptDateBoundary("終了日時", "end");
+      const endMs = await promptDateBoundary("終了日時", "end", displayTimezone);
       if (endMs === null) {
         return;
       }
@@ -256,7 +257,7 @@ export function createShowMergedViewFilteredCommand(
     }
     const filteredMergedEntries = filterResult.entries;
     const content = formatMergedLog(filteredMergedEntries, {
-      displayTimezone: readDisplayTimezone(),
+      displayTimezone,
       gapThresholdMs: readGapThresholdMs(),
     });
 

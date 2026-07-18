@@ -32,6 +32,14 @@ Totonoe Log はログ調査のための VS Code 拡張機能です。実際の�
 
 各条件は単独のコマンドとしても使えます（`... Filtered by Severity` / `... Filtered by Date Range` / `... Filtered by Date Range and Severity` / `... Filtered by Ignore Pattern`）。
 
+日付/時刻の境界は `totonoeLog.timezone.display` で選んだタイムゾーンを
+基準に解釈します。たとえばビューに
+`2024-01-02T12:04:05.000+09:00` と表示されていれば、壁時計部分の
+`2024-01-02 12:04:05` をそのまま入力できます。日付のみの入力は、選択した
+タイムゾーンでその日全体を対象にします。`local` では通常日時をこのマシンの
+ローカルタイムゾーンで解釈し、DST切り替えで存在しない時刻は拒否、重複する
+時刻は早い側として解釈します。
+
 ## 複数ファイルをマージする
 
 `Totonoe Log: Show Merged View` は、複数のログファイルを日時ベースで1本のタイムラインにマージし、ファイルを横断した調査を可能にします。ファイル名と、ファイルの「種類」列付きです（例: `message_20240101.log` → 種類 `message`）。

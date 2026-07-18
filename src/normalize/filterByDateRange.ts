@@ -1,4 +1,5 @@
 import type { LogEntry } from "./types";
+import type { DisplayTimezone } from "./timezone";
 
 /**
  * 日付範囲の境界を開始境界として使うか終了境界として使うかの区別。
@@ -13,17 +14,22 @@ export type DateBoundaryKind = "start" | "end";
  * 日付範囲の境界（開始・終了いずれか一方）として使う入力文字列を解析する。
  *
  * `YYYY-MM-DD` または `YYYY-MM-DD HH:mm[:ss]`（`T` 区切りも可）を受け付ける。
- * タイムゾーン表記は持たず、他のタイムスタンプ形式（{@link ISO_8601_FORMAT} 等）
- * と同様に常に UTC として解釈する。時刻を省略した場合、`boundaryKind` に
- * 応じて開始境界なら `00:00:00.000`、終了境界なら `23:59:59.999` を補う
- * （終了境界に開始境界と同じ `00:00:00` を補うと、その日のエントリが
- * `timestampMs > endMs` の判定でほぼ除外されてしまうため）。
+ * タイムゾーン表記は持たず、`displayTimezone` の壁時計時刻として解釈する。
+ * 時刻を省略した場合、`boundaryKind` に応じて開始境界なら
+ * `00:00:00.000`、終了境界なら `23:59:59.999` を補う（終了境界に開始境界
+ * と同じ `00:00:00` を補うと、その日のエントリが `timestampMs > endMs`
+ * の判定でほぼ除外されてしまうため）。
+ *
+ * `"local"` の DST 境界では、存在しない壁時計時刻は `undefined` を返す。
+ * 2回現れる壁時計時刻は JavaScript `Date` の互換動作に合わせ、早い側の
+ * インスタントを選ぶ。UTC表示時は既定値 `0` により従来の解釈を維持する。
  * 形式に一致しない、または存在しない日付（例: 2024-02-30）の場合は
  * `undefined` を返す。
  */
 export function parseDateBoundary(
   input: string,
-  boundaryKind: DateBoundaryKind
+  boundaryKind: DateBoundaryKind,
+  displayTimezone: DisplayTimezone = 0
 ): number | undefined {
   const match = /^(\d{4})-(\d{2})-(\d{2})(?:[T ](\d{2}):(\d{2})(?::(\d{2}))?)?$/.exec(
     input.trim()
@@ -49,11 +55,28 @@ export function parseDateBoundary(
     return undefined;
   }
 
-  const epochMs = Date.UTC(year, month, day, hour, minute, second, millisecond);
+  if (displayTimezone === "local") {
+    const epochMs = new Date(year, month, day, hour, minute, second, millisecond).getTime();
+    const check = new Date(epochMs);
+    if (
+      check.getFullYear() !== year ||
+      check.getMonth() !== month ||
+      check.getDate() !== day ||
+      check.getHours() !== hour ||
+      check.getMinutes() !== minute ||
+      check.getSeconds() !== second ||
+      check.getMilliseconds() !== millisecond
+    ) {
+      return undefined;
+    }
+    return epochMs;
+  }
+
+  const wallClockMs = Date.UTC(year, month, day, hour, minute, second, millisecond);
 
   // Date.UTC は範囲外の値を繰り上げ処理するため（例: 2024-02-30 → 2024-03-01）、
-  // 逆算して比較することで不正な日付をサイレントに受け入れないようにする。
-  const check = new Date(epochMs);
+  // オフセット適用前の壁時計を逆算して不正な日付を拒否する。
+  const check = new Date(wallClockMs);
   if (
     check.getUTCFullYear() !== year ||
     check.getUTCMonth() !== month ||
@@ -62,7 +85,7 @@ export function parseDateBoundary(
     return undefined;
   }
 
-  return epochMs;
+  return wallClockMs - displayTimezone * 60 * 1000;
 }
 
 /** {@link filterEntriesByDateRange} の絞り込み範囲。両端とも省略可能（片側のみの指定を許す）。 */

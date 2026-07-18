@@ -2416,6 +2416,52 @@ suite("Totonoe Log timezone settings (#13)", () => {
     }
   });
 
+  test("filters by the wall-clock time shown in the configured display timezone (issue #134)", async function () {
+    this.timeout(10000);
+    const extension = vscode.extensions.getExtension("upu.totonoe-log");
+    await extension!.activate();
+
+    const config = vscode.workspace.getConfiguration("totonoeLog.timezone");
+    await config.update("display", "+09:00", vscode.ConfigurationTarget.Global);
+
+    const source = await vscode.workspace.openTextDocument({
+      content: [
+        "2024-01-02T03:04:04Z INFO before",
+        "2024-01-02T03:04:05Z INFO target",
+        "2024-01-02T03:04:06Z INFO after",
+      ].join("\n"),
+      language: "log",
+    });
+    await vscode.window.showTextDocument(source);
+
+    const originalShowInputBox = vscode.window.showInputBox;
+    const prompts: string[] = [];
+    (vscode.window as any).showInputBox = async (
+      options: vscode.InputBoxOptions
+    ): Promise<string> => {
+      prompts.push(options.prompt ?? "");
+      return "2024-01-02 12:04:05";
+    };
+
+    try {
+      await vscode.commands.executeCommand("totonoeLog.showNormalizedViewFilteredByDateRange");
+
+      const activeEditor = vscode.window.activeTextEditor;
+      assert.ok(activeEditor, "a filtered normalized view editor should be shown");
+      assert.strictEqual(
+        activeEditor!.document.getText(),
+        "2 | 2024-01-02T12:04:05.000+09:00 INFO target"
+      );
+      assert.ok(
+        prompts.every((prompt) => prompt.includes("表示タイムゾーン +09:00 基準")),
+        "both boundary prompts should explain the display-timezone basis"
+      );
+    } finally {
+      (vscode.window as any).showInputBox = originalShowInputBox;
+      await config.update("display", undefined, vscode.ConfigurationTarget.Global);
+    }
+  });
+
   test("interprets zone-less timestamps with the offset configured via totonoeLog.timezone.sourceOffset", async function () {
     this.timeout(10000);
     const extension = vscode.extensions.getExtension("upu.totonoe-log");

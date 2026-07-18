@@ -9,6 +9,7 @@ import {
   formatCollapsedLog,
   applyClockSkew,
   DEFAULT_COLLAPSE_THRESHOLD,
+  type DisplayTimezone,
   type FilterCriteria,
   type LogEntry,
 } from "./normalize";
@@ -67,10 +68,13 @@ function nextViewCounter(fileTag: string): number {
  * 折りたたみビュー以外の全コマンドがこのオプション組み立てを共有するため
  * 一箇所にまとめる。
  */
-function formatNormalizedWithGap(entries: readonly LogEntry[]): string {
+function formatNormalizedWithGap(
+  entries: readonly LogEntry[],
+  displayTimezone: DisplayTimezone = readDisplayTimezone()
+): string {
   return formatNormalizedLog(entries, {
     gapThresholdMs: readGapThresholdMs(),
-    displayTimezone: readDisplayTimezone(),
+    displayTimezone,
   });
 }
 
@@ -229,20 +233,21 @@ export function createShowNormalizedViewFilteredByDateRangeCommand(
       return;
     }
 
-    const startMs = await promptDateBoundary("開始日時", "start");
+    const displayTimezone = readDisplayTimezone();
+    const startMs = await promptDateBoundary("開始日時", "start", displayTimezone);
     // null はキャンセル、または不正な入力による中断を表す。
     if (startMs === null) {
       return;
     }
 
-    const endMs = await promptDateBoundary("終了日時", "end");
+    const endMs = await promptDateBoundary("終了日時", "end", displayTimezone);
     if (endMs === null) {
       return;
     }
 
     const entries = parseSourceLog(sourceDocument);
     const filteredEntries = filterEntriesByDateRange(entries, { startMs, endMs });
-    const content = formatNormalizedWithGap(filteredEntries);
+    const content = formatNormalizedWithGap(filteredEntries, displayTimezone);
 
     await openVirtualNormalizedDocument(provider, sourceDocument, content, "date-range-filtered");
 
@@ -267,6 +272,7 @@ export function createShowNormalizedViewFilteredByDateRangeAndSeverityCommand(
     }
 
     const entries = parseSourceLog(sourceDocument);
+    const displayTimezone = readDisplayTimezone();
 
     const selectedSeverities = await promptSeveritySelection(entries);
     // ユーザーがピッカーを Esc 等でキャンセルした場合は何もしない。
@@ -274,13 +280,13 @@ export function createShowNormalizedViewFilteredByDateRangeAndSeverityCommand(
       return;
     }
 
-    const startMs = await promptDateBoundary("開始日時", "start");
+    const startMs = await promptDateBoundary("開始日時", "start", displayTimezone);
     // null はキャンセル、または不正な入力による中断を表す。
     if (startMs === null) {
       return;
     }
 
-    const endMs = await promptDateBoundary("終了日時", "end");
+    const endMs = await promptDateBoundary("終了日時", "end", displayTimezone);
     if (endMs === null) {
       return;
     }
@@ -290,7 +296,7 @@ export function createShowNormalizedViewFilteredByDateRangeAndSeverityCommand(
       filterEntriesBySeverity(entries, selectedSeverities),
       { startMs, endMs }
     );
-    const content = formatNormalizedWithGap(filteredEntries);
+    const content = formatNormalizedWithGap(filteredEntries, displayTimezone);
 
     await openVirtualNormalizedDocument(
       provider,
@@ -373,6 +379,7 @@ export function createShowNormalizedViewFilteredCommand(
     }
 
     const entries = parseSourceLog(sourceDocument);
+    const displayTimezone = readDisplayTimezone();
 
     let severities: Set<string> | undefined;
     if (selectedKinds.has("severity")) {
@@ -384,13 +391,13 @@ export function createShowNormalizedViewFilteredCommand(
 
     let dateRange: FilterCriteria["dateRange"];
     if (selectedKinds.has("dateRange")) {
-      const startMs = await promptDateBoundary("開始日時", "start");
+      const startMs = await promptDateBoundary("開始日時", "start", displayTimezone);
       // null はキャンセル、または不正な入力による中断を表す。
       if (startMs === null) {
         return;
       }
 
-      const endMs = await promptDateBoundary("終了日時", "end");
+      const endMs = await promptDateBoundary("終了日時", "end", displayTimezone);
       if (endMs === null) {
         return;
       }
@@ -420,7 +427,7 @@ export function createShowNormalizedViewFilteredCommand(
       return;
     }
     const filteredEntries = filterResult.entries;
-    const content = formatNormalizedWithGap(filteredEntries);
+    const content = formatNormalizedWithGap(filteredEntries, displayTimezone);
 
     await openVirtualNormalizedDocument(provider, sourceDocument, content, "filtered");
 
