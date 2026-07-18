@@ -1,4 +1,5 @@
 import * as vscode from "vscode";
+import type { LineSource } from "./normalize";
 
 /** 正規化ビュー用の仮想ドキュメントに割り当てる URI スキーム。 */
 export const NORMALIZED_VIEW_SCHEME = "totonoe-log-normalized";
@@ -66,15 +67,28 @@ export const CONTENT_LOST_PLACEHOLDER =
   "Totonoe Log: このビューの内容は失われました。コマンドを再実行して開き直してください。";
 
 /**
+ * 仮想ドキュメントの表示行から元ログの該当行へ移動するための対応情報
+ * （issue #137）。`lineSources` の各要素は表示行（0始まり）に対応し、
+ * `fileIndex` で `sourceUris` から元ファイルの URI を引く。
+ */
+export interface SourceLineMap {
+  /** 元ログファイルの URI 一覧。{@link LineSource.fileIndex} で参照する。 */
+  readonly sourceUris: readonly vscode.Uri[];
+  /** 表示行ごとの元位置。ギャップマーカー等の生成行は `undefined`。 */
+  readonly lineSources: readonly (LineSource | undefined)[];
+}
+
+/**
  * URIごとにテキスト内容を保持する読み取り専用の仮想ドキュメントプロバイダ。
  * 正規化ビュー・比較ビューなど、スキームだけが異なる複数の機能が共有する
- * 基底実装。ドキュメントが閉じられたら保持内容を解放し、コマンドを繰り返し
- * 実行してもメモリが増え続けないようにする。
+ * 基底実装。ドキュメントが閉じられたら保持内容（本文と行対応情報の両方）を
+ * 解放し、コマンドを繰り返し実行してもメモリが増え続けないようにする。
  */
 export class VirtualDocumentContentProvider
   implements vscode.TextDocumentContentProvider, vscode.Disposable
 {
   private readonly contentByUri = new Map<string, string>();
+  private readonly sourceLineMapByUri = new Map<string, SourceLineMap>();
   private readonly closeListener: vscode.Disposable;
 
   constructor(private readonly scheme: string) {
@@ -83,14 +97,26 @@ export class VirtualDocumentContentProvider
     });
   }
 
-  register(uri: vscode.Uri, content: string): void {
+  register(uri: vscode.Uri, content: string, sourceLineMap?: SourceLineMap): void {
     this.contentByUri.set(uri.toString(), content);
+    if (sourceLineMap) {
+      this.sourceLineMapByUri.set(uri.toString(), sourceLineMap);
+    }
+  }
+
+  /**
+   * 指定した URI の仮想ドキュメントに紐づく行対応情報を返す。登録されて
+   * いない（比較ビュー等の対象外ビュー、または解放済み）場合は `undefined`。
+   */
+  getSourceLineMap(uri: vscode.Uri): SourceLineMap | undefined {
+    return this.sourceLineMapByUri.get(uri.toString());
   }
 
   /** 指定した URI の保持内容を破棄する。対象スキーム以外の URI は無視する。 */
   release(uri: vscode.Uri): void {
     if (uri.scheme === this.scheme) {
       this.contentByUri.delete(uri.toString());
+      this.sourceLineMapByUri.delete(uri.toString());
     }
   }
 

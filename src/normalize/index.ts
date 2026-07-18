@@ -2,7 +2,8 @@ export type { LogEntry, TimestampFormat, TimestampParseContext } from "./types";
 export type { ParseLogOptions } from "./parseLog";
 export { parseLog } from "./parseLog";
 export type { FormatNormalizedLogOptions } from "./formatNormalizedLog";
-export { formatNormalizedLog } from "./formatNormalizedLog";
+export { formatNormalizedLog, formatNormalizedLogWithLineSources } from "./formatNormalizedLog";
+export type { LineSource, FormattedLogWithLineSources } from "./lineSources";
 export { DEFAULT_GAP_THRESHOLD_SECONDS } from "./gapDetection";
 export type {
   DisplayTimezone,
@@ -27,11 +28,11 @@ export { formatMaskedLogForCompare, maskLogTextForCopy } from "./maskForCompare"
 export type { CollapseOptions, CollapsedItem } from "./collapseRepeatedEntries";
 export { DEFAULT_COLLAPSE_THRESHOLD, collapseRepeatedEntries } from "./collapseRepeatedEntries";
 export type { FormatCollapsedLogOptions } from "./formatCollapsedLog";
-export { formatCollapsedLog } from "./formatCollapsedLog";
+export { formatCollapsedLog, formatCollapsedLogWithLineSources } from "./formatCollapsedLog";
 export type { LogFileInput, MergedEntry } from "./mergeLogFiles";
 export { deriveLogKind, mergeLogFiles } from "./mergeLogFiles";
 export type { FormatMergedLogOptions } from "./formatMergedLog";
-export { formatMergedLog } from "./formatMergedLog";
+export { formatMergedLog, formatMergedLogWithLineSources } from "./formatMergedLog";
 export { UNRECOGNIZED_SEVERITY_KEY, getDistinctSeverities, filterEntriesBySeverity } from "./filterBySeverity";
 export type { DateBoundaryKind, DateRange } from "./filterByDateRange";
 export { parseDateBoundary, filterEntriesByDateRange } from "./filterByDateRange";
