@@ -1,0 +1,12 @@
+2024-02-01T09:00:00.000Z INFO Starting application server
+2024-02-01T09:00:00.400Z INFO Loaded configuration from /etc/app/config.yaml
+2024-02-01T09:00:01.100Z WARN Connection pool at 80% capacity
+2024-02-01T09:00:01.900Z ERROR Failed to acquire database connection
+java.sql.SQLException: Connection timed out
+	at com.example.db.ConnectionPool.acquire(ConnectionPool.java:142)
+	at com.example.app.Service.handleRequest(Service.java:57)
+2024-02-01T09:00:48.200Z INFO Connection pool recovered
+2024-02-01T09:00:49.000Z INFO Handling request /api/orders
+2024-02-01T09:00:49.050Z INFO Handling request /api/orders
+2024-02-01T09:00:49.100Z INFO Handling request /api/orders
+2024-02-01T09:00:50.100Z INFO Request completed in 1100ms

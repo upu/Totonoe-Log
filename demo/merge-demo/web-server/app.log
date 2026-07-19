@@ -1,0 +1,5 @@
+2024-02-01T09:00:00.200Z INFO Web server listening on :8080
+2024-02-01T09:00:01.300Z INFO GET /health 200
+2024-02-01T09:00:02.000Z WARN Upstream app-server unavailable, retrying
+2024-02-01T09:00:48.900Z INFO GET /api/orders 200
+2024-02-01T09:00:50.300Z INFO GET /api/orders 200
