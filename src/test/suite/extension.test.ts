@@ -3319,6 +3319,73 @@ suite("Totonoe Log go to source line (#137)", () => {
     assert.strictEqual(activeEditor!.document.uri.toString(), source.uri.toString());
   });
 
+  test("warns instead of crashing when the source file was deleted before navigating (#156)", async function () {
+    this.timeout(10000);
+    const extension = vscode.extensions.getExtension("upu.totonoe-log");
+    await extension!.activate();
+
+    const fs = await import("node:fs/promises");
+    const os = await import("node:os");
+    const path = await import("node:path");
+
+    const tempDir = await fs.mkdtemp(path.join(os.tmpdir(), "totonoe-log-"));
+    try {
+      const keptPath = path.join(tempDir, "a.log");
+      const deletedPath = path.join(tempDir, "b.log");
+      await fs.writeFile(keptPath, "2024-01-02T03:04:05Z INFO from-a");
+      await fs.writeFile(deletedPath, "2024-01-02T03:04:06Z ERROR from-b");
+
+      const keptUri = vscode.Uri.file(keptPath);
+      const deletedUri = vscode.Uri.file(deletedPath);
+
+      // マージビューは vscode.workspace.fs.readFile で元ファイルを読むため
+      // （openTextDocument を経由しない）、この時点では VSCode 側に元ファイルの
+      // ドキュメントキャッシュが残らず、削除後の openTextDocument が確実に失敗する。
+      await vscode.commands.executeCommand("totonoeLog.mergeSelectedFiles", keptUri, [
+        keptUri,
+        deletedUri,
+      ]);
+
+      const viewEditor = vscode.window.activeTextEditor;
+      assert.ok(viewEditor, "a merged view editor should be shown");
+      assert.strictEqual(viewEditor!.document.uri.scheme, "totonoe-log-merged");
+      // 時系列マージ後の表示2行目（0始まりで1）は b.log 由来のエントリ。
+      viewEditor!.selection = new vscode.Selection(1, 0, 1, 0);
+
+      await fs.rm(deletedPath);
+
+      const originalShowWarningMessage = vscode.window.showWarningMessage;
+      let warningMessage: string | undefined;
+      (vscode.window as any).showWarningMessage = async (message: string) => {
+        warningMessage = message;
+        return undefined;
+      };
+
+      try {
+        await assert.doesNotReject(async () => {
+          await vscode.commands.executeCommand("totonoeLog.goToSourceLine");
+        });
+        assert.ok(
+          warningMessage?.includes("元ログファイルを開けませんでした"),
+          `expected a warning about the missing source file, got: ${warningMessage}`
+        );
+      } finally {
+        (vscode.window as any).showWarningMessage = originalShowWarningMessage;
+      }
+
+      const activeEditor = vscode.window.activeTextEditor;
+      assert.ok(activeEditor, "an editor should remain active");
+      assert.strictEqual(
+        activeEditor!.document.uri.scheme,
+        "totonoe-log-merged",
+        "the command should not navigate away from the view when the source file is missing"
+      );
+    } finally {
+      await vscode.commands.executeCommand("workbench.action.closeAllEditors");
+      await fs.rm(tempDir, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 });
+    }
+  });
+
   test("release() drops the source line map together with the content", async () => {
     const { NormalizedViewContentProvider, NORMALIZED_VIEW_SCHEME } = await import(
       "../../normalizedView"
