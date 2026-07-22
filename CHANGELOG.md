@@ -8,6 +8,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- `Totonoe Log: Go to Source Line` now shows a warning message instead of an
+  unhandled error when the original log file has been deleted, moved, or
+  renamed since the view was opened (issue #156).
+
 ## [0.6.0] - 2026-07-20
 
 ### Added
