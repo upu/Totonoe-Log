@@ -1680,6 +1680,103 @@ suite("Totonoe Log merged view", () => {
   });
 });
 
+suite("Totonoe Log merged view filename hover (#150)", () => {
+  test("shows the full source path when hovering the file name column", async function () {
+    this.timeout(10000);
+    const extension = vscode.extensions.getExtension("upu.totonoe-log");
+    await extension!.activate();
+
+    const fs = await import("node:fs/promises");
+    const os = await import("node:os");
+    const path = await import("node:path");
+
+    const tempDir = await fs.mkdtemp(path.join(os.tmpdir(), "totonoe-log-"));
+    try {
+      const dirA = path.join(tempDir, "app-server");
+      const dirB = path.join(tempDir, "web-server");
+      await fs.mkdir(dirA);
+      await fs.mkdir(dirB);
+      const appAPath = path.join(dirA, "app.log");
+      const appBPath = path.join(dirB, "app.log");
+      await fs.writeFile(appAPath, "2024-01-02T03:04:05Z INFO from-a");
+      await fs.writeFile(appBPath, "2024-01-02T03:04:06Z ERROR from-b");
+
+      const uriA = vscode.Uri.file(appAPath);
+      const uriB = vscode.Uri.file(appBPath);
+
+      await vscode.commands.executeCommand("totonoeLog.mergeSelectedFiles", uriA, [uriA, uriB]);
+
+      const viewEditor = vscode.window.activeTextEditor;
+      assert.ok(viewEditor, "a merged view editor should be shown");
+      const viewUri = viewEditor!.document.uri;
+
+      // 時系列マージ後の表示2行目（0始まりで1）は b/app.log 由来のエントリ。
+      const hovers = (await vscode.commands.executeCommand(
+        "vscode.executeHoverProvider",
+        viewUri,
+        new vscode.Position(1, 0)
+      )) as vscode.Hover[];
+
+      assert.strictEqual(hovers.length, 1, "exactly one hover should be provided");
+      const hoverText = hovers[0].contents
+        .map((content) => (typeof content === "string" ? content : content.value))
+        .join("\n");
+      // vscode.Uri.fsPath はWindowsでドライブレターを小文字化するため、
+      // 大文字小文字を無視して比較する（パス自体は大小文字を区別しない）。
+      assert.ok(
+        hoverText.toLowerCase().includes(appBPath.toLowerCase()),
+        `hover text should include the full source path (${appBPath}), got: ${hoverText}`
+      );
+    } finally {
+      await vscode.commands.executeCommand("workbench.action.closeAllEditors");
+      await fs.rm(tempDir, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 });
+    }
+  });
+
+  test("shows no hover outside the file name column", async function () {
+    this.timeout(10000);
+    const extension = vscode.extensions.getExtension("upu.totonoe-log");
+    await extension!.activate();
+
+    const fs = await import("node:fs/promises");
+    const os = await import("node:os");
+    const path = await import("node:path");
+
+    const tempDir = await fs.mkdtemp(path.join(os.tmpdir(), "totonoe-log-"));
+    try {
+      const appPath = path.join(tempDir, "app.log");
+      await fs.writeFile(appPath, "2024-01-02T03:04:05Z INFO hello");
+      const uri = vscode.Uri.file(appPath);
+
+      await vscode.commands.executeCommand("totonoeLog.mergeSelectedFiles", uri, [
+        uri,
+        uri,
+      ]);
+
+      const viewEditor = vscode.window.activeTextEditor;
+      assert.ok(viewEditor, "a merged view editor should be shown");
+      const viewUri = viewEditor!.document.uri;
+      const lineText = viewEditor!.document.lineAt(0).text;
+      const afterColumnCharacter = lineText.length - 1;
+
+      const hovers = (await vscode.commands.executeCommand(
+        "vscode.executeHoverProvider",
+        viewUri,
+        new vscode.Position(0, afterColumnCharacter)
+      )) as vscode.Hover[];
+
+      assert.strictEqual(
+        hovers.length,
+        0,
+        "no hover should be provided outside the file name column"
+      );
+    } finally {
+      await vscode.commands.executeCommand("workbench.action.closeAllEditors");
+      await fs.rm(tempDir, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 });
+    }
+  });
+});
+
 suite("Totonoe Log merged view filtered (combined)", () => {
   /**
    * "セベリティ" / "日付範囲" / "無視パターン" の条件選択ピッカーを、指定した

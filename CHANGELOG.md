@@ -8,6 +8,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- The merged view now shows the full source path (including its folder) in
+  a hover tooltip when you point at the file name column, making it
+  possible to tell apart same-named files merged from different folders
+  (issue #150).
+
 ### Fixed
 
 - `Totonoe Log: Go to Source Line` now shows a warning message instead of an
