@@ -42,7 +42,7 @@ and a repeated time selects its earlier occurrence.
 
 ## Merge multiple files
 
-`Totonoe Log: Show Merged View` merges multiple log files by timestamp into a single timeline for cross-file investigation, with source file name and file "kind" columns (e.g. `message_20240101.log` → kind `message`).
+`Totonoe Log: Show Merged View` merges multiple log files by timestamp into a single timeline for cross-file investigation, with source file name and file "kind" columns (e.g. `message_20240101.log` → kind `message`). Hovering over the file name column shows the full source path, so same-named files merged from different folders can still be told apart.
 
 Each selected file is decoded with VS Code's resource-scoped `files.encoding`
 setting. Normal VS Code configuration precedence applies, so a workspace-folder

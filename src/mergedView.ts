@@ -12,6 +12,7 @@ import {
 import {
   VirtualDocumentContentProvider,
   MERGED_VIEW_SCHEME,
+  type SourceLineMap,
 } from "./virtualDocumentContentProvider";
 import {
   promptSeveritySelection,
@@ -524,5 +525,61 @@ export function createMergeSelectedFilesCommand(
     }
 
     await openMergedView(provider, fileUris);
+  };
+}
+
+/**
+ * マージビューの行から、そのファイル名列の区切り（`" | "`）より前の文字数を
+ * 返す。`formatMergedLogWithLineSources` が `fileName.padEnd(fileNameWidth)`
+ * の直後に固定で `" | "` を置く実装（`src/normalize/formatMergedLog.ts`）に
+ * 依存しており、行ごとに実際の区切り位置を探すことで、別ロジックで
+ * 列幅を再計算せずに済む。区切りが無ければ `undefined`（マージビュー以外の
+ * 行、または内容が壊れている場合）。
+ */
+function findFileNameColumnEnd(lineText: string): number | undefined {
+  const separatorIndex = lineText.indexOf(" | ");
+  return separatorIndex === -1 ? undefined : separatorIndex;
+}
+
+/**
+ * マージビューでファイル名列にカーソルを合わせると、対応する元ログファイルの
+ * フルパス（フォルダ含む）をホバー表示するプロバイダの本体（issue #150）。
+ * 異なるフォルダに同名ファイルが存在する場合、ファイル名列だけでは見分けが
+ * つかないため、`Go to Source Line`（issue #137）と同じ表示行→元URIの対応表
+ * （{@link SourceLineMap}）を再利用する。継続行・区切り行はファイル名列が
+ * 空白で埋められているだけで対応表自体は引けるため（区切り行は対応情報が
+ * 無く自然に対象外になる）、列の範囲判定だけで十分。
+ */
+export function createMergedViewFilenameHoverProvider(
+  provider: MergedViewContentProvider
+): vscode.HoverProvider {
+  return {
+    provideHover(document, position) {
+      const sourceLineMap: SourceLineMap | undefined = provider.getSourceLineMap(document.uri);
+      if (!sourceLineMap) {
+        return undefined;
+      }
+
+      const lineText = document.lineAt(position.line).text;
+      const columnEnd = findFileNameColumnEnd(lineText);
+      if (columnEnd === undefined || position.character > columnEnd) {
+        return undefined;
+      }
+
+      const lineSource = sourceLineMap.lineSources[position.line];
+      if (!lineSource) {
+        return undefined;
+      }
+
+      const sourceUri = sourceLineMap.sourceUris[lineSource.fileIndex];
+      if (!sourceUri) {
+        return undefined;
+      }
+
+      return new vscode.Hover(
+        sourceUri.fsPath,
+        new vscode.Range(position.line, 0, position.line, columnEnd)
+      );
+    },
   };
 }
