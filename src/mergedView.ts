@@ -350,21 +350,57 @@ async function openMergedView(
   await provider.openDocument(formatted, fileUris, `/merged-${mergedViewCounter}.log`);
 }
 
+/** フォルダを除いたファイルの URI だけを残す。 */
+async function filterOutFolders(uris: readonly vscode.Uri[]): Promise<vscode.Uri[]> {
+  const files: vscode.Uri[] = [];
+  for (const uri of uris) {
+    const stat = await vscode.workspace.fs.stat(uri);
+    if ((stat.type & vscode.FileType.Directory) === 0) {
+      files.push(uri);
+    }
+  }
+  return files;
+}
+
 /**
- * ファイル選択ダイアログで、マージ対象のログファイルを複数選ばせ、時系列
- * 順にマージした結果を開くコマンドの本体。
+ * エクスプローラのコンテキストメニューコマンドが渡す `(クリックされた項目,
+ * 選択項目全体の配列)` から、フォルダを除いた対象ファイルのURI一覧を解決する。
+ * `selectedUris` を優先して使い、単一クリック時のフォールバックとして
+ * `clickedUri` を使う。選択が2つ未満（フォルダを除いた後）の場合は警告を
+ * 表示して `undefined` を返す。`mergeSelectedFiles` / `mergeSelectedFilesFiltered`
+ * の両方が共有する（issue #151）。
  */
-export function createShowMergedViewCommand(
+async function resolveSelectedLogFileUris(
+  clickedUri: vscode.Uri,
+  selectedUris: vscode.Uri[] | undefined
+): Promise<vscode.Uri[] | undefined> {
+  const candidateUris =
+    selectedUris && selectedUris.length > 0 ? selectedUris : clickedUri ? [clickedUri] : [];
+  const fileUris = await filterOutFolders(candidateUris);
+
+  if (fileUris.length < 2) {
+    await vscode.window.showWarningMessage(
+      "マージするには2つ以上のログファイルを選択してください。"
+    );
+    return undefined;
+  }
+
+  return fileUris;
+}
+
+/**
+ * エクスプローラで複数選択したログファイルを、ファイル選択ダイアログを
+ * 経由せずに直接マージするコマンドの本体。
+ */
+export function createMergeSelectedFilesCommand(
   provider: MergedViewContentProvider
-): () => Promise<void> {
-  return async function showMergedView(): Promise<void> {
-    const fileUris = await vscode.window.showOpenDialog({
-      canSelectMany: true,
-      canSelectFolders: false,
-      openLabel: "選択",
-      title: "マージするログファイルを選択してください（複数選択可）",
-    });
-    if (!fileUris || fileUris.length === 0) {
+): (clickedUri: vscode.Uri, selectedUris?: vscode.Uri[]) => Promise<void> {
+  return async function mergeSelectedFiles(
+    clickedUri: vscode.Uri,
+    selectedUris?: vscode.Uri[]
+  ): Promise<void> {
+    const fileUris = await resolveSelectedLogFileUris(clickedUri, selectedUris);
+    if (!fileUris) {
       return;
     }
 
@@ -373,10 +409,17 @@ export function createShowMergedViewCommand(
 }
 
 /**
- * ファイル選択ダイアログで、マージ対象のログファイルを複数選ばせて時系列順に
- * マージしたうえで、ユーザーが選んだ条件（セベリティ / 日付範囲 / 無視
- * パターンのうち任意の組み合わせ）で絞り込んだ結果を開くコマンドの本体
- * （issue #61）。
+ * エクスプローラで複数選択したログファイルを、ファイル選択ダイアログを経由
+ * せずに直接マージしたうえで、ユーザーが選んだ条件（セベリティ / 日付範囲 /
+ * 無視パターンのうち任意の組み合わせ）で絞り込んだ結果を開くコマンドの本体
+ * （issue #61 / #151）。
+ *
+ * もとは `Show Merged View Filtered` として `vscode.window.showOpenDialog` 経由
+ * でファイルを選ばせていたが、OS標準のファイル選択ダイアログは単一フォルダ内
+ * でしか複数選択できず、複数フォルダにまたがるログをマージしたいケースで実質
+ * 使えなかった（issue #151）。エクスプローラの複数選択はフォルダをまたいでも
+ * 問題なく選べるため、`mergeSelectedFiles` と同じ入力経路（{@link resolveSelectedLogFileUris}）
+ * に一本化した。
  *
  * 「マージビューを開いた後にそのビューへ絞り込みコマンドを実行する」形（正規化
  * ビューの絞り込み系コマンドと同じ、アクティブエディタを起点とする方式）ではなく、
@@ -385,22 +428,17 @@ export function createShowMergedViewCommand(
  * 表示されるため、後者を選ぶとその表示テキストから `MergedEntry[]` を再パース
  * する専用ロジックが要り、フォーマットの変更に弱くなる
  * （`guardAgainstVirtualDocumentSource` が仮想ドキュメントに対する
- * `parseLog` 実行を警告する形で防いでいるのと同種の問題、#57）。ファイル選択
- * ダイアログはファイルシステム上のファイルしか選べず仮想ドキュメントを選択肢に
- * 含められないため、`showMergedView` と同様にこのコマンドも自ビュー判定は不要
- * （アクティブエディタを一切参照しない）。
+ * `parseLog` 実行を警告する形で防いでいるのと同種の問題、#57）。
  */
-export function createShowMergedViewFilteredCommand(
+export function createMergeSelectedFilesFilteredCommand(
   provider: MergedViewContentProvider
-): () => Promise<void> {
-  return async function showMergedViewFiltered(): Promise<void> {
-    const fileUris = await vscode.window.showOpenDialog({
-      canSelectMany: true,
-      canSelectFolders: false,
-      openLabel: "選択",
-      title: "マージするログファイルを選択してください（複数選択可）",
-    });
-    if (!fileUris || fileUris.length === 0) {
+): (clickedUri: vscode.Uri, selectedUris?: vscode.Uri[]) => Promise<void> {
+  return async function mergeSelectedFilesFiltered(
+    clickedUri: vscode.Uri,
+    selectedUris?: vscode.Uri[]
+  ): Promise<void> {
+    const fileUris = await resolveSelectedLogFileUris(clickedUri, selectedUris);
+    if (!fileUris) {
       return;
     }
 
@@ -484,47 +522,6 @@ export function createShowMergedViewFilteredCommand(
     vscode.window.showInformationMessage(
       `Totonoe Log: 条件に合わない ${hiddenLineCount} 行を非表示にしました（${countLines(filteredEntries)}/${countLines(entries)} 行を表示）。`
     );
-  };
-}
-
-/** フォルダを除いたファイルの URI だけを残す。 */
-async function filterOutFolders(uris: readonly vscode.Uri[]): Promise<vscode.Uri[]> {
-  const files: vscode.Uri[] = [];
-  for (const uri of uris) {
-    const stat = await vscode.workspace.fs.stat(uri);
-    if ((stat.type & vscode.FileType.Directory) === 0) {
-      files.push(uri);
-    }
-  }
-  return files;
-}
-
-/**
- * エクスプローラで複数選択したログファイルを、ファイル選択ダイアログを
- * 経由せずに直接マージするコマンドの本体。VSCode はエクスプローラの
- * コンテキストメニューコマンドに `(クリックされた項目, 選択項目全体の配列)`
- * を渡すため、`selectedUris` を優先して使い、単一クリック時のフォールバックと
- * して `clickedUri` を使う。選択範囲にフォルダが混ざっていても無視して続行する。
- */
-export function createMergeSelectedFilesCommand(
-  provider: MergedViewContentProvider
-): (clickedUri: vscode.Uri, selectedUris?: vscode.Uri[]) => Promise<void> {
-  return async function mergeSelectedFiles(
-    clickedUri: vscode.Uri,
-    selectedUris?: vscode.Uri[]
-  ): Promise<void> {
-    const candidateUris =
-      selectedUris && selectedUris.length > 0 ? selectedUris : clickedUri ? [clickedUri] : [];
-    const fileUris = await filterOutFolders(candidateUris);
-
-    if (fileUris.length < 2) {
-      await vscode.window.showWarningMessage(
-        "マージするには2つ以上のログファイルを選択してください。"
-      );
-      return;
-    }
-
-    await openMergedView(provider, fileUris);
   };
 }
 

@@ -42,7 +42,7 @@ Totonoe Log はログ調査のための VS Code 拡張機能です。実際の�
 
 ## 複数ファイルをマージする
 
-`Totonoe Log: Show Merged View` は、複数のログファイルを日時ベースで1本のタイムラインにマージし、ファイルを横断した調査を可能にします。ファイル名と、ファイルの「種類」列付きです（例: `message_20240101.log` → 種類 `message`）。ファイル名列にカーソルを合わせるとフルパスをホバー表示するので、異なるフォルダにある同名ファイルをマージした場合でも見分けられます。
+エクスプローラで2つ以上のログファイルを選択し、右クリックのコンテキストメニューから `Totonoe Log: Merge Selected Files` を選ぶと、複数のログファイルを日時ベースで1本のタイムラインにマージし、ファイルを横断した調査を可能にします。ファイル名と、ファイルの「種類」列付きです（例: `message_20240101.log` → 種類 `message`）。ファイル名列にカーソルを合わせるとフルパスをホバー表示するので、異なるフォルダにある同名ファイルをマージした場合でも見分けられます。
 
 選択した各ファイルは、VS Code のリソーススコープの `files.encoding` 設定で
 デコードされます。通常の VS Code 設定の優先順位に従い、ワークスペース
@@ -57,9 +57,7 @@ Totonoe Log はログ調査のための VS Code 拡張機能です。実際の�
 検索・コピーを維持します。一時コピーを編集しても元のログは変わらず、保存した
 結果はタブを閉じた後に削除されます。
 
-エクスプローラで2つ以上のファイルを選択し、右クリックのコンテキストメニューから直接マージすることもできます（`Totonoe Log: Merge Selected Files`）。
-
-マージビューも絞り込みできます。`Totonoe Log: Show Merged View Filtered` は、マージ対象のファイルを選んでから、上記と同じ複数選択の絞り込みフローを適用します。
+マージビューも絞り込みできます。エクスプローラでファイルを選択し、代わりに `Totonoe Log: Merge Selected Files Filtered` を選ぶと、マージ直後に上記と同じ複数選択の絞り込みフローを適用します。
 
 上で説明した「XX秒の空白」のギャップ検出はこちらにも適用され、マージした複数ファイルを横断した沈黙時間を見つけられます（[1本のタイムラインに正規化する](#1本のタイムラインに正規化する) を参照）。
 
@@ -172,7 +170,7 @@ code --install-extension totonoe-log.vsix
 
 | 設定 | 型 | 既定値 | 説明 |
 | --- | --- | --- | --- |
-| `totonoeLog.gap.thresholdSeconds` | number | `30` | `Show Normalized View` と `Show Merged View`（とそれぞれの絞り込み系コマンド）で、連続するエントリのタイムスタンプ差がこの秒数以上のときに「XX秒の空白」の区切り行を挿入する。`0` で無効化。 |
+| `totonoeLog.gap.thresholdSeconds` | number | `30` | `Show Normalized View` とマージビュー（`Merge Selected Files` とそれぞれの絞り込み系コマンド）で、連続するエントリのタイムスタンプ差がこの秒数以上のときに「XX秒の空白」の区切り行を挿入する。`0` で無効化。 |
 | `totonoeLog.collapse.threshold` | number | `3` | `Show Collapsed View` で、何回以上連続で繰り返されたら1行に折りたたむかのしきい値。 |
 | `totonoeLog.copyMasked.maskTimestamp` | boolean | `true` | `Copy Masked Text` 実行時にタイムスタンプをマスクする。 |
 | `totonoeLog.copyMasked.maskHost` | boolean | `true` | `Copy Masked Text` 実行時に IPv4/IPv6 アドレスと、syslog 形式として認識できた行のホスト名トークンをマスクする（任意の形式のホスト名全般ではない）。 |

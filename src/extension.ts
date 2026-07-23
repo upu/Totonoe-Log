@@ -20,9 +20,8 @@ import { createGoToSourceLineCommand } from "./goToSourceLine";
 import {
   MERGED_VIEW_SCHEME,
   MergedViewContentProvider,
-  createShowMergedViewCommand,
-  createShowMergedViewFilteredCommand,
   createMergeSelectedFilesCommand,
+  createMergeSelectedFilesFilteredCommand,
   createMergedViewFilenameHoverProvider,
 } from "./mergedView";
 
@@ -38,16 +37,12 @@ export function activate(context: vscode.ExtensionContext): void {
     ),
     mergedViewProvider,
     vscode.commands.registerCommand(
-      "totonoeLog.showMergedView",
-      createShowMergedViewCommand(mergedViewProvider)
-    ),
-    vscode.commands.registerCommand(
-      "totonoeLog.showMergedViewFiltered",
-      createShowMergedViewFilteredCommand(mergedViewProvider)
-    ),
-    vscode.commands.registerCommand(
       "totonoeLog.mergeSelectedFiles",
       createMergeSelectedFilesCommand(mergedViewProvider)
+    ),
+    vscode.commands.registerCommand(
+      "totonoeLog.mergeSelectedFilesFiltered",
+      createMergeSelectedFilesFilteredCommand(mergedViewProvider)
     ),
     vscode.languages.registerHoverProvider(
       { scheme: MERGED_VIEW_SCHEME },
