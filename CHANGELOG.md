@@ -14,6 +14,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   a hover tooltip when you point at the file name column, making it
   possible to tell apart same-named files merged from different folders
   (issue #150).
+- New `Totonoe Log: Merge Selected Files Filtered` command: select two or
+  more files in the Explorer, right-click, and merge them with the same
+  severity / date range / ignore pattern filter flow already available for
+  the normalized view (issue #151).
+
+### Changed
+
+- `Totonoe Log: Show Merged View` and `Totonoe Log: Show Merged View
+  Filtered`, which picked files via an OS file-selection dialog, have been
+  removed. The OS dialog could only multi-select files within a single
+  folder, so merging logs across folders required using `Merge Selected
+  Files` anyway; merging now goes exclusively through the Explorer
+  right-click context menu (`Totonoe Log: Merge Selected Files` /
+  `Totonoe Log: Merge Selected Files Filtered`), which merges cleanly
+  across folders (issue #151).
 
 ### Fixed
 

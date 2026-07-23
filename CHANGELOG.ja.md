@@ -13,6 +13,21 @@
 - マージビューでファイル名列にカーソルを合わせると、対応する元ログファイルの
   フルパス（フォルダ含む）をホバー表示するようにした。異なるフォルダにある
   同名ファイルをマージした場合でも見分けられる（issue #150）。
+- 新コマンド `Totonoe Log: Merge Selected Files Filtered` を追加。
+  エクスプローラで2つ以上のファイルを選択して右クリックすると、正規化
+  ビューで使えるセベリティ・日付範囲・無視パターンの絞り込みフローを
+  適用しながらマージできる（issue #151）。
+
+### Changed
+
+- OS標準のファイル選択ダイアログ経由でファイルを選ばせていた
+  `Totonoe Log: Show Merged View` / `Totonoe Log: Show Merged View
+  Filtered` を廃止した。OSダイアログは単一フォルダ内でしか複数選択できず、
+  複数フォルダにまたがるログをマージする場合は結局 `Merge Selected Files`
+  を使う必要があったため、マージの導線はエクスプローラの右クリック
+  コンテキストメニュー（`Totonoe Log: Merge Selected Files` /
+  `Totonoe Log: Merge Selected Files Filtered`）に一本化した。こちらは
+  複数フォルダにまたがる選択でも問題なくマージできる（issue #151）。
 
 ### Fixed
 

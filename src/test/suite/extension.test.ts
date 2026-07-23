@@ -2,7 +2,7 @@ import * as assert from "node:assert";
 import * as vscode from "vscode";
 
 suite("Totonoe Log extension", () => {
-  test("activates and registers the showMergedView command", async () => {
+  test("activates and registers the mergeSelectedFiles command", async () => {
     const extension = vscode.extensions.getExtension("upu.totonoe-log");
     assert.ok(extension, "extension should be discoverable by id");
 
@@ -10,8 +10,8 @@ suite("Totonoe Log extension", () => {
 
     const commands = await vscode.commands.getCommands(true);
     assert.ok(
-      commands.includes("totonoeLog.showMergedView"),
-      "totonoeLog.showMergedView command should be registered"
+      commands.includes("totonoeLog.mergeSelectedFiles"),
+      "totonoeLog.mergeSelectedFiles command should be registered"
     );
   });
 
@@ -1347,17 +1347,12 @@ suite("Totonoe Log merged view", () => {
       await fs.writeFile(appLogPath, "2024-01-02T03:04:05Z INFO hello");
       await fs.writeFile(dbLogPath, "2024-01-02T03:04:04Z ERROR boom");
 
-      const originalShowOpenDialog = vscode.window.showOpenDialog;
-      (vscode.window as any).showOpenDialog = async () => [
-        vscode.Uri.file(appLogPath),
-        vscode.Uri.file(dbLogPath),
-      ];
-
-      try {
-        await vscode.commands.executeCommand("totonoeLog.showMergedView");
-      } finally {
-        (vscode.window as any).showOpenDialog = originalShowOpenDialog;
-      }
+      const appLogUri = vscode.Uri.file(appLogPath);
+      const dbLogUri = vscode.Uri.file(dbLogPath);
+      await vscode.commands.executeCommand("totonoeLog.mergeSelectedFiles", appLogUri, [
+        appLogUri,
+        dbLogUri,
+      ]);
 
       const activeEditor = vscode.window.activeTextEditor;
       assert.ok(activeEditor, "a merged view editor should be shown");
@@ -1400,17 +1395,12 @@ suite("Totonoe Log merged view", () => {
 
       await filesConfig.update("encoding", "shiftjis", vscode.ConfigurationTarget.Global);
 
-      const originalShowOpenDialog = vscode.window.showOpenDialog;
-      (vscode.window as any).showOpenDialog = async () => [
-        vscode.Uri.file(shiftJisLogPath),
-        vscode.Uri.file(utf8LogPath),
-      ];
-
-      try {
-        await vscode.commands.executeCommand("totonoeLog.showMergedView");
-      } finally {
-        (vscode.window as any).showOpenDialog = originalShowOpenDialog;
-      }
+      const shiftJisLogUri = vscode.Uri.file(shiftJisLogPath);
+      const utf8LogUri = vscode.Uri.file(utf8LogPath);
+      await vscode.commands.executeCommand("totonoeLog.mergeSelectedFiles", shiftJisLogUri, [
+        shiftJisLogUri,
+        utf8LogUri,
+      ]);
 
       const activeEditor = vscode.window.activeTextEditor;
       assert.ok(activeEditor, "a merged view editor should be shown");
@@ -1452,9 +1442,6 @@ suite("Totonoe Log merged view", () => {
         return originalGetConfiguration(section, scope);
       };
 
-      const originalShowOpenDialog = vscode.window.showOpenDialog;
-      (vscode.window as any).showOpenDialog = async () => [vscode.Uri.file(logPath)];
-
       const originalShowWarningMessage = vscode.window.showWarningMessage;
       let warningMessage: string | undefined;
       (vscode.window as any).showWarningMessage = async (message: string) => {
@@ -1462,11 +1449,14 @@ suite("Totonoe Log merged view", () => {
         return undefined;
       };
 
+      const logUri = vscode.Uri.file(logPath);
       try {
-        await vscode.commands.executeCommand("totonoeLog.showMergedView");
+        await vscode.commands.executeCommand("totonoeLog.mergeSelectedFiles", logUri, [
+          logUri,
+          logUri,
+        ]);
       } finally {
         (vscode.workspace as any).getConfiguration = originalGetConfiguration;
-        (vscode.window as any).showOpenDialog = originalShowOpenDialog;
         (vscode.window as any).showWarningMessage = originalShowWarningMessage;
       }
 
@@ -1477,31 +1467,6 @@ suite("Totonoe Log merged view", () => {
       await vscode.commands.executeCommand("workbench.action.closeAllEditors");
       await fs.rm(tempDir, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 });
     }
-  });
-
-  test("does nothing when the file picker is cancelled", async () => {
-    const extension = vscode.extensions.getExtension("upu.totonoe-log");
-    await extension!.activate();
-
-    const source = await vscode.workspace.openTextDocument({
-      content: "2024-01-02T03:04:05Z INFO starting",
-      language: "log",
-    });
-    await vscode.window.showTextDocument(source);
-    await vscode.commands.executeCommand("workbench.action.closeOtherEditors");
-
-    const originalShowOpenDialog = vscode.window.showOpenDialog;
-    (vscode.window as any).showOpenDialog = async () => undefined;
-
-    try {
-      await vscode.commands.executeCommand("totonoeLog.showMergedView");
-    } finally {
-      (vscode.window as any).showOpenDialog = originalShowOpenDialog;
-    }
-
-    const activeEditor = vscode.window.activeTextEditor;
-    assert.ok(activeEditor, "the original editor should remain active");
-    assert.notStrictEqual(activeEditor!.document.uri.scheme, "totonoe-log-merged");
   });
 
   test("opens the complete merged result when its formatted content exceeds 50MB", async function () {
@@ -1531,14 +1496,11 @@ suite("Totonoe Log merged view", () => {
         ).join("\n")
       );
 
-      const originalShowOpenDialog = vscode.window.showOpenDialog;
-      (vscode.window as any).showOpenDialog = async () => [vscode.Uri.file(bigLogPath)];
-
-      try {
-        await vscode.commands.executeCommand("totonoeLog.showMergedView");
-      } finally {
-        (vscode.window as any).showOpenDialog = originalShowOpenDialog;
-      }
+      const bigLogUri = vscode.Uri.file(bigLogPath);
+      await vscode.commands.executeCommand("totonoeLog.mergeSelectedFiles", bigLogUri, [
+        bigLogUri,
+        bigLogUri,
+      ]);
 
       const activeTab = vscode.window.tabGroups.activeTabGroup.activeTab;
       assert.ok(activeTab, "the large merged result should be opened in a tab");
@@ -1625,11 +1587,8 @@ suite("Totonoe Log merged view", () => {
       const smallLogPath = path.join(tempDir, "small.log");
       await fs.writeFile(smallLogPath, "2024-01-02T02:59:59Z ERROR boom");
 
-      const originalShowOpenDialog = vscode.window.showOpenDialog;
-      (vscode.window as any).showOpenDialog = async () => [
-        vscode.Uri.file(bigLogPath),
-        vscode.Uri.file(smallLogPath),
-      ];
+      const bigLogUri = vscode.Uri.file(bigLogPath);
+      const smallLogUri = vscode.Uri.file(smallLogPath);
 
       const originalShowQuickPick = vscode.window.showQuickPick;
       (vscode.window as any).showQuickPick = async (items: vscode.QuickPickItem[]) => {
@@ -1642,9 +1601,12 @@ suite("Totonoe Log merged view", () => {
       };
 
       try {
-        await vscode.commands.executeCommand("totonoeLog.showMergedViewFiltered");
+        await vscode.commands.executeCommand(
+          "totonoeLog.mergeSelectedFilesFiltered",
+          bigLogUri,
+          [bigLogUri, smallLogUri]
+        );
       } finally {
-        (vscode.window as any).showOpenDialog = originalShowOpenDialog;
         (vscode.window as any).showQuickPick = originalShowQuickPick;
       }
 
@@ -1782,7 +1744,7 @@ suite("Totonoe Log merged view filtered (combined)", () => {
    * "セベリティ" / "日付範囲" / "無視パターン" の条件選択ピッカーを、指定した
    * 種類だけ選んで確定するようにモックする。正規化ビューの統合絞り込みテスト
    * が使う `installQuickPickMock` と同じ役割だが、こちらは
-   * `showMergedViewFiltered` 用に別定義する（テストファイル内で重複がある点は
+   * `mergeSelectedFilesFiltered` 用に別定義する（テストファイル内で重複がある点は
    * 承知のうえ、対象コマンドが違うテストスイート間で暗黙の結合を作らないよう
    * 意図的に分けている）。
    */
@@ -1828,14 +1790,14 @@ suite("Totonoe Log merged view filtered (combined)", () => {
     }
   }
 
-  test("registers the showMergedViewFiltered command", async () => {
+  test("registers the mergeSelectedFilesFiltered command", async () => {
     const extension = vscode.extensions.getExtension("upu.totonoe-log");
     await extension!.activate();
 
     const commands = await vscode.commands.getCommands(true);
     assert.ok(
-      commands.includes("totonoeLog.showMergedViewFiltered"),
-      "totonoeLog.showMergedViewFiltered command should be registered"
+      commands.includes("totonoeLog.mergeSelectedFilesFiltered"),
+      "totonoeLog.mergeSelectedFilesFiltered command should be registered"
     );
   });
 
@@ -1852,11 +1814,8 @@ suite("Totonoe Log merged view filtered (combined)", () => {
         ].join("\n"),
       },
       async (paths) => {
-        const originalShowOpenDialog = vscode.window.showOpenDialog;
-        (vscode.window as any).showOpenDialog = async () => [
-          vscode.Uri.file(paths["app.log"]),
-          vscode.Uri.file(paths["database_20240101.log"]),
-        ];
+        const appLogUri = vscode.Uri.file(paths["app.log"]);
+        const dbLogUri = vscode.Uri.file(paths["database_20240101.log"]);
 
         const restoreQuickPick = installFilterKindQuickPickMock(["セベリティ", "無視パターン"]);
         const originalShowInputBox = vscode.window.showInputBox;
@@ -1870,9 +1829,12 @@ suite("Totonoe Log merged view filtered (combined)", () => {
         };
 
         try {
-          await vscode.commands.executeCommand("totonoeLog.showMergedViewFiltered");
+          await vscode.commands.executeCommand(
+            "totonoeLog.mergeSelectedFilesFiltered",
+            appLogUri,
+            [appLogUri, dbLogUri]
+          );
         } finally {
-          (vscode.window as any).showOpenDialog = originalShowOpenDialog;
           restoreQuickPick();
           (vscode.window as any).showInputBox = originalShowInputBox;
           (vscode.window as any).showInformationMessage = originalShowInformationMessage;
@@ -1906,19 +1868,19 @@ suite("Totonoe Log merged view filtered (combined)", () => {
         "db.log": "2024-01-02T03:04:06Z ERROR boom",
       },
       async (paths) => {
-        const originalShowOpenDialog = vscode.window.showOpenDialog;
-        (vscode.window as any).showOpenDialog = async () => [
-          vscode.Uri.file(paths["app.log"]),
-          vscode.Uri.file(paths["db.log"]),
-        ];
+        const appLogUri = vscode.Uri.file(paths["app.log"]);
+        const dbLogUri = vscode.Uri.file(paths["db.log"]);
 
         const originalShowQuickPick = vscode.window.showQuickPick;
         (vscode.window as any).showQuickPick = async () => [];
 
         try {
-          await vscode.commands.executeCommand("totonoeLog.showMergedViewFiltered");
+          await vscode.commands.executeCommand(
+            "totonoeLog.mergeSelectedFilesFiltered",
+            appLogUri,
+            [appLogUri, dbLogUri]
+          );
         } finally {
-          (vscode.window as any).showOpenDialog = originalShowOpenDialog;
           (vscode.window as any).showQuickPick = originalShowQuickPick;
         }
 
@@ -1941,29 +1903,40 @@ suite("Totonoe Log merged view filtered (combined)", () => {
     await vscode.commands.executeCommand("workbench.action.closeAllEditors");
   });
 
-  test("does nothing when the file picker is cancelled", async () => {
+  test("shows a warning and does nothing when fewer than two files are selected", async () => {
     const extension = vscode.extensions.getExtension("upu.totonoe-log");
     await extension!.activate();
 
-    const source = await vscode.workspace.openTextDocument({
-      content: "2024-01-02T03:04:05Z INFO starting",
-      language: "log",
-    });
-    await vscode.window.showTextDocument(source);
-    await vscode.commands.executeCommand("workbench.action.closeOtherEditors");
+    await withTempLogFiles(
+      { "app.log": "2024-01-02T03:04:05Z INFO starting" },
+      async (paths) => {
+        const appLogUri = vscode.Uri.file(paths["app.log"]);
 
-    const originalShowOpenDialog = vscode.window.showOpenDialog;
-    (vscode.window as any).showOpenDialog = async () => undefined;
+        const source = await vscode.workspace.openTextDocument({
+          content: "2024-01-02T03:04:05Z INFO starting",
+          language: "log",
+        });
+        await vscode.window.showTextDocument(source);
+        await vscode.commands.executeCommand("workbench.action.closeOtherEditors");
 
-    try {
-      await vscode.commands.executeCommand("totonoeLog.showMergedViewFiltered");
-    } finally {
-      (vscode.window as any).showOpenDialog = originalShowOpenDialog;
-    }
+        const originalShowWarningMessage = vscode.window.showWarningMessage;
+        (vscode.window as any).showWarningMessage = async () => undefined;
 
-    const activeEditor = vscode.window.activeTextEditor;
-    assert.ok(activeEditor, "the original editor should remain active");
-    assert.notStrictEqual(activeEditor!.document.uri.scheme, "totonoe-log-merged");
+        try {
+          await vscode.commands.executeCommand(
+            "totonoeLog.mergeSelectedFilesFiltered",
+            appLogUri,
+            [appLogUri]
+          );
+        } finally {
+          (vscode.window as any).showWarningMessage = originalShowWarningMessage;
+        }
+
+        const activeEditor = vscode.window.activeTextEditor;
+        assert.ok(activeEditor, "the original editor should remain active");
+        assert.notStrictEqual(activeEditor!.document.uri.scheme, "totonoe-log-merged");
+      }
+    );
   });
 
   test("does nothing when the kind picker is dismissed", async () => {
@@ -1973,16 +1946,18 @@ suite("Totonoe Log merged view filtered (combined)", () => {
     await withTempLogFiles(
       { "app.log": "2024-01-02T03:04:05Z INFO starting" },
       async (paths) => {
-        const originalShowOpenDialog = vscode.window.showOpenDialog;
-        (vscode.window as any).showOpenDialog = async () => [vscode.Uri.file(paths["app.log"])];
+        const appLogUri = vscode.Uri.file(paths["app.log"]);
 
         const originalShowQuickPick = vscode.window.showQuickPick;
         (vscode.window as any).showQuickPick = async () => undefined;
 
         try {
-          await vscode.commands.executeCommand("totonoeLog.showMergedViewFiltered");
+          await vscode.commands.executeCommand(
+            "totonoeLog.mergeSelectedFilesFiltered",
+            appLogUri,
+            [appLogUri, appLogUri]
+          );
         } finally {
-          (vscode.window as any).showOpenDialog = originalShowOpenDialog;
           (vscode.window as any).showQuickPick = originalShowQuickPick;
         }
 
@@ -1999,8 +1974,7 @@ suite("Totonoe Log merged view filtered (combined)", () => {
     await withTempLogFiles(
       { "app.log": "2024-01-02T03:04:05Z INFO starting" },
       async (paths) => {
-        const originalShowOpenDialog = vscode.window.showOpenDialog;
-        (vscode.window as any).showOpenDialog = async () => [vscode.Uri.file(paths["app.log"])];
+        const appLogUri = vscode.Uri.file(paths["app.log"]);
 
         const originalShowQuickPick = vscode.window.showQuickPick;
         let callCount = 0;
@@ -2013,9 +1987,12 @@ suite("Totonoe Log merged view filtered (combined)", () => {
         };
 
         try {
-          await vscode.commands.executeCommand("totonoeLog.showMergedViewFiltered");
+          await vscode.commands.executeCommand(
+            "totonoeLog.mergeSelectedFilesFiltered",
+            appLogUri,
+            [appLogUri, appLogUri]
+          );
         } finally {
-          (vscode.window as any).showOpenDialog = originalShowOpenDialog;
           (vscode.window as any).showQuickPick = originalShowQuickPick;
         }
 
@@ -2032,17 +2009,19 @@ suite("Totonoe Log merged view filtered (combined)", () => {
     await withTempLogFiles(
       { "app.log": "2024-01-02T03:04:05Z INFO starting" },
       async (paths) => {
-        const originalShowOpenDialog = vscode.window.showOpenDialog;
-        (vscode.window as any).showOpenDialog = async () => [vscode.Uri.file(paths["app.log"])];
+        const appLogUri = vscode.Uri.file(paths["app.log"]);
 
         const restoreQuickPick = installFilterKindQuickPickMock(["日付範囲"]);
         const originalShowInputBox = vscode.window.showInputBox;
         (vscode.window as any).showInputBox = async () => undefined;
 
         try {
-          await vscode.commands.executeCommand("totonoeLog.showMergedViewFiltered");
+          await vscode.commands.executeCommand(
+            "totonoeLog.mergeSelectedFilesFiltered",
+            appLogUri,
+            [appLogUri, appLogUri]
+          );
         } finally {
-          (vscode.window as any).showOpenDialog = originalShowOpenDialog;
           restoreQuickPick();
           (vscode.window as any).showInputBox = originalShowInputBox;
         }
@@ -2060,17 +2039,19 @@ suite("Totonoe Log merged view filtered (combined)", () => {
     await withTempLogFiles(
       { "app.log": "2024-01-02T03:04:05Z INFO starting" },
       async (paths) => {
-        const originalShowOpenDialog = vscode.window.showOpenDialog;
-        (vscode.window as any).showOpenDialog = async () => [vscode.Uri.file(paths["app.log"])];
+        const appLogUri = vscode.Uri.file(paths["app.log"]);
 
         const restoreQuickPick = installFilterKindQuickPickMock(["無視パターン"]);
         const originalShowInputBox = vscode.window.showInputBox;
         (vscode.window as any).showInputBox = async () => undefined;
 
         try {
-          await vscode.commands.executeCommand("totonoeLog.showMergedViewFiltered");
+          await vscode.commands.executeCommand(
+            "totonoeLog.mergeSelectedFilesFiltered",
+            appLogUri,
+            [appLogUri, appLogUri]
+          );
         } finally {
-          (vscode.window as any).showOpenDialog = originalShowOpenDialog;
           restoreQuickPick();
           (vscode.window as any).showInputBox = originalShowInputBox;
         }
@@ -2441,16 +2422,16 @@ suite("Totonoe Log virtual document guard", () => {
     const tempDir = await fs.mkdtemp(path.join(os.tmpdir(), "totonoe-log-"));
     try {
       const appLogPath = path.join(tempDir, "app.log");
+      const dbLogPath = path.join(tempDir, "db.log");
       await fs.writeFile(appLogPath, "2024-01-02T03:04:05Z INFO hello");
+      await fs.writeFile(dbLogPath, "2024-01-02T03:04:06Z INFO world");
 
-      const originalShowOpenDialog = vscode.window.showOpenDialog;
-      (vscode.window as any).showOpenDialog = async () => [vscode.Uri.file(appLogPath)];
-
-      try {
-        await vscode.commands.executeCommand("totonoeLog.showMergedView");
-      } finally {
-        (vscode.window as any).showOpenDialog = originalShowOpenDialog;
-      }
+      const appLogUri = vscode.Uri.file(appLogPath);
+      const dbLogUri = vscode.Uri.file(dbLogPath);
+      await vscode.commands.executeCommand("totonoeLog.mergeSelectedFiles", appLogUri, [
+        appLogUri,
+        dbLogUri,
+      ]);
 
       assert.strictEqual(vscode.window.activeTextEditor?.document.uri.scheme, "totonoe-log-merged");
       const mergedUri = vscode.window.activeTextEditor?.document.uri.toString();
@@ -2783,17 +2764,12 @@ suite("Totonoe Log timezone settings (#13)", () => {
       await fs.writeFile(tokyoLogPath, "2024-01-02 09:00:00 INFO tokyo-entry");
       await fs.writeFile(utcLogPath, "2024-01-02 03:00:00 INFO utc-entry");
 
-      const originalShowOpenDialog = vscode.window.showOpenDialog;
-      (vscode.window as any).showOpenDialog = async () => [
-        vscode.Uri.file(tokyoLogPath),
-        vscode.Uri.file(utcLogPath),
-      ];
-
-      try {
-        await vscode.commands.executeCommand("totonoeLog.showMergedView");
-      } finally {
-        (vscode.window as any).showOpenDialog = originalShowOpenDialog;
-      }
+      const tokyoLogUri = vscode.Uri.file(tokyoLogPath);
+      const utcLogUri = vscode.Uri.file(utcLogPath);
+      await vscode.commands.executeCommand("totonoeLog.mergeSelectedFiles", tokyoLogUri, [
+        tokyoLogUri,
+        utcLogUri,
+      ]);
 
       const activeEditor = vscode.window.activeTextEditor;
       assert.ok(activeEditor, "a merged view editor should be shown");
@@ -2920,17 +2896,12 @@ suite("Totonoe Log clock skew settings (#15)", () => {
       await fs.writeFile(fastLogPath, "2024-01-02T03:04:30Z INFO fast-entry");
       await fs.writeFile(steadyLogPath, "2024-01-02T03:04:00Z INFO steady-entry");
 
-      const originalShowOpenDialog = vscode.window.showOpenDialog;
-      (vscode.window as any).showOpenDialog = async () => [
-        vscode.Uri.file(fastLogPath),
-        vscode.Uri.file(steadyLogPath),
-      ];
-
-      try {
-        await vscode.commands.executeCommand("totonoeLog.showMergedView");
-      } finally {
-        (vscode.window as any).showOpenDialog = originalShowOpenDialog;
-      }
+      const fastLogUri = vscode.Uri.file(fastLogPath);
+      const steadyLogUri = vscode.Uri.file(steadyLogPath);
+      await vscode.commands.executeCommand("totonoeLog.mergeSelectedFiles", fastLogUri, [
+        fastLogUri,
+        steadyLogUri,
+      ]);
 
       const activeEditor = vscode.window.activeTextEditor;
       assert.ok(activeEditor, "a merged view editor should be shown");
@@ -3161,20 +3132,13 @@ suite("Totonoe Log low timestamp recognition warning", () => {
         { name: "good.log", content: RECOGNIZED_LOG },
       ],
       async (uris) => {
-        const originalShowOpenDialog = vscode.window.showOpenDialog;
-        (vscode.window as any).showOpenDialog = async () => uris;
+        const warnings = await collectRecognitionWarningsWhile(async () => {
+          await vscode.commands.executeCommand("totonoeLog.mergeSelectedFiles", uris[0], uris);
+        });
 
-        try {
-          const warnings = await collectRecognitionWarningsWhile(async () => {
-            await vscode.commands.executeCommand("totonoeLog.showMergedView");
-          });
-
-          assert.strictEqual(warnings.length, 1, "only the unrecognized file should warn");
-          assert.ok(warnings[0].includes("bad.log"));
-          assert.ok(!warnings[0].includes("good.log"));
-        } finally {
-          (vscode.window as any).showOpenDialog = originalShowOpenDialog;
-        }
+        assert.strictEqual(warnings.length, 1, "only the unrecognized file should warn");
+        assert.ok(warnings[0].includes("bad.log"));
+        assert.ok(!warnings[0].includes("good.log"));
       }
     );
   });

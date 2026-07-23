@@ -42,7 +42,7 @@ and a repeated time selects its earlier occurrence.
 
 ## Merge multiple files
 
-`Totonoe Log: Show Merged View` merges multiple log files by timestamp into a single timeline for cross-file investigation, with source file name and file "kind" columns (e.g. `message_20240101.log` → kind `message`). Hovering over the file name column shows the full source path, so same-named files merged from different folders can still be told apart.
+Select two or more log files in the Explorer, then right-click and choose `Totonoe Log: Merge Selected Files` to merge them by timestamp into a single timeline for cross-file investigation, with source file name and file "kind" columns (e.g. `message_20240101.log` → kind `message`). Hovering over the file name column shows the full source path, so same-named files merged from different folders can still be told apart.
 
 Each selected file is decoded with VS Code's resource-scoped `files.encoding`
 setting. Normal VS Code configuration precedence applies, so a workspace-folder
@@ -57,9 +57,7 @@ regular text tabs, bypassing the same synchronization limit while preserving
 VS Code's standard search and copy features. Editing that temporary copy never
 changes the source logs, and the stored result is removed after its tab closes.
 
-You can also select two or more files in the Explorer and merge them straight from the right-click context menu (`Totonoe Log: Merge Selected Files`).
-
-The merged view can be filtered too: `Totonoe Log: Show Merged View Filtered` picks the files to merge, then applies the same multi-select filter flow described above.
+The merged view can be filtered too: select the files in the Explorer and choose `Totonoe Log: Merge Selected Files Filtered` instead, which applies the same multi-select filter flow described above right after merging.
 
 The same "XX seconds of silence" gap detection described above applies here too, spotting silent stretches across all merged source files (see [Normalize into one timeline](#normalize-into-one-timeline)).
 
@@ -174,7 +172,7 @@ All settings live under the `totonoeLog` namespace.
 
 | Setting | Type | Default | Description |
 | --- | --- | --- | --- |
-| `totonoeLog.gap.thresholdSeconds` | number | `30` | Insert a "XX seconds of silence" separator line in `Show Normalized View` and `Show Merged View` (and their filtered variants) when the timestamp gap between consecutive entries is at least this many seconds. `0` disables it. |
+| `totonoeLog.gap.thresholdSeconds` | number | `30` | Insert a "XX seconds of silence" separator line in `Show Normalized View` and the merged view (`Merge Selected Files` and their filtered variants) when the timestamp gap between consecutive entries is at least this many seconds. `0` disables it. |
 | `totonoeLog.collapse.threshold` | number | `3` | How many consecutive repeats it takes before `Show Collapsed View` folds them into one line. |
 | `totonoeLog.copyMasked.maskTimestamp` | boolean | `true` | Mask timestamps when running `Copy Masked Text`. |
 | `totonoeLog.copyMasked.maskHost` | boolean | `true` | Mask IPv4/IPv6 addresses — and the hostname token of lines recognized as syslog format (not arbitrary hostnames in general) — when running `Copy Masked Text`. |
