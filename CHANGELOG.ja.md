@@ -8,6 +8,8 @@
 
 ## [Unreleased]
 
+## [0.7.0] - 2026-07-23
+
 ### Added
 
 - マージビューでファイル名列にカーソルを合わせると、対応する元ログファイルの
@@ -316,7 +318,8 @@
   ドットファイルの場合に名前全体が消えてしまい、`/.normalized-1.log`
   のようなパスになっていた問題を修正。先頭のドットは保持されるようにした。
 
-[Unreleased]: https://github.com/upu/Totonoe-Log/compare/v0.6.0...HEAD
+[Unreleased]: https://github.com/upu/Totonoe-Log/compare/v0.7.0...HEAD
+[0.7.0]: https://github.com/upu/Totonoe-Log/releases/tag/v0.7.0
 [0.6.0]: https://github.com/upu/Totonoe-Log/releases/tag/v0.6.0
 [0.5.0]: https://github.com/upu/Totonoe-Log/releases/tag/v0.5.0
 [0.3.1]: https://github.com/upu/Totonoe-Log/releases/tag/v0.3.1
