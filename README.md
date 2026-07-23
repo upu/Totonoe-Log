@@ -69,6 +69,8 @@ Logs from servers in different timezones, or from a host whose clock is off, can
 
 `Totonoe Log: Show Collapsed View` folds consecutive repeated patterns into a single line with a repeat count (e.g. "×5"), so repetitive noise stops burying the interesting entries (threshold configurable with `totonoeLog.collapse.threshold`). Each collapsed line also shows the group's timestamp span (start 〜 end), so you can tell a burst that happened in seconds from one spread over hours without expanding the group.
 
+Collapsing can be combined with filtering too: `Totonoe Log: Show Collapsed View Filtered` applies the same multi-select filter flow described above, then folds the filtered entries — narrow down to what matters and collapse the repeats in one pass.
+
 ## Compare two logs
 
 `Totonoe Log: Compare Logs` diffs two logs that differ in dates or hosts — without those differences flooding the diff as noise, so the real differences stand out.

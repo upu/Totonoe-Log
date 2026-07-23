@@ -86,6 +86,10 @@
         "title": "Totonoe Log: Show Collapsed View"
       },
       {
+        "command": "totonoeLog.showCollapsedViewFiltered",
+        "title": "Totonoe Log: Show Collapsed View Filtered"
+      },
+      {
         "command": "totonoeLog.goToSourceLine",
         "title": "Totonoe Log: Go to Source Line"
       }

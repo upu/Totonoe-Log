@@ -9,6 +9,7 @@ import {
   createShowNormalizedViewFilteredByIgnorePatternCommand,
   createShowNormalizedViewFilteredCommand,
   createShowCollapsedViewCommand,
+  createShowCollapsedViewFilteredCommand,
 } from "./normalizedView";
 import {
   COMPARE_VIEW_SCHEME,
@@ -80,6 +81,10 @@ export function activate(context: vscode.ExtensionContext): void {
     vscode.commands.registerCommand(
       "totonoeLog.showCollapsedView",
       createShowCollapsedViewCommand(normalizedViewProvider)
+    ),
+    vscode.commands.registerCommand(
+      "totonoeLog.showCollapsedViewFiltered",
+      createShowCollapsedViewFilteredCommand(normalizedViewProvider)
     ),
     vscode.workspace.registerTextDocumentContentProvider(
       COMPARE_VIEW_SCHEME,

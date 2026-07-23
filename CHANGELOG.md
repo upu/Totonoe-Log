@@ -8,6 +8,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- New `Totonoe Log: Show Collapsed View Filtered` command combines the
+  severity / date range / ignore pattern filtering already available for the
+  normalized and merged views with repeated-entry collapsing, so noisy
+  repeats can be collapsed while still narrowing down to the entries you
+  care about (issue #157).
+
 ### Fixed
 
 - `Totonoe Log: Go to Source Line` now shows a warning message instead of an

@@ -8,6 +8,13 @@
 
 ## [Unreleased]
 
+### Added
+
+- 新コマンド `Totonoe Log: Show Collapsed View Filtered` を追加。正規化・
+  マージビューで使えるセベリティ・日付範囲・無視パターンの絞り込みを
+  折りたたみビューと組み合わせられるようにした。繰り返しノイズを畳みつつ、
+  必要なエントリだけに絞り込める（issue #157）。
+
 ### Fixed
 
 - `Totonoe Log: Go to Source Line` 実行時、ビューを開いた後に元ログファイルが

@@ -472,3 +472,94 @@ export function createShowCollapsedViewCommand(
     await openVirtualNormalizedDocument(provider, sourceDocument, formatted, "collapsed");
   };
 }
+
+/**
+ * アクティブなエディタの内容を、ユーザーが選んだ条件（セベリティ / 日付範囲 /
+ * 無視パターンのうち任意の組み合わせ）で絞り込んでから折りたたんだ、読み取り
+ * 専用の仮想ドキュメントとして開くコマンド。既存の `showCollapsedView` を
+ * 拡張して常に条件選択ピッカーを経由させる案（issue #157 設計メモの案1）では
+ * なく、`showNormalizedViewFiltered` / `showMergedViewFiltered` と同様に無印
+ * コマンドとは別の新規コマンドとする案2を採る。絞り込みなしの折りたたみを
+ * ピッカー経由なしで即座に開ける既存の挙動を変えずに済み、正規化・マージの
+ * 両ビューが既に持つ「無印コマンド」と「Filtered コマンド」の対を崩さない
+ * ため。絞り込み→折りたたみの順で処理し、行対応表（issue #137）は絞り込み後の
+ * エントリに対して `formatCollapsedLogWithLineSources` が組み立てる。
+ */
+export function createShowCollapsedViewFilteredCommand(
+  provider: NormalizedViewContentProvider
+): () => Promise<void> {
+  return async function showCollapsedViewFiltered(): Promise<void> {
+    const sourceDocument = getSourceDocumentOrWarn("絞り込む");
+    if (!sourceDocument) {
+      return;
+    }
+
+    const selectedKinds = await promptFilterKinds();
+    // ユーザーがピッカーを Esc 等でキャンセルした場合は何もしない。
+    if (selectedKinds === undefined) {
+      return;
+    }
+
+    const entries = parseSourceLog(sourceDocument);
+    const displayTimezone = readDisplayTimezone();
+
+    let severities: Set<string> | undefined;
+    if (selectedKinds.has("severity")) {
+      severities = await promptSeveritySelection(entries);
+      if (severities === undefined) {
+        return;
+      }
+    }
+
+    let dateRange: FilterCriteria["dateRange"];
+    if (selectedKinds.has("dateRange")) {
+      const startMs = await promptDateBoundary("開始日時", "start", displayTimezone);
+      // null はキャンセル、または不正な入力による中断を表す。
+      if (startMs === null) {
+        return;
+      }
+
+      const endMs = await promptDateBoundary("終了日時", "end", displayTimezone);
+      if (endMs === null) {
+        return;
+      }
+
+      dateRange = { startMs, endMs };
+    }
+
+    let ignorePattern: RegExp | undefined;
+    if (selectedKinds.has("ignorePattern")) {
+      ignorePattern = await promptIgnorePattern();
+      // ユーザーがキャンセルした場合、または不正な入力による中断の場合は何もしない。
+      if (ignorePattern === undefined) {
+        return;
+      }
+    }
+
+    const criteria: FilterCriteria = { severities, dateRange, ignorePattern };
+
+    const filterResult = await filterEntriesByCriteria(entries, criteria);
+    if (!filterResult.ok) {
+      // 破局的バックトラッキング等でマッチング処理がタイムアウトした場合。
+      // 正規化ビューの統合絞り込みコマンドと同じ理由で、フォールバックせず
+      // 警告のみ出す。
+      vscode.window.showWarningMessage(
+        "Totonoe Log: 入力されたパターンの処理に時間がかかりすぎたため中断しました。より単純なパターンをお試しください。"
+      );
+      return;
+    }
+    const filteredEntries = filterResult.entries;
+
+    const threshold = vscode.workspace
+      .getConfiguration(COLLAPSE_CONFIG_SECTION)
+      .get<number>("threshold", DEFAULT_COLLAPSE_THRESHOLD);
+    const items = collapseRepeatedEntries(filteredEntries, { threshold });
+    const formatted = formatCollapsedLogWithLineSources(filteredEntries, items, {
+      displayTimezone,
+    });
+
+    await openVirtualNormalizedDocument(provider, sourceDocument, formatted, "collapsed-filtered");
+
+    reportHiddenLineCount("条件に合わない", entries, filteredEntries);
+  };
+}

@@ -1331,6 +1331,155 @@ suite("Totonoe Log collapsed view", () => {
   });
 });
 
+suite("Totonoe Log collapsed view filtered (issue #157)", () => {
+  /**
+   * "セベリティ" / "日付範囲" / "無視パターン" の条件選択ピッカーを、指定した
+   * 種類だけ選んで確定するようにモックする。正規化ビュー・マージビューの
+   * 統合絞り込みテストが使うものと同じ役割だが、テストファイル内で重複がある
+   * 点は承知のうえ、対象コマンドが違うテストスイート間で暗黙の結合を作らない
+   * よう意図的に分けている。
+   */
+  function installQuickPickMock(kindsToSelect: readonly string[]): () => void {
+    const original = vscode.window.showQuickPick;
+    (vscode.window as any).showQuickPick = async (items: vscode.QuickPickItem[]) => {
+      const isKindPicker = items.some((item) =>
+        ["セベリティ", "日付範囲", "無視パターン"].includes(item.label)
+      );
+      if (isKindPicker) {
+        return items.filter((item) => kindsToSelect.includes(item.label));
+      }
+      // セベリティ選択ピッカー: ERROR のみ選択する。
+      return items.filter((item) => item.label === "ERROR");
+    };
+    return () => {
+      (vscode.window as any).showQuickPick = original;
+    };
+  }
+
+  test("registers the showCollapsedViewFiltered command", async () => {
+    const extension = vscode.extensions.getExtension("upu.totonoe-log");
+    await extension!.activate();
+
+    const commands = await vscode.commands.getCommands(true);
+    assert.ok(
+      commands.includes("totonoeLog.showCollapsedViewFiltered"),
+      "totonoeLog.showCollapsedViewFiltered command should be registered"
+    );
+  });
+
+  test("applies the selected filter criteria before collapsing repeated entries", async () => {
+    const extension = vscode.extensions.getExtension("upu.totonoe-log");
+    await extension!.activate();
+
+    const source = await vscode.workspace.openTextDocument({
+      content: [
+        "2024-01-02T03:04:05Z INFO connect ok",
+        "2024-01-02T03:04:06Z ERROR boom",
+        "2024-01-02T03:04:07Z ERROR boom",
+        "2024-01-02T03:04:08Z ERROR boom",
+      ].join("\n"),
+      language: "log",
+    });
+    await vscode.window.showTextDocument(source);
+
+    const restoreQuickPick = installQuickPickMock(["セベリティ"]);
+    const originalShowInformationMessage = vscode.window.showInformationMessage;
+    let infoMessage: string | undefined;
+    (vscode.window as any).showInformationMessage = async (message: string) => {
+      infoMessage = message;
+      return undefined;
+    };
+
+    try {
+      await vscode.commands.executeCommand("totonoeLog.showCollapsedViewFiltered");
+    } finally {
+      restoreQuickPick();
+      (vscode.window as any).showInformationMessage = originalShowInformationMessage;
+    }
+
+    const activeEditor = vscode.window.activeTextEditor;
+    assert.ok(activeEditor, "a filtered collapsed view editor should be shown");
+    assert.strictEqual(activeEditor!.document.uri.scheme, "totonoe-log-normalized");
+    assert.strictEqual(
+      activeEditor!.document.getText(),
+      "2-4 | 2024-01-02T03:04:06.000Z 〜 2024-01-02T03:04:08.000Z ERROR boom (×3)"
+    );
+    assert.ok(
+      infoMessage?.includes("条件に合わない 1 行"),
+      "the hidden line count should be reported"
+    );
+  });
+
+  test("opens an unfiltered collapsed view when no kind is selected (but the picker is not dismissed)", async () => {
+    const extension = vscode.extensions.getExtension("upu.totonoe-log");
+    await extension!.activate();
+
+    const source = await vscode.workspace.openTextDocument({
+      content: [
+        "2024-01-02T03:04:05Z INFO connect ok",
+        "2024-01-02T03:04:06Z INFO connect ok",
+        "2024-01-02T03:04:07Z INFO connect ok",
+      ].join("\n"),
+      language: "log",
+    });
+    await vscode.window.showTextDocument(source);
+    await vscode.commands.executeCommand("workbench.action.closeOtherEditors");
+
+    const originalShowQuickPick = vscode.window.showQuickPick;
+    (vscode.window as any).showQuickPick = async () => [];
+
+    try {
+      await vscode.commands.executeCommand("totonoeLog.showCollapsedViewFiltered");
+    } finally {
+      (vscode.window as any).showQuickPick = originalShowQuickPick;
+    }
+
+    const activeEditor = vscode.window.activeTextEditor;
+    assert.ok(activeEditor, "a collapsed view editor should be shown");
+    assert.strictEqual(activeEditor!.document.uri.scheme, "totonoe-log-normalized");
+    assert.strictEqual(
+      activeEditor!.document.getText(),
+      "1-3 | 2024-01-02T03:04:05.000Z 〜 2024-01-02T03:04:07.000Z INFO connect ok (×3)"
+    );
+  });
+
+  test("does nothing when the kind picker is dismissed", async () => {
+    const extension = vscode.extensions.getExtension("upu.totonoe-log");
+    await extension!.activate();
+
+    const source = await vscode.workspace.openTextDocument({
+      content: "2024-01-02T03:04:05Z INFO starting",
+      language: "log",
+    });
+    await vscode.window.showTextDocument(source);
+    await vscode.commands.executeCommand("workbench.action.closeOtherEditors");
+
+    const originalShowQuickPick = vscode.window.showQuickPick;
+    (vscode.window as any).showQuickPick = async () => undefined;
+
+    try {
+      await vscode.commands.executeCommand("totonoeLog.showCollapsedViewFiltered");
+    } finally {
+      (vscode.window as any).showQuickPick = originalShowQuickPick;
+    }
+
+    const activeEditor = vscode.window.activeTextEditor;
+    assert.ok(activeEditor, "the original editor should remain active");
+    assert.notStrictEqual(activeEditor!.document.uri.scheme, "totonoe-log-normalized");
+  });
+
+  test("shows a warning when there is no active editor to filter", async () => {
+    const extension = vscode.extensions.getExtension("upu.totonoe-log");
+    await extension!.activate();
+
+    await vscode.commands.executeCommand("workbench.action.closeAllEditors");
+
+    await assert.doesNotReject(async () => {
+      await vscode.commands.executeCommand("totonoeLog.showCollapsedViewFiltered");
+    });
+  });
+});
+
 suite("Totonoe Log merged view", () => {
   test("merges the selected files into a single chronologically-ordered view", async () => {
     const extension = vscode.extensions.getExtension("upu.totonoe-log");
@@ -2250,6 +2399,7 @@ suite("Totonoe Log virtual document guard", () => {
       "totonoeLog.showNormalizedViewFilteredByIgnorePattern",
       "totonoeLog.showNormalizedViewFiltered",
       "totonoeLog.showCollapsedView",
+      "totonoeLog.showCollapsedViewFiltered",
     ];
 
     const originalShowWarningMessage = vscode.window.showWarningMessage;
