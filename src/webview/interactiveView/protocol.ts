@@ -11,6 +11,17 @@
  * `Set` をそのまま送らず、JSON化できるプリミティブ・配列だけで表現する。
  */
 
+/**
+ * 折りたたみ表示1件分（`normalize` の `InteractiveDisplayItem` と同じ形）。
+ * `normalize/buildInteractiveCollapsedLines.ts` からは `import type` でも
+ * 型解決される（`collapseRepeatedEntries` → `maskForCompare` → `node:net` と
+ * 依存が連なり、Node型を持たないWebview向け型チェック（`tsconfig.webview.json`）
+ * が壊れるため、あえて再定義してこのファイルのNode非依存を保つ。
+ */
+export type InteractiveDisplayItem =
+  | { readonly kind: "line"; readonly text: string }
+  | { readonly kind: "group"; readonly headerText: string; readonly lines: readonly string[] };
+
 /** Webview側フォームの状態をJSON化した表現。 */
 export interface SerializedFilterCriteria {
   /** チェック済みのセベリティ（`normalize` の `UNRECOGNIZED_SEVERITY_KEY` を含みうる）。 */
@@ -21,6 +32,12 @@ export interface SerializedFilterCriteria {
   readonly dateRangeEnd: string;
   /** 無視パターンの入力文字列（正規表現）。空文字列は「パターンなし」。 */
   readonly ignorePattern: string;
+  /**
+   * 繰り返しエントリの折りたたみを有効にするか（issue #172）。絞り込み条件
+   * ではなく表示方法の切り替えのため `FilterCriteria` には変換しないが、
+   * Webviewフォームの状態としては他の入力と同じく丸ごと送り返す。
+   */
+  readonly collapseEnabled: boolean;
 }
 
 /** Webview → 拡張機能本体 のメッセージ。 */
@@ -45,4 +62,16 @@ export interface ExtensionToWebviewMessage {
   readonly loadedFileNames: readonly string[];
   /** 無視パターンのタイムアウト・構文エラー等、絞り込み条件の一部を無視した場合の警告文。 */
   readonly warning?: string;
+  /**
+   * 折りたたみトグルを表示できるか（issue #172）。単一ファイル表示中のみ
+   * true。マージ表示（2ファイル以上）は #158 の設計課題が未解決のため
+   * 対象外とし、false のときWebview側はトグルを無効化して `text` を描画する。
+   */
+  readonly collapsibleSupported: boolean;
+  /**
+   * 折りたたみ表示用の構造化データ。`collapsibleSupported && criteria.collapseEnabled`
+   * のときだけ送る。Webview側はこれがあれば `items` を、無ければ `text` を
+   * そのまま描画する。
+   */
+  readonly items?: readonly InteractiveDisplayItem[];
 }

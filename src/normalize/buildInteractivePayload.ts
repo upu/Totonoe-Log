@@ -4,6 +4,7 @@ import type { LineSource } from "./lineSources";
 import { getDistinctSeverities } from "./filterBySeverity";
 import { filterEntriesByCriteria, type FilterCriteria } from "./filterEntries";
 import { formatNormalizedLogWithLineSources } from "./formatNormalizedLog";
+import { buildInteractiveCollapsedLines, type InteractiveDisplayItem } from "./buildInteractiveCollapsedLines";
 
 /** {@link buildInteractivePayload} の挙動を調整するオプション。 */
 export interface BuildInteractivePayloadOptions {
@@ -11,6 +12,12 @@ export interface BuildInteractivePayloadOptions {
   readonly displayTimezone?: DisplayTimezone;
   /** 無視パターンの評価に使うタイムアウト（ミリ秒）を上書きしたい場合に指定する（主にテスト用）。 */
   readonly ignorePatternTimeoutMs?: number;
+  /**
+   * 指定すると、絞り込み後のエントリから折りたたみ用の構造化データ（`items`）
+   * も合わせて計算する（issue #172）。未指定なら `items` は計算しない
+   * （マージ表示モードは折りたたみ非対応のため、呼び出し側がこの値を渡さない）。
+   */
+  readonly collapseThreshold?: number;
 }
 
 export type InteractivePayloadResult =
@@ -21,6 +28,7 @@ export type InteractivePayloadResult =
       readonly distinctSeverities: readonly string[];
       readonly totalLineCount: number;
       readonly visibleLineCount: number;
+      readonly items?: readonly InteractiveDisplayItem[];
     }
   | { readonly ok: false; readonly reason: "timeout" | "error" };
 
@@ -57,6 +65,13 @@ export async function buildInteractivePayload(
     displayTimezone: options.displayTimezone,
   });
 
+  const items = options.collapseThreshold !== undefined
+    ? buildInteractiveCollapsedLines(filterResult.entries, {
+        threshold: options.collapseThreshold,
+        displayTimezone: options.displayTimezone,
+      })
+    : undefined;
+
   return {
     ok: true,
     text: formatted.text,
@@ -64,5 +79,6 @@ export async function buildInteractivePayload(
     distinctSeverities,
     totalLineCount: countPhysicalLines(entries),
     visibleLineCount: countPhysicalLines(filterResult.entries),
+    items,
   };
 }

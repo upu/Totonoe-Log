@@ -33,6 +33,7 @@ import {
   formatCollapsedLogWithLineSources,
   buildInteractivePayload,
   buildInteractiveMergedPayload,
+  buildInteractiveCollapsedLines,
 } from "../../normalize";
 import * as maskForCompare from "../../normalize/maskForCompare";
 
@@ -1141,6 +1142,40 @@ suite("normalize / buildInteractivePayload (#166)", () => {
       assert.strictEqual(payload.reason, "timeout");
     }
   });
+
+  test("omits items when collapseThreshold is not specified", async () => {
+    const entries = parseLog(sampleText);
+
+    const payload = await buildInteractivePayload(entries, {});
+
+    assert.strictEqual(payload.ok, true);
+    if (!payload.ok) {
+      throw new Error("unreachable");
+    }
+    assert.strictEqual(payload.items, undefined);
+  });
+
+  test("computes items from the filtered entries when collapseThreshold is specified (#172)", async () => {
+    const entries = parseLog(sampleText);
+    const criteria = { severities: new Set(["ERROR"]) };
+
+    const payload = await buildInteractivePayload(entries, criteria, { collapseThreshold: 3 });
+
+    assert.strictEqual(payload.ok, true);
+    if (!payload.ok) {
+      throw new Error("unreachable");
+    }
+
+    const filterResult = await filterEntriesByCriteria(entries, criteria);
+    assert.strictEqual(filterResult.ok, true);
+    if (!filterResult.ok) {
+      throw new Error("unreachable");
+    }
+    assert.deepStrictEqual(
+      payload.items,
+      buildInteractiveCollapsedLines(filterResult.entries, { threshold: 3 })
+    );
+  });
 });
 
 suite("normalize / buildInteractiveMergedPayload (#168)", () => {
@@ -1234,6 +1269,113 @@ suite("normalize / buildInteractiveMergedPayload (#168)", () => {
     if (!payload.ok) {
       assert.strictEqual(payload.reason, "timeout");
     }
+  });
+});
+
+suite("normalize / buildInteractiveCollapsedLines (#172)", () => {
+  test("keeps entries below the threshold as individual line items", () => {
+    const text = ["2024-01-02T03:04:05Z INFO A", "2024-01-02T03:04:06Z INFO B"].join("\n");
+    const entries = parseLog(text);
+
+    const items = buildInteractiveCollapsedLines(entries, { threshold: 3 });
+
+    assert.deepStrictEqual(
+      items,
+      formatNormalizedLog(entries)
+        .split("\n")
+        .map((text) => ({ kind: "line", text }))
+    );
+  });
+
+  test("groups entries at or above the threshold into a single group item", () => {
+    const text = [
+      "2024-01-02T03:04:05Z INFO connect ok",
+      "2024-01-02T03:04:06Z INFO connect ok",
+      "2024-01-02T03:04:07Z INFO connect ok",
+    ].join("\n");
+    const entries = parseLog(text);
+
+    const items = buildInteractiveCollapsedLines(entries, { threshold: 3 });
+
+    assert.strictEqual(items.length, 1);
+    const [item] = items;
+    assert.strictEqual(item.kind, "group");
+    if (item.kind !== "group") {
+      throw new Error("unreachable");
+    }
+    // 見出しは formatCollapsedLog と同じ内容になる（範囲ラベル・タイムスタンプスパン・×N）。
+    const collapsedItems = collapseRepeatedEntries(entries, { threshold: 3 });
+    assert.strictEqual(item.headerText, formatCollapsedLog(entries, collapsedItems));
+    // 展開後の各行は、範囲ラベル("1-3"、3桁)に合わせた幅のガターで揃う。
+    assert.deepStrictEqual(item.lines, [
+      "  1 | 2024-01-02T03:04:05.000Z INFO connect ok",
+      "  2 | 2024-01-02T03:04:06.000Z INFO connect ok",
+      "  3 | 2024-01-02T03:04:07.000Z INFO connect ok",
+    ]);
+  });
+
+  test("shares a gutter width wide enough for both plain line numbers and group range labels", () => {
+    const text = [
+      "==== banner ====",
+      "2024-01-02T03:04:05Z INFO ok",
+      "2024-01-02T03:04:06Z INFO ok",
+      "2024-01-02T03:04:07Z INFO ok",
+    ].join("\n");
+    const entries = parseLog(text);
+
+    const items = buildInteractiveCollapsedLines(entries, { threshold: 3 });
+
+    assert.strictEqual(items.length, 2);
+    assert.deepStrictEqual(items[0], { kind: "line", text: "  1 | ==== banner ====" });
+    assert.strictEqual(items[1].kind, "group");
+    if (items[1].kind !== "group") {
+      throw new Error("unreachable");
+    }
+    assert.strictEqual(
+      items[1].headerText,
+      "2-4 | 2024-01-02T03:04:05.000Z 〜 2024-01-02T03:04:07.000Z INFO ok (×3)"
+    );
+    // グループ内の展開行も、範囲ラベル("2-4"、3桁)に合わせた幅のガターで揃う。
+    assert.deepStrictEqual(items[1].lines, [
+      "  2 | 2024-01-02T03:04:05.000Z INFO ok",
+      "  3 | 2024-01-02T03:04:06.000Z INFO ok",
+      "  4 | 2024-01-02T03:04:07.000Z INFO ok",
+    ]);
+  });
+
+  test("keeps each grouped entry's own continuation lines in the expanded output", () => {
+    const text = [
+      "2024-01-02T03:04:05Z ERROR boom",
+      "  detail",
+      "2024-01-02T03:04:06Z ERROR boom",
+      "  detail",
+      "2024-01-02T03:04:07Z ERROR boom",
+      "  detail",
+    ].join("\n");
+    const entries = parseLog(text);
+
+    const items = buildInteractiveCollapsedLines(entries, { threshold: 3 });
+
+    assert.strictEqual(items.length, 1);
+    const [item] = items;
+    assert.strictEqual(item.kind, "group");
+    if (item.kind !== "group") {
+      throw new Error("unreachable");
+    }
+    // ガター幅は範囲ラベル("1-6"、3桁)に合わせて揃うため、単独で
+    // formatNormalizedLog(entries) を呼んだ場合（幅1桁）とは異なる。
+    assert.deepStrictEqual(item.lines, [
+      "  1 | 2024-01-02T03:04:05.000Z ERROR boom",
+      "  2 |   detail",
+      "  3 | 2024-01-02T03:04:06.000Z ERROR boom",
+      "  4 |   detail",
+      "  5 | 2024-01-02T03:04:07.000Z ERROR boom",
+      "  6 |   detail",
+    ]);
+  });
+
+  test("returns no items for an empty entry list", () => {
+    assert.deepStrictEqual(buildInteractiveCollapsedLines([]), []);
   });
 });
 

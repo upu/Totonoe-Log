@@ -11,6 +11,7 @@ suite("interactiveViewCriteria / toFilterCriteria (#166)", () => {
         dateRangeStart: "",
         dateRangeEnd: "",
         ignorePattern: "",
+        collapseEnabled: false,
       },
       0
     );
@@ -28,6 +29,7 @@ suite("interactiveViewCriteria / toFilterCriteria (#166)", () => {
         dateRangeStart: "  ",
         dateRangeEnd: "",
         ignorePattern: "",
+        collapseEnabled: false,
       },
       0
     );
@@ -43,6 +45,7 @@ suite("interactiveViewCriteria / toFilterCriteria (#166)", () => {
         dateRangeStart: "2024-01-02",
         dateRangeEnd: "2024-01-03",
         ignorePattern: "",
+        collapseEnabled: false,
       },
       0
     );
@@ -61,6 +64,7 @@ suite("interactiveViewCriteria / toFilterCriteria (#166)", () => {
         dateRangeStart: "not-a-date",
         dateRangeEnd: "",
         ignorePattern: "",
+        collapseEnabled: false,
       },
       0
     );
@@ -77,6 +81,7 @@ suite("interactiveViewCriteria / toFilterCriteria (#166)", () => {
         dateRangeStart: "",
         dateRangeEnd: "",
         ignorePattern: "heartbeat",
+        collapseEnabled: false,
       },
       0
     );
@@ -93,6 +98,7 @@ suite("interactiveViewCriteria / toFilterCriteria (#166)", () => {
         dateRangeStart: "",
         dateRangeEnd: "",
         ignorePattern: "(unterminated",
+        collapseEnabled: false,
       },
       0
     );
