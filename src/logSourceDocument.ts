@@ -1,5 +1,5 @@
 import * as vscode from "vscode";
-import { applyClockSkew, type LogEntry } from "./normalize";
+import { applyClockSkew, type LogEntry, type LogFileInput } from "./normalize";
 import { guardAgainstVirtualDocumentSource } from "./virtualDocumentContentProvider";
 import { parseLogWithConfiguredFormats } from "./timestampFormatSettings";
 import { createSourceOffsetResolver } from "./timezoneSettings";
@@ -50,4 +50,23 @@ export function parseSourceLog(sourceDocument: vscode.TextDocument): LogEntry[] 
   const entries = applyClockSkew(parsedEntries, createClockSkewResolver()(fileName));
   warnIfLowTimestampRecognition(sourceDocument.uri, entries);
   return entries;
+}
+
+/**
+ * 既に開いているドキュメントから {@link LogFileInput}（`mergeLogFiles` への
+ * 入力形式）を組み立てる。`readLogFiles`（`logFileReading.ts`）はディスクから
+ * 読み直す前提だが、こちらは既にエディタが内容をデコード済みのドキュメントを
+ * 対象にするため `sourceDocument.getText()` をそのまま使い、二重読み込みを
+ * 避ける。Interactive View (Alpha, issue #168) が、単一ファイル表示から
+ * 複数ファイルのマージ表示に切り替わる際、最初のファイルを追加ファイルと
+ * 同じ形式で `mergeLogFiles` に渡すために使う。
+ */
+export function buildLogFileInputFromDocument(sourceDocument: vscode.TextDocument): LogFileInput {
+  const fileName = sourceDocument.uri.path.split("/").pop() ?? "";
+  return {
+    fileName,
+    text: sourceDocument.getText(),
+    sourceUtcOffsetMinutes: createSourceOffsetResolver()(fileName),
+    clockSkewMs: createClockSkewResolver()(fileName),
+  };
 }
