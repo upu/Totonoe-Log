@@ -66,3 +66,8 @@ export {
   LOW_RECOGNITION_RATIO_THRESHOLD,
   assessTimestampRecognition,
 } from "./timestampCoverage";
+export type {
+  BuildInteractivePayloadOptions,
+  InteractivePayloadResult,
+} from "./buildInteractivePayload";
+export { buildInteractivePayload } from "./buildInteractivePayload";

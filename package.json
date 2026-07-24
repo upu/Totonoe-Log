@@ -84,6 +84,10 @@
       {
         "command": "totonoeLog.goToSourceLine",
         "title": "Totonoe Log: Go to Source Line"
+      },
+      {
+        "command": "totonoeLog.showInteractiveViewAlpha",
+        "title": "Totonoe Log: Show Interactive View (Alpha)"
       }
     ],
     "menus": {
@@ -214,8 +218,8 @@
     "vscode:prepublish": "npm run build",
     "build": "node scripts/esbuild.js --production",
     "watch": "node scripts/esbuild.js --watch",
-    "compile": "tsc -p ./",
-    "check-types": "tsc --noEmit",
+    "compile": "tsc -p ./ && tsc -p tsconfig.webview.json",
+    "check-types": "tsc --noEmit && tsc -p tsconfig.webview.json --noEmit",
     "lint": "eslint src scripts eslint.config.mjs",
     "test": "vscode-test",
     "check:package": "node scripts/check-package-contents.js",

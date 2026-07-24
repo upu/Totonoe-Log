@@ -31,6 +31,7 @@ import {
   formatNormalizedLogWithLineSources,
   formatMergedLogWithLineSources,
   formatCollapsedLogWithLineSources,
+  buildInteractivePayload,
 } from "../../normalize";
 import * as maskForCompare from "../../normalize/maskForCompare";
 
@@ -1060,6 +1061,83 @@ suite("normalize / filterEntriesByCriteria", () => {
     assert.strictEqual(result.ok, false);
     if (!result.ok) {
       assert.strictEqual(result.reason, "timeout");
+    }
+  });
+});
+
+suite("normalize / buildInteractivePayload (#166)", () => {
+  const sampleText = [
+    "2024-01-01T00:00:00Z ERROR before range",
+    "2024-01-02T03:04:05Z INFO in range but wrong severity",
+    "2024-01-02T03:04:06Z ERROR in range and matching",
+    "2024-01-02T03:04:07Z ERROR heartbeat noise",
+    "not a recognizable log line at all",
+  ].join("\n");
+
+  test("matches filterEntriesByCriteria + formatNormalizedLogWithLineSources composed manually", async () => {
+    const entries = parseLog(sampleText);
+    const criteria = { severities: new Set(["ERROR"]) };
+
+    const payload = await buildInteractivePayload(entries, criteria);
+
+    assert.strictEqual(payload.ok, true);
+    if (!payload.ok) {
+      throw new Error("unreachable");
+    }
+
+    const filterResult = await filterEntriesByCriteria(entries, criteria);
+    assert.strictEqual(filterResult.ok, true);
+    if (!filterResult.ok) {
+      throw new Error("unreachable");
+    }
+    const expected = formatNormalizedLogWithLineSources(filterResult.entries);
+
+    assert.strictEqual(payload.text, expected.text);
+    assert.deepStrictEqual(payload.lineSources, expected.lineSources);
+  });
+
+  test("computes distinctSeverities from the unfiltered entries, not the filtered result", async () => {
+    const entries = parseLog(sampleText);
+
+    const payload = await buildInteractivePayload(entries, { severities: new Set(["ERROR"]) });
+
+    assert.strictEqual(payload.ok, true);
+    if (!payload.ok) {
+      throw new Error("unreachable");
+    }
+    // INFO のエントリはフィルタで0件になるが、チェックボックス自体は残ってほしい。
+    assert.deepStrictEqual(payload.distinctSeverities, getDistinctSeverities(entries));
+    assert.ok(payload.distinctSeverities.includes("INFO"));
+  });
+
+  test("counts total and visible physical lines separately", async () => {
+    const entries = parseLog(sampleText);
+
+    const payload = await buildInteractivePayload(entries, { severities: new Set(["ERROR"]) });
+
+    assert.strictEqual(payload.ok, true);
+    if (!payload.ok) {
+      throw new Error("unreachable");
+    }
+    assert.strictEqual(payload.totalLineCount, entries.reduce((n, e) => n + e.lines.length, 0));
+    // ERRORの3エントリ。最後の「heartbeat noise」エントリは、次行の
+    // 「not a recognizable...」（タイムスタンプなし）を継続行として
+    // 取り込むため2行になる（1+1+2=4）。
+    assert.strictEqual(payload.visibleLineCount, 4);
+  });
+
+  test("propagates a timeout failure from the ignore pattern stage", async () => {
+    const entries = parseLog("2024-01-02T03:04:05Z INFO hello");
+
+    const payload = await buildInteractivePayload(
+      entries,
+      { ignorePattern: /hello/ },
+      { ignorePatternTimeoutMs: 1 }
+    );
+
+    assert.strictEqual(payload.ok, false);
+    if (!payload.ok) {
+      assert.strictEqual(payload.reason, "timeout");
     }
   });
 });

@@ -12,7 +12,15 @@ const { execSync } = require("node:child_process");
 const fs = require("node:fs");
 const path = require("node:path");
 
-const EXPECTED = ["CHANGELOG.md", "LICENSE", "README.md", "media/icon.png", "out/extension.js", "package.json"];
+const EXPECTED = [
+  "CHANGELOG.md",
+  "LICENSE",
+  "README.md",
+  "media/icon.png",
+  "out/extension.js",
+  "out/webview/interactiveView/main.js",
+  "package.json",
+];
 
 function listPackagedFiles() {
   const output = execSync("npx --no-install vsce ls", { encoding: "utf8" });

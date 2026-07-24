@@ -8,6 +8,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- New experimental `Totonoe Log: Show Interactive View (Alpha)` command:
+  opens the normalized log in a Webview panel where severity, date-range,
+  and ignore-pattern filters can be toggled live, without round-tripping
+  through Quick Pick dialogs. This is the first step of an alpha
+  exploration (issue #166) into a Webview-based interactive view; existing
+  read-only virtual-document views are unaffected and remain the primary
+  way to work with logs. Expect this command's behavior to change.
+
 ## [0.7.0] - 2026-07-23
 
 ### Added

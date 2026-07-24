@@ -67,6 +67,10 @@ Logs from servers in different timezones, or from a host whose clock is off, can
 
 `Totonoe Log: Show Collapsed View` folds consecutive repeated patterns into a single line with a repeat count (e.g. "×5"), so repetitive noise stops burying the interesting entries (threshold configurable with `totonoeLog.collapse.threshold`). Each collapsed line also shows the group's timestamp span (start 〜 end), so you can tell a burst that happened in seconds from one spread over hours without expanding the group.
 
+## Interactive View (Alpha)
+
+`Totonoe Log: Show Interactive View (Alpha)` opens the normalized log in a Webview panel where you can toggle severity, date-range, and ignore-pattern filters live, without round-tripping through Quick Pick dialogs. This is an experimental first step toward a Webview-based interactive view (tracked in issue #165/#166); its behavior may change, and the read-only virtual-document views above remain the primary, stable way to work with logs.
+
 ## Compare two logs
 
 `Totonoe Log: Compare Logs` diffs two logs that differ in dates or hosts — without those differences flooding the diff as noise, so the real differences stand out.
