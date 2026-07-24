@@ -109,17 +109,42 @@ function renderLoadedFiles(fileNames: readonly string[]): void {
 const COLLAPSED_PREFIX = "▶ ";
 const EXPANDED_PREFIX = "▼ ";
 
+/** 展開中の見出し行に表示する固定ラベル（折りたたみへ戻す操作であることだけを示す）。 */
+const COLLAPSE_ACTION_LABEL = "折りたたむ";
+
+/**
+ * `headerText`（`"範囲ラベル | 時刻 severity メッセージ (×N)"`）を、ガター部分
+ * （`"範囲ラベル | "`）とそれ以降に分割する。矢印・操作ラベルをガターの直後に
+ * 挿入することで、他の行のガター列と縦位置を揃える。
+ */
+function splitHeaderGutter(headerText: string): { readonly gutter: string; readonly rest: string } {
+  const separatorIndex = headerText.indexOf(" | ");
+  if (separatorIndex < 0) {
+    return { gutter: "", rest: headerText };
+  }
+  return {
+    gutter: headerText.slice(0, separatorIndex + 3),
+    rest: headerText.slice(separatorIndex + 3),
+  };
+}
+
 /**
  * 折りたたみグループ1件をDOMに追加する。展開/復元はここに閉じたローカル
  *状態（`body.hidden`）だけで完結させ、拡張機能本体へは何も送らない
  * （issue #172、届いた `lines` を表示/非表示切り替えするだけで済むため）。
+ *
+ * 展開中は見出し行から時刻・severity・メッセージ（`rest`）を消し、ガターと
+ * 「折りたたむ」操作ラベルだけを残す——`rest` はこれから表示する `body` の
+ * 先頭エントリと同じ内容のため、両方出すと展開直後に同じ行が二重に見えて
+ * 読みにくいという指摘（#172 PRレビュー）への対応。
  */
 function appendGroupItem(item: Extract<DisplayItem, { kind: "group" }>): void {
+  const { gutter, rest } = splitHeaderGutter(item.headerText);
+
   const header = document.createElement("span");
   header.className = "collapse-group-header";
   header.setAttribute("role", "button");
   header.tabIndex = 0;
-  header.textContent = COLLAPSED_PREFIX + item.headerText;
 
   const body = document.createElement("span");
   body.className = "collapse-group-body";
@@ -127,10 +152,16 @@ function appendGroupItem(item: Extract<DisplayItem, { kind: "group" }>): void {
   // グループ本文もログ由来の非信頼データのため textContent で設定する。
   body.textContent = item.lines.join("\n") + "\n";
 
+  const updateHeaderText = (): void => {
+    header.textContent = body.hidden
+      ? `${gutter}${COLLAPSED_PREFIX}${rest}`
+      : `${gutter}${EXPANDED_PREFIX}${COLLAPSE_ACTION_LABEL}`;
+  };
+  updateHeaderText();
+
   const toggle = (): void => {
-    const willExpand = body.hidden;
-    body.hidden = !willExpand;
-    header.textContent = (willExpand ? EXPANDED_PREFIX : COLLAPSED_PREFIX) + item.headerText;
+    body.hidden = !body.hidden;
+    updateHeaderText();
   };
   header.addEventListener("click", toggle);
   header.addEventListener("keydown", (event) => {
