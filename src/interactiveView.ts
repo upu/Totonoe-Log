@@ -5,6 +5,7 @@ import {
   buildInteractiveMergedPayload,
   getDistinctSeverities,
   mergeLogFiles,
+  DEFAULT_COLLAPSE_THRESHOLD,
   type BuildInteractivePayloadOptions,
   type FilterCriteria,
   type InteractivePayloadResult,
@@ -35,14 +36,23 @@ const INTERACTIVE_VIEW_TYPE = "totonoeLog.interactiveViewAlpha";
 /** Webview側スクリプトのバンドル出力（`scripts/esbuild.js` の第2エントリ）を探すための相対パス。 */
 const WEBVIEW_SCRIPT_RELATIVE_PATH = ["out", "webview", "interactiveView", "main.js"];
 
-/** チェック済みセベリティ・空の日付範囲・空の無視パターンという初期状態を作る。 */
+/** 折りたたみのしきい値を読み込むVSCode設定のセクション名（`normalizedView.ts` の `Show Collapsed View` と共有）。 */
+const COLLAPSE_CONFIG_SECTION = "totonoeLog.collapse";
+
+/** チェック済みセベリティ・空の日付範囲・空の無視パターン・折りたたみONという初期状態を作る（issue #172、デフォルトON）。 */
 function createDefaultSerializedCriteria(entries: readonly LogEntry[]): SerializedFilterCriteria {
   return {
     severities: getDistinctSeverities(entries),
     dateRangeStart: "",
     dateRangeEnd: "",
     ignorePattern: "",
+    collapseEnabled: true,
   };
+}
+
+/** `totonoeLog.collapse.threshold` 設定を読む（`normalizedView.ts` の `Show Collapsed View` と同じ読み取り方）。 */
+function readCollapseThreshold(): number {
+  return vscode.workspace.getConfiguration(COLLAPSE_CONFIG_SECTION).get<number>("threshold", DEFAULT_COLLAPSE_THRESHOLD);
 }
 
 /**
@@ -251,15 +261,19 @@ export class InteractiveViewPanelController implements vscode.Disposable {
 
     const displayTimezone = readDisplayTimezone();
     const { criteria, errors } = toFilterCriteria(this.criteria, displayTimezone);
+    // マージ表示（2ファイル以上）は折りたたみ非対応（issue #172、#158の未解決課題を踏まえた判断）。
+    const collapsibleSupported = this.additionalFiles.length === 0;
     const formatOptions: BuildInteractivePayloadOptions = {
       gapThresholdMs: readGapThresholdMs(),
       displayTimezone,
+      collapseThreshold:
+        collapsibleSupported && this.criteria.collapseEnabled ? readCollapseThreshold() : undefined,
     };
 
     const payload = await this.computePayload(criteria, formatOptions);
 
     if (payload.ok) {
-      await this.sendState(payload, errors);
+      await this.sendState(payload, errors, collapsibleSupported);
       return;
     }
 
@@ -270,7 +284,7 @@ export class InteractiveViewPanelController implements vscode.Disposable {
         payload.reason === "timeout"
           ? "入力されたパターンの処理に時間がかかりすぎたため、無視パターンを適用せずに表示しています。より単純なパターンをお試しください。"
           : "無視パターンの評価中にエラーが発生したため、無視パターンを適用せずに表示しています。";
-      await this.sendState(fallbackPayload, [...errors, reason]);
+      await this.sendState(fallbackPayload, [...errors, reason], collapsibleSupported);
     }
   }
 
@@ -282,7 +296,8 @@ export class InteractiveViewPanelController implements vscode.Disposable {
    */
   private async sendState(
     payload: Extract<InteractivePayloadResult, { ok: true }>,
-    errors: readonly string[]
+    errors: readonly string[],
+    collapsibleSupported: boolean
   ): Promise<void> {
     if (!this.panel) {
       return;
@@ -297,6 +312,8 @@ export class InteractiveViewPanelController implements vscode.Disposable {
       visibleLineCount: payload.visibleLineCount,
       loadedFileNames: this.loadedFileNames(),
       warning: errors.length > 0 ? errors.join(" / ") : undefined,
+      collapsibleSupported,
+      items: payload.items,
     };
     await this.panel.webview.postMessage(message);
   }
@@ -379,6 +396,12 @@ export class InteractiveViewPanelController implements vscode.Disposable {
     white-space: pre;
     overflow-x: auto;
   }
+  .collapse-group-header {
+    cursor: pointer;
+  }
+  .collapse-group-header:hover {
+    background-color: var(--vscode-list-hoverBackground);
+  }
 </style>
 </head>
 <body>
@@ -391,6 +414,7 @@ export class InteractiveViewPanelController implements vscode.Disposable {
     <label>開始日時 <input type="text" id="date-start" placeholder="YYYY-MM-DD"></label>
     <label>終了日時 <input type="text" id="date-end" placeholder="YYYY-MM-DD"></label>
     <label>無視パターン <input type="text" id="ignore-pattern" placeholder="正規表現"></label>
+    <label><input type="checkbox" id="collapse-toggle" checked>繰り返しを折りたたむ</label>
   </div>
   <div id="status"></div>
   <div id="warning"></div>

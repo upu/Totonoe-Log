@@ -72,3 +72,8 @@ export type {
 } from "./buildInteractivePayload";
 export { buildInteractivePayload } from "./buildInteractivePayload";
 export { buildInteractiveMergedPayload } from "./buildInteractiveMergedPayload";
+export type {
+  InteractiveDisplayItem,
+  BuildInteractiveCollapsedLinesOptions,
+} from "./buildInteractiveCollapsedLines";
+export { buildInteractiveCollapsedLines } from "./buildInteractiveCollapsedLines";
