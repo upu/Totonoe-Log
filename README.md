@@ -69,7 +69,7 @@ Logs from servers in different timezones, or from a host whose clock is off, can
 
 ## Interactive View (Alpha)
 
-`Totonoe Log: Show Interactive View (Alpha)` opens the normalized log in a Webview panel where you can toggle severity, date-range, and ignore-pattern filters live, without round-tripping through Quick Pick dialogs. This is an experimental first step toward a Webview-based interactive view (tracked in issue #165/#166); its behavior may change, and the read-only virtual-document views above remain the primary, stable way to work with logs.
+`Totonoe Log: Show Interactive View (Alpha)` opens the normalized log in a Webview panel where you can toggle severity, date-range, and ignore-pattern filters live, without round-tripping through Quick Pick dialogs. A "+ Add Files..." button lets you load more log files into the same panel; once two or more files are loaded, the view switches to a merged, filename/kind-columned display. This is an experimental first step toward a Webview-based interactive view (tracked in issue #165/#166/#168); its behavior may change, and the read-only virtual-document views above remain the primary, stable way to work with logs.
 
 ## Compare two logs
 

@@ -17,6 +17,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   exploration (issue #166) into a Webview-based interactive view; existing
   read-only virtual-document views are unaffected and remain the primary
   way to work with logs. Expect this command's behavior to change.
+- `Totonoe Log: Show Interactive View (Alpha)` can now load additional log
+  files via a "+ Add Files..." button in the panel. Once two or more files
+  are loaded, the view switches to a merged, filename/kind-columned display
+  (issue #168, the next alpha step in #165), while a single loaded file
+  keeps the original normalized display.
 
 ## [0.7.0] - 2026-07-23
 

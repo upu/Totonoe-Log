@@ -1,6 +1,7 @@
 import * as assert from "node:assert";
 import * as vscode from "vscode";
 import { toFilterCriteria } from "../../interactiveViewCriteria";
+import { selectNewFileUris } from "../../interactiveViewFiles";
 
 suite("interactiveViewCriteria / toFilterCriteria (#166)", () => {
   test("converts checked severities into a Set as-is", () => {
@@ -99,6 +100,31 @@ suite("interactiveViewCriteria / toFilterCriteria (#166)", () => {
     assert.strictEqual(criteria.ignorePattern, undefined);
     assert.strictEqual(errors.length, 1);
     assert.match(errors[0], /正規表現として解釈できませんでした/);
+  });
+});
+
+suite("interactiveViewFiles / selectNewFileUris (#168)", () => {
+  test("returns candidates unchanged when nothing is already loaded", () => {
+    const result = selectNewFileUris([], ["file:///a.log", "file:///b.log"]);
+    assert.deepStrictEqual(result, ["file:///a.log", "file:///b.log"]);
+  });
+
+  test("excludes candidates that are already loaded", () => {
+    const result = selectNewFileUris(
+      ["file:///a.log"],
+      ["file:///a.log", "file:///b.log"]
+    );
+    assert.deepStrictEqual(result, ["file:///b.log"]);
+  });
+
+  test("de-duplicates repeated candidates while preserving first-seen order", () => {
+    const result = selectNewFileUris([], ["file:///b.log", "file:///a.log", "file:///b.log"]);
+    assert.deepStrictEqual(result, ["file:///b.log", "file:///a.log"]);
+  });
+
+  test("returns an empty array when every candidate is already loaded", () => {
+    const result = selectNewFileUris(["file:///a.log"], ["file:///a.log"]);
+    assert.deepStrictEqual(result, []);
   });
 });
 

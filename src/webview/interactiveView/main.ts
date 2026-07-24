@@ -16,6 +16,8 @@ const UNRECOGNIZED_SEVERITY_LABEL = "(no severity)";
 
 const vscodeApi = acquireVsCodeApi<WebviewToExtensionMessage>();
 
+const addFilesButton = document.getElementById("add-files-button") as HTMLButtonElement;
+const loadedFilesElement = document.getElementById("loaded-files") as HTMLSpanElement;
 const severitiesContainer = document.getElementById("severities") as HTMLDivElement;
 const dateStartInput = document.getElementById("date-start") as HTMLInputElement;
 const dateEndInput = document.getElementById("date-end") as HTMLInputElement;
@@ -62,6 +64,13 @@ dateStartInput.addEventListener("input", postFilterChangedDebounced);
 dateEndInput.addEventListener("input", postFilterChangedDebounced);
 ignorePatternInput.addEventListener("input", postFilterChangedDebounced);
 
+// ファイル選択ダイアログを開くのは拡張機能本体側の責務（Webviewからは
+// vscode.window.showOpenDialog を呼べない）。ボタンは離散的な操作なので
+// チェックボックスと同じく即座に送る。
+addFilesButton.addEventListener("click", () => {
+  vscodeApi.postMessage({ type: "addFiles" });
+});
+
 function renderSeverities(distinctSeverities: readonly string[], checked: readonly string[]): void {
   const checkedSet = new Set(checked);
   severitiesContainer.textContent = "";
@@ -86,7 +95,12 @@ function syncTextInputIfNotFocused(input: HTMLInputElement, value: string): void
   }
 }
 
+function renderLoadedFiles(fileNames: readonly string[]): void {
+  loadedFilesElement.textContent = `読み込み済み: ${fileNames.join(", ")}`;
+}
+
 function renderState(state: ExtensionToWebviewMessage): void {
+  renderLoadedFiles(state.loadedFileNames);
   renderSeverities(state.distinctSeverities, state.criteria.severities);
   syncTextInputIfNotFocused(dateStartInput, state.criteria.dateRangeStart);
   syncTextInputIfNotFocused(dateEndInput, state.criteria.dateRangeEnd);

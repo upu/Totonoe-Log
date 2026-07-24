@@ -71,3 +71,4 @@ export type {
   InteractivePayloadResult,
 } from "./buildInteractivePayload";
 export { buildInteractivePayload } from "./buildInteractivePayload";
+export { buildInteractiveMergedPayload } from "./buildInteractiveMergedPayload";

@@ -2,13 +2,26 @@ import * as vscode from "vscode";
 import { randomBytes } from "node:crypto";
 import {
   buildInteractivePayload,
+  buildInteractiveMergedPayload,
   getDistinctSeverities,
+  mergeLogFiles,
+  type BuildInteractivePayloadOptions,
   type FilterCriteria,
+  type InteractivePayloadResult,
   type LogEntry,
+  type LogFileInput,
+  type MergedEntry,
 } from "./normalize";
-import { getSourceDocumentOrWarn, parseSourceLog } from "./logSourceDocument";
+import {
+  getSourceDocumentOrWarn,
+  parseSourceLog,
+  buildLogFileInputFromDocument,
+} from "./logSourceDocument";
+import { readLogFiles, filterOutFolders } from "./logFileReading";
+import { selectNewFileUris } from "./interactiveViewFiles";
 import { readDisplayTimezone } from "./timezoneSettings";
 import { readGapThresholdMs } from "./gapThresholdSetting";
+import { readConfiguredTimestampFormats } from "./timestampFormatSettings";
 import { toFilterCriteria } from "./interactiveViewCriteria";
 import type {
   ExtensionToWebviewMessage,
@@ -41,6 +54,11 @@ function generateNonce(): string {
   return randomBytes(16).toString("hex");
 }
 
+/** URIの最後のパス要素（ファイル名）を取り出す。取得できない場合は空文字列。 */
+function baseName(uri: vscode.Uri): string {
+  return uri.path.split("/").pop() ?? "";
+}
+
 /**
  * Webviewベースのインタラクティブビュー（issue #166）のパネルを1つだけ保持し、
  * 生成・再表示・破棄とメッセージ配線を行う。
@@ -50,20 +68,33 @@ function generateNonce(): string {
  * （拡張機能本体側、Node実行）が一手に引き受ける。Webview側は届いた結果を
  * 描画するだけの薄いレンダラーにとどめる。
  *
- * パネルはシングルトンで、既に開いている状態で別のログファイルに対して
- * コマンドを実行すると、既存パネルの表示内容がそのファイルに差し替わる
- * （複数ファイルを同時に扱う対応は、#165 の後続フェーズで検討する）。
+ * パネルはシングルトン。ファイルは「+ Add Files...」（issue #168）で追加
+ * でき、1ファイルの間は正規化ビュー相当の表示、2ファイル以上になった時点で
+ * マージビュー相当（ファイル名/種別列付き）の表示に切り替わる（デュアルパス）。
+ * 別のログファイルに対してコマンドを再実行すると、既存パネルの表示内容が
+ * そのファイル1つにリセットされる。
  */
 export class InteractiveViewPanelController implements vscode.Disposable {
   private panel: vscode.WebviewPanel | undefined;
-  private entries: readonly LogEntry[] = [];
+  private sourceDocument: vscode.TextDocument | undefined;
+  /** 2ファイル目以降に追加されたファイル。1ファイル目（`sourceDocument`）はここに含めない。 */
+  private additionalFiles: LogFileInput[] = [];
+  /** 重複読み込み防止用。先頭は `sourceDocument` のURI文字列。 */
+  private loadedUriStrings: string[] = [];
+  /** `additionalFiles.length === 0` の間だけ使う、単一ファイルパスのキャッシュ。 */
+  private singleEntries: readonly LogEntry[] = [];
+  /** `additionalFiles.length > 0` の間だけ使う、マージ済みエントリのキャッシュ。 */
+  private mergedEntries: readonly MergedEntry[] = [];
   private criteria: SerializedFilterCriteria = createDefaultSerializedCriteria([]);
 
   constructor(private readonly extensionUri: vscode.Uri) {}
 
   async showOrReveal(sourceDocument: vscode.TextDocument): Promise<void> {
-    this.entries = parseSourceLog(sourceDocument);
-    this.criteria = createDefaultSerializedCriteria(this.entries);
+    this.sourceDocument = sourceDocument;
+    this.additionalFiles = [];
+    this.loadedUriStrings = [sourceDocument.uri.toString()];
+    this.recomputeEntries();
+    this.criteria = createDefaultSerializedCriteria(this.singleEntries);
 
     if (this.panel) {
       this.panel.title = this.buildTitle(sourceDocument);
@@ -100,8 +131,7 @@ export class InteractiveViewPanelController implements vscode.Disposable {
   }
 
   private buildTitle(sourceDocument: vscode.TextDocument): string {
-    const baseName = sourceDocument.uri.path.split("/").pop() ?? "log";
-    return `Totonoe Log (Alpha): ${baseName}`;
+    return `Totonoe Log (Alpha): ${baseName(sourceDocument.uri)}`;
   }
 
   private async handleMessage(message: WebviewToExtensionMessage): Promise<void> {
@@ -109,8 +139,102 @@ export class InteractiveViewPanelController implements vscode.Disposable {
       await this.postState();
       return;
     }
+    if (message.type === "addFiles") {
+      await this.addFiles();
+      return;
+    }
     this.criteria = message.criteria;
     await this.postState();
+  }
+
+  /**
+   * ファイル選択ダイアログで1つ以上のログファイルを追加読み込みする。
+   * 既に読み込み済みのファイル（`loadedUriStrings`）は `selectNewFileUris` で
+   * 除外し、二重読み込みしない。フォルダ選択や、追加分が全て既読み込み
+   * だった場合は無言で何もしない（キャンセル時と同じ扱い）。
+   *
+   * ダイアログは複数フォルダをまたいだ複数選択ができない制限がある
+   * （issue #151 の教訓）が、これは「既に開いているセッションに追加する」
+   * という操作の性質上ダイアログ方式を選んだ結果として許容する
+   * （フォルダをまたぐ場合は複数回に分けて追加すればよい）。
+   */
+  private async addFiles(): Promise<void> {
+    if (!this.sourceDocument) {
+      return;
+    }
+
+    const picked = await vscode.window.showOpenDialog({
+      canSelectMany: true,
+      canSelectFolders: false,
+      title: "Totonoe Log: 追加するログファイルを選択",
+      openLabel: "追加",
+    });
+    if (!picked) {
+      return;
+    }
+
+    const candidates = await filterOutFolders(picked);
+    const newUriStrings = selectNewFileUris(
+      this.loadedUriStrings,
+      candidates.map((uri) => uri.toString())
+    );
+    if (newUriStrings.length === 0) {
+      return;
+    }
+
+    const newUriStringSet = new Set(newUriStrings);
+    const newUris = candidates.filter((uri) => newUriStringSet.has(uri.toString()));
+    const newFiles = await readLogFiles(newUris);
+
+    this.additionalFiles.push(...newFiles);
+    this.loadedUriStrings.push(...newUriStrings);
+    this.recomputeEntries();
+    await this.postState();
+  }
+
+  /**
+   * ファイル集合（`sourceDocument` + `additionalFiles`）が変わった時だけ
+   * 呼ぶ、パース/マージのやり直し。絞り込み条件が変わるだけの再描画
+   * （`postState`）では呼ばない — `mergeLogFiles` は差分追加ができず毎回
+   * 全件処理になるため、無駄な再マージを避ける。
+   */
+  private recomputeEntries(): void {
+    if (!this.sourceDocument) {
+      return;
+    }
+
+    if (this.additionalFiles.length === 0) {
+      this.singleEntries = parseSourceLog(this.sourceDocument);
+      this.mergedEntries = [];
+      return;
+    }
+
+    const files: LogFileInput[] = [
+      buildLogFileInputFromDocument(this.sourceDocument),
+      ...this.additionalFiles,
+    ];
+    this.mergedEntries = mergeLogFiles(files, {
+      timestampFormats: readConfiguredTimestampFormats(),
+    });
+    this.singleEntries = [];
+  }
+
+  /** 現在のファイル集合に応じて、単一ファイル用/マージ用いずれかの合成処理を呼ぶ。 */
+  private async computePayload(
+    criteria: FilterCriteria,
+    options: BuildInteractivePayloadOptions
+  ): Promise<InteractivePayloadResult> {
+    if (this.additionalFiles.length === 0) {
+      return buildInteractivePayload(this.singleEntries, criteria, options);
+    }
+    return buildInteractiveMergedPayload(this.mergedEntries, criteria, options);
+  }
+
+  private loadedFileNames(): string[] {
+    if (!this.sourceDocument) {
+      return [];
+    }
+    return [baseName(this.sourceDocument.uri), ...this.additionalFiles.map((file) => file.fileName)];
   }
 
   /**
@@ -127,11 +251,12 @@ export class InteractiveViewPanelController implements vscode.Disposable {
 
     const displayTimezone = readDisplayTimezone();
     const { criteria, errors } = toFilterCriteria(this.criteria, displayTimezone);
-
-    const payload = await buildInteractivePayload(this.entries, criteria, {
+    const formatOptions: BuildInteractivePayloadOptions = {
       gapThresholdMs: readGapThresholdMs(),
       displayTimezone,
-    });
+    };
+
+    const payload = await this.computePayload(criteria, formatOptions);
 
     if (payload.ok) {
       await this.sendState(payload, errors);
@@ -139,10 +264,7 @@ export class InteractiveViewPanelController implements vscode.Disposable {
     }
 
     const fallbackCriteria: FilterCriteria = { ...criteria, ignorePattern: undefined };
-    const fallbackPayload = await buildInteractivePayload(this.entries, fallbackCriteria, {
-      gapThresholdMs: readGapThresholdMs(),
-      displayTimezone,
-    });
+    const fallbackPayload = await this.computePayload(fallbackCriteria, formatOptions);
     if (fallbackPayload.ok) {
       const reason =
         payload.reason === "timeout"
@@ -159,7 +281,7 @@ export class InteractiveViewPanelController implements vscode.Disposable {
    * 消さずに `warning` だけで通知する。
    */
   private async sendState(
-    payload: Extract<Awaited<ReturnType<typeof buildInteractivePayload>>, { ok: true }>,
+    payload: Extract<InteractivePayloadResult, { ok: true }>,
     errors: readonly string[]
   ): Promise<void> {
     if (!this.panel) {
@@ -173,6 +295,7 @@ export class InteractiveViewPanelController implements vscode.Disposable {
       text: payload.text,
       totalLineCount: payload.totalLineCount,
       visibleLineCount: payload.visibleLineCount,
+      loadedFileNames: this.loadedFileNames(),
       warning: errors.length > 0 ? errors.join(" / ") : undefined,
     };
     await this.panel.webview.postMessage(message);
@@ -194,6 +317,28 @@ export class InteractiveViewPanelController implements vscode.Disposable {
     color: var(--vscode-editor-foreground);
     background-color: var(--vscode-editor-background);
     padding: 8px 12px;
+  }
+  #files-panel {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding-bottom: 8px;
+    border-bottom: 1px solid var(--vscode-panel-border);
+    margin-bottom: 8px;
+  }
+  button {
+    background-color: var(--vscode-button-background);
+    color: var(--vscode-button-foreground);
+    border: none;
+    padding: 4px 10px;
+    cursor: pointer;
+  }
+  button:hover {
+    background-color: var(--vscode-button-hoverBackground);
+  }
+  #loaded-files {
+    font-size: 0.9em;
+    opacity: 0.8;
   }
   #filter-panel {
     display: flex;
@@ -237,6 +382,10 @@ export class InteractiveViewPanelController implements vscode.Disposable {
 </style>
 </head>
 <body>
+  <div id="files-panel">
+    <button id="add-files-button" type="button">+ Add Files...</button>
+    <span id="loaded-files"></span>
+  </div>
   <div id="filter-panel">
     <div id="severities"></div>
     <label>開始日時 <input type="text" id="date-start" placeholder="YYYY-MM-DD"></label>

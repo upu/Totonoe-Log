@@ -26,7 +26,8 @@ export interface SerializedFilterCriteria {
 /** Webview → 拡張機能本体 のメッセージ。 */
 export type WebviewToExtensionMessage =
   | { readonly type: "ready" }
-  | { readonly type: "filterChanged"; readonly criteria: SerializedFilterCriteria };
+  | { readonly type: "filterChanged"; readonly criteria: SerializedFilterCriteria }
+  | { readonly type: "addFiles" };
 
 /**
  * 拡張機能本体 → Webview のメッセージ。`criteria` は絞り込み条件の解析結果
@@ -40,6 +41,8 @@ export interface ExtensionToWebviewMessage {
   readonly text: string;
   readonly totalLineCount: number;
   readonly visibleLineCount: number;
+  /** 現在読み込み済みのファイル名一覧（issue #168）。1件なら単一ファイル表示中。 */
+  readonly loadedFileNames: readonly string[];
   /** 無視パターンのタイムアウト・構文エラー等、絞り込み条件の一部を無視した場合の警告文。 */
   readonly warning?: string;
 }
