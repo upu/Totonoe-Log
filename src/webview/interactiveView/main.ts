@@ -105,82 +105,80 @@ function renderLoadedFiles(fileNames: readonly string[]): void {
   loadedFilesElement.textContent = `読み込み済み: ${fileNames.join(", ")}`;
 }
 
-/** 折りたたみグループの見出し先頭に付ける矢印（拡張機能から届く非信頼データではなく、UI側の固定文字）。 */
+/**
+ * 折りたたみ状態を示す矢印（拡張機能から届く非信頼データではなく、UI側の
+ * 固定文字）。ガター欄の直前に置く、折りたためない通常行の余白
+ * （{@link PLAIN_ROW_PREFIX}）と同じ幅にすることで、矢印の有無に関わらず
+ * ガターの `|` が縦に揃う。
+ */
 const COLLAPSED_PREFIX = "▶ ";
 const EXPANDED_PREFIX = "▼ ";
-
-/** 展開中の見出し行に表示する固定ラベル（折りたたみへ戻す操作であることだけを示す）。 */
-const COLLAPSE_ACTION_LABEL = "折りたたむ";
-
-/**
- * `headerText`（`"範囲ラベル | 時刻 severity メッセージ (×N)"`）を、ガター部分
- * （`"範囲ラベル | "`）とそれ以降に分割する。矢印・操作ラベルをガターの直後に
- * 挿入することで、他の行のガター列と縦位置を揃える。
- */
-function splitHeaderGutter(headerText: string): { readonly gutter: string; readonly rest: string } {
-  const separatorIndex = headerText.indexOf(" | ");
-  if (separatorIndex < 0) {
-    return { gutter: "", rest: headerText };
-  }
-  return {
-    gutter: headerText.slice(0, separatorIndex + 3),
-    rest: headerText.slice(separatorIndex + 3),
-  };
-}
+/** 折りたためない通常行・展開後2行目以降の左余白（矢印列の幅に合わせる）。 */
+const PLAIN_ROW_PREFIX = " ".repeat(COLLAPSED_PREFIX.length);
 
 /**
  * 折りたたみグループ1件をDOMに追加する。展開/復元はここに閉じたローカル
- *状態（`body.hidden`）だけで完結させ、拡張機能本体へは何も送らない
- * （issue #172、届いた `lines` を表示/非表示切り替えするだけで済むため）。
+ * 状態だけで完結させ、拡張機能本体へは何も送らない（issue #172、届いた
+ * `lines` の表示/非表示を切り替えるだけで済むため）。
  *
- * 展開中は見出し行から時刻・severity・メッセージ（`rest`）を消し、ガターと
- * 「折りたたむ」操作ラベルだけを残す——`rest` はこれから表示する `body` の
- * 先頭エントリと同じ内容のため、両方出すと展開直後に同じ行が二重に見えて
- * 読みにくいという指摘（#172 PRレビュー）への対応。
+ * 折りたたみ中は範囲ラベルの行（`item.headerText`）1行だけを表示し、展開時は
+ * それを消して `item.lines`（各エントリ個別の行）をそのまま並べる——折りたたみ
+ * を戻す操作は、展開後の先頭行（グループの最初のエントリ）自体をクリック
+ * 対象にする。専用の「折りたたむ」行を別途挟むと、代表エントリの内容が
+ * 展開後の本文と二重に見えて読みにくいという指摘（#172 PRレビュー）への対応。
  */
 function appendGroupItem(item: Extract<DisplayItem, { kind: "group" }>): void {
-  const { gutter, rest } = splitHeaderGutter(item.headerText);
+  const [firstLine, ...restLines] = item.lines;
 
-  const header = document.createElement("span");
-  header.className = "collapse-group-header";
-  header.setAttribute("role", "button");
-  header.tabIndex = 0;
+  const collapsedRow = document.createElement("span");
+  collapsedRow.className = "collapse-group-header";
+  collapsedRow.setAttribute("role", "button");
+  collapsedRow.tabIndex = 0;
+  collapsedRow.textContent = `${COLLAPSED_PREFIX}${item.headerText}\n`;
 
-  const body = document.createElement("span");
-  body.className = "collapse-group-body";
-  body.hidden = true;
+  const expandedFirstRow = document.createElement("span");
+  expandedFirstRow.className = "collapse-group-header";
+  expandedFirstRow.setAttribute("role", "button");
+  expandedFirstRow.tabIndex = 0;
+  expandedFirstRow.textContent = `${EXPANDED_PREFIX}${firstLine}\n`;
+
+  const expandedRest = document.createElement("span");
   // グループ本文もログ由来の非信頼データのため textContent で設定する。
-  body.textContent = item.lines.join("\n") + "\n";
+  expandedRest.textContent = restLines.map((line) => `${PLAIN_ROW_PREFIX}${line}\n`).join("");
 
-  const updateHeaderText = (): void => {
-    header.textContent = body.hidden
-      ? `${gutter}${COLLAPSED_PREFIX}${rest}`
-      : `${gutter}${EXPANDED_PREFIX}${COLLAPSE_ACTION_LABEL}`;
+  let expanded = false;
+  const applyExpandedState = (): void => {
+    collapsedRow.hidden = expanded;
+    expandedFirstRow.hidden = !expanded;
+    expandedRest.hidden = !expanded;
   };
-  updateHeaderText();
+  applyExpandedState();
 
   const toggle = (): void => {
-    body.hidden = !body.hidden;
-    updateHeaderText();
+    expanded = !expanded;
+    applyExpandedState();
   };
-  header.addEventListener("click", toggle);
-  header.addEventListener("keydown", (event) => {
-    if (event.key === "Enter" || event.key === " ") {
-      event.preventDefault();
-      toggle();
-    }
-  });
+  for (const clickableRow of [collapsedRow, expandedFirstRow]) {
+    clickableRow.addEventListener("click", toggle);
+    clickableRow.addEventListener("keydown", (event) => {
+      if (event.key === "Enter" || event.key === " ") {
+        event.preventDefault();
+        toggle();
+      }
+    });
+  }
 
-  logOutputElement.appendChild(header);
-  logOutputElement.appendChild(document.createTextNode("\n"));
-  logOutputElement.appendChild(body);
+  logOutputElement.appendChild(collapsedRow);
+  logOutputElement.appendChild(expandedFirstRow);
+  logOutputElement.appendChild(expandedRest);
 }
 
 function renderItems(items: readonly DisplayItem[]): void {
   logOutputElement.textContent = "";
   for (const item of items) {
     if (item.kind === "line") {
-      logOutputElement.appendChild(document.createTextNode(item.text + "\n"));
+      // 折りたたみ矢印の列幅ぶんだけ、折りたためない通常行も余白を揃える。
+      logOutputElement.appendChild(document.createTextNode(`${PLAIN_ROW_PREFIX}${item.text}\n`));
       continue;
     }
     appendGroupItem(item);
