@@ -12,10 +12,13 @@ scripts/**
 src/**
 out/**
 !out/extension.js
+!out/webview/interactiveView/main.js
 out-tsc/**
+out-tsc-webview/**
 node_modules/**
 .gitignore
 tsconfig.json
+tsconfig.webview.json
 **/*.map
 **/*.ts
 eslint.config.mjs

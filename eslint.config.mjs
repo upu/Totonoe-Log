@@ -14,7 +14,10 @@ export default tseslint.config(
     extends: [js.configs.recommended, ...tseslint.configs.recommendedTypeChecked],
     languageOptions: {
       parserOptions: {
-        project: "./tsconfig.json",
+        // src/webview/** は DOM lib を持つ別プログラム（tsconfig.webview.json）
+        // でチェックしているため、型情報を使うルールがどちらのプログラムに
+        // 属するファイルでも解決できるよう両方を渡す。
+        project: ["./tsconfig.json", "./tsconfig.webview.json"],
         tsconfigRootDir: import.meta.dirname,
       },
     },

@@ -24,11 +24,16 @@ import {
   createMergeSelectedFilesFilteredCommand,
   createMergedViewFilenameHoverProvider,
 } from "./mergedView";
+import {
+  InteractiveViewPanelController,
+  createShowInteractiveViewAlphaCommand,
+} from "./interactiveView";
 
 export function activate(context: vscode.ExtensionContext): void {
   const normalizedViewProvider = new NormalizedViewContentProvider();
   const compareViewProvider = new CompareViewContentProvider();
   const mergedViewProvider = new MergedViewContentProvider(context.globalStorageUri);
+  const interactiveViewController = new InteractiveViewPanelController(context.extensionUri);
 
   context.subscriptions.push(
     vscode.workspace.registerTextDocumentContentProvider(
@@ -96,6 +101,11 @@ export function activate(context: vscode.ExtensionContext): void {
     vscode.commands.registerCommand(
       "totonoeLog.goToSourceLine",
       createGoToSourceLineCommand([normalizedViewProvider, mergedViewProvider])
+    ),
+    interactiveViewController,
+    vscode.commands.registerCommand(
+      "totonoeLog.showInteractiveViewAlpha",
+      createShowInteractiveViewAlphaCommand(interactiveViewController)
     )
   );
 }

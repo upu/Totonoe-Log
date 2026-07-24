@@ -1,0 +1,68 @@
+import type { LogEntry } from "./types";
+import type { DisplayTimezone } from "./timezone";
+import type { LineSource } from "./lineSources";
+import { getDistinctSeverities } from "./filterBySeverity";
+import { filterEntriesByCriteria, type FilterCriteria } from "./filterEntries";
+import { formatNormalizedLogWithLineSources } from "./formatNormalizedLog";
+
+/** {@link buildInteractivePayload} の挙動を調整するオプション。 */
+export interface BuildInteractivePayloadOptions {
+  readonly gapThresholdMs?: number;
+  readonly displayTimezone?: DisplayTimezone;
+  /** 無視パターンの評価に使うタイムアウト（ミリ秒）を上書きしたい場合に指定する（主にテスト用）。 */
+  readonly ignorePatternTimeoutMs?: number;
+}
+
+export type InteractivePayloadResult =
+  | {
+      readonly ok: true;
+      readonly text: string;
+      readonly lineSources: readonly (LineSource | undefined)[];
+      readonly distinctSeverities: readonly string[];
+      readonly totalLineCount: number;
+      readonly visibleLineCount: number;
+    }
+  | { readonly ok: false; readonly reason: "timeout" | "error" };
+
+/** entries の物理行数（メッセージの継続行込み）を数える。 */
+function countPhysicalLines(entries: readonly LogEntry[]): number {
+  return entries.reduce((total, entry) => total + entry.lines.length, 0);
+}
+
+/**
+ * Webviewベースのインタラクティブビュー（issue #166）が、絞り込み条件が
+ * 変わるたびに呼び出す合成処理。「セベリティ一覧の算出 → 絞り込み → 整形」
+ * という、正規化ビューの各コマンドが個別に組み立てていた手順を1つにまとめた。
+ *
+ * `distinctSeverities` は絞り込み前の `entries` から算出する。絞り込みで
+ * あるセベリティのエントリが0件になっても、そのセベリティのチェックボックス
+ * 自体はWebview側のフォームから消えないようにするため。
+ */
+export async function buildInteractivePayload(
+  entries: readonly LogEntry[],
+  criteria: FilterCriteria,
+  options: BuildInteractivePayloadOptions = {}
+): Promise<InteractivePayloadResult> {
+  const distinctSeverities = getDistinctSeverities(entries);
+
+  const filterResult = await filterEntriesByCriteria(entries, criteria, {
+    ignorePatternTimeoutMs: options.ignorePatternTimeoutMs,
+  });
+  if (!filterResult.ok) {
+    return filterResult;
+  }
+
+  const formatted = formatNormalizedLogWithLineSources(filterResult.entries, {
+    gapThresholdMs: options.gapThresholdMs,
+    displayTimezone: options.displayTimezone,
+  });
+
+  return {
+    ok: true,
+    text: formatted.text,
+    lineSources: formatted.lineSources,
+    distinctSeverities,
+    totalLineCount: countPhysicalLines(entries),
+    visibleLineCount: countPhysicalLines(filterResult.entries),
+  };
+}
