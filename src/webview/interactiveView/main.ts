@@ -20,6 +20,7 @@ type DisplayItem = NonNullable<ExtensionToWebviewMessage["items"]>[number];
 const vscodeApi = acquireVsCodeApi<WebviewToExtensionMessage>();
 
 const addFilesButton = document.getElementById("add-files-button") as HTMLButtonElement;
+const exportButton = document.getElementById("export-button") as HTMLButtonElement;
 const loadedFilesElement = document.getElementById("loaded-files") as HTMLSpanElement;
 const severitiesContainer = document.getElementById("severities") as HTMLDivElement;
 const dateStartInput = document.getElementById("date-start") as HTMLInputElement;
@@ -75,6 +76,11 @@ collapseToggle.addEventListener("change", postFilterChanged);
 // チェックボックスと同じく即座に送る。
 addFilesButton.addEventListener("click", () => {
   vscodeApi.postMessage({ type: "addFiles" });
+});
+
+// 書き出しも離散的な操作なので、テキスト入力と違いデバウンスせず即座に送る。
+exportButton.addEventListener("click", () => {
+  vscodeApi.postMessage({ type: "exportVirtualDocument" });
 });
 
 function renderSeverities(distinctSeverities: readonly string[], checked: readonly string[]): void {
