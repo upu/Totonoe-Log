@@ -2,6 +2,7 @@ import * as assert from "node:assert";
 import * as vscode from "vscode";
 import { toFilterCriteria } from "../../interactiveViewCriteria";
 import { selectNewFileUris } from "../../interactiveViewFiles";
+import { parseWebviewLineSource } from "../../interactiveViewContext";
 
 suite("interactiveViewCriteria / toFilterCriteria (#166)", () => {
   test("converts checked severities into a Set as-is", () => {
@@ -134,6 +135,35 @@ suite("interactiveViewFiles / selectNewFileUris (#168)", () => {
   });
 });
 
+suite("interactiveViewContext / parseWebviewLineSource (#191)", () => {
+  test("accepts a context object carrying a valid line source", () => {
+    const parsed = parseWebviewLineSource({
+      webviewSection: "totonoeLogInteractiveLine",
+      lineSource: { fileIndex: 1, line: 42 },
+    });
+
+    assert.deepStrictEqual(parsed, { fileIndex: 1, line: 42 });
+  });
+
+  test("rejects a context object without a line source", () => {
+    assert.strictEqual(parseWebviewLineSource({ webviewSection: "totonoeLogInteractiveLine" }), undefined);
+    assert.strictEqual(parseWebviewLineSource(undefined), undefined);
+    assert.strictEqual(parseWebviewLineSource("lineSource"), undefined);
+  });
+
+  test("rejects out-of-range or non-integer values", () => {
+    // 1始まりの行番号・0始まりのファイル位置として成立しない値は、URI解決前に落とす。
+    assert.strictEqual(parseWebviewLineSource({ lineSource: { fileIndex: 0, line: 0 } }), undefined);
+    assert.strictEqual(parseWebviewLineSource({ lineSource: { fileIndex: -1, line: 1 } }), undefined);
+    assert.strictEqual(parseWebviewLineSource({ lineSource: { fileIndex: 0, line: 1.5 } }), undefined);
+    assert.strictEqual(
+      parseWebviewLineSource({ lineSource: { fileIndex: 0, line: Number.NaN } }),
+      undefined
+    );
+    assert.strictEqual(parseWebviewLineSource({ lineSource: { fileIndex: "0", line: "1" } }), undefined);
+  });
+});
+
 /**
  * Webviewパネルがタブとして `vscode.window.tabGroups` に反映されるまでには、
  * パネル生成呼び出しの完了から1ティック以上のラグがありうる。テストの
@@ -164,6 +194,34 @@ suite("Totonoe Log interactive view (alpha, #166)", () => {
       commands.includes("totonoeLog.showInteractiveViewAlpha"),
       "totonoeLog.showInteractiveViewAlpha command should be registered"
     );
+  });
+
+  test("registers the webview context menu jump command, hidden from the palette (#191)", async () => {
+    const extension = vscode.extensions.getExtension("upu.totonoe-log");
+    await extension!.activate();
+
+    const commands = await vscode.commands.getCommands(true);
+    assert.ok(
+      commands.includes("totonoeLog.goToSourceLineFromInteractiveView"),
+      "totonoeLog.goToSourceLineFromInteractiveView command should be registered"
+    );
+
+    const menus = extension!.packageJSON.contributes.menus as Record<
+      string,
+      Array<{ command: string; when?: string }>
+    >;
+    const contextEntry = menus["webview/context"].find(
+      (item) => item.command === "totonoeLog.goToSourceLineFromInteractiveView"
+    );
+    assert.ok(contextEntry, "webview/context should have a jump entry");
+    assert.strictEqual(contextEntry!.when, "webviewSection == totonoeLogInteractiveLine");
+
+    // 行のコンテキストからしか意味を持たないコマンドなので、パレットには出さない。
+    const paletteEntry = menus.commandPalette.find(
+      (item) => item.command === "totonoeLog.goToSourceLineFromInteractiveView"
+    );
+    assert.ok(paletteEntry, "commandPalette should have an entry hiding the command");
+    assert.strictEqual(paletteEntry!.when, "false");
   });
 
   test("opens a webview tab when invoked against an active log editor", async function () {
