@@ -34,6 +34,8 @@ import {
   buildInteractivePayload,
   buildInteractiveMergedPayload,
   buildInteractiveCollapsedLines,
+  buildInteractiveExportText,
+  buildInteractiveMergedExportText,
 } from "../../normalize";
 import * as maskForCompare from "../../normalize/maskForCompare";
 
@@ -2870,5 +2872,129 @@ suite("normalize / formatCollapsedLogWithLineSources (#137)", () => {
       { fileIndex: 0, line: 1 },
       { fileIndex: 0, line: 4 },
     ]);
+  });
+});
+
+suite("normalize / buildInteractiveExportText (#175)", () => {
+  const sampleText = [
+    "2024-01-02T03:04:05Z INFO connect ok",
+    "2024-01-02T03:04:06Z INFO connect ok",
+    "2024-01-02T03:04:07Z INFO connect ok",
+    "2024-01-02T03:04:08Z ERROR tail",
+  ].join("\n");
+
+  test("matches filterEntriesByCriteria + formatNormalizedLogWithLineSources when collapseThreshold is not specified", async () => {
+    const entries = parseLog(sampleText);
+    const criteria = { severities: new Set(["INFO", "ERROR"]) };
+
+    const result = await buildInteractiveExportText(entries, criteria);
+
+    assert.strictEqual(result.ok, true);
+    if (!result.ok) {
+      throw new Error("unreachable");
+    }
+
+    const filterResult = await filterEntriesByCriteria(entries, criteria);
+    assert.strictEqual(filterResult.ok, true);
+    if (!filterResult.ok) {
+      throw new Error("unreachable");
+    }
+    const expected = formatNormalizedLogWithLineSources(filterResult.entries);
+
+    assert.strictEqual(result.formatted.text, expected.text);
+    assert.deepStrictEqual(result.formatted.lineSources, expected.lineSources);
+  });
+
+  test("matches collapseRepeatedEntries + formatCollapsedLogWithLineSources when collapseThreshold is specified", async () => {
+    const entries = parseLog(sampleText);
+    const criteria = {};
+
+    const result = await buildInteractiveExportText(entries, criteria, { collapseThreshold: 3 });
+
+    assert.strictEqual(result.ok, true);
+    if (!result.ok) {
+      throw new Error("unreachable");
+    }
+
+    const items = collapseRepeatedEntries(entries, { threshold: 3 });
+    const expected = formatCollapsedLogWithLineSources(entries, items);
+
+    assert.strictEqual(result.formatted.text, expected.text);
+    assert.deepStrictEqual(result.formatted.lineSources, expected.lineSources);
+    // 折りたたみが実際に効いていること（4行あるINFOの連続がまとまっている）も確認する。
+    assert.ok(result.formatted.text.includes("×3"));
+  });
+
+  test("propagates a timeout failure from the ignore pattern stage", async () => {
+    const entries = parseLog("2024-01-02T03:04:05Z INFO hello");
+
+    const result = await buildInteractiveExportText(
+      entries,
+      { ignorePattern: /hello/ },
+      { ignorePatternTimeoutMs: 1 }
+    );
+
+    assert.strictEqual(result.ok, false);
+    if (!result.ok) {
+      assert.strictEqual(result.reason, "timeout");
+    }
+  });
+});
+
+suite("normalize / buildInteractiveMergedExportText (#175)", () => {
+  const files = [
+    {
+      fileName: "app.log",
+      text: [
+        "2024-01-01T00:00:00Z ERROR before range",
+        "2024-01-02T03:04:06Z ERROR in range and matching",
+      ].join("\n"),
+    },
+    {
+      fileName: "worker.log",
+      text: [
+        "2024-01-02T03:04:05Z INFO in range but wrong severity",
+        "2024-01-02T03:04:07Z ERROR heartbeat noise",
+      ].join("\n"),
+    },
+  ];
+
+  test("matches filterMergedEntriesByCriteria + formatMergedLogWithLineSources composed manually", async () => {
+    const mergedEntries = mergeLogFiles(files);
+    const criteria = { severities: new Set(["ERROR"]) };
+
+    const result = await buildInteractiveMergedExportText(mergedEntries, criteria);
+
+    assert.strictEqual(result.ok, true);
+    if (!result.ok) {
+      throw new Error("unreachable");
+    }
+
+    const filterResult = await filterMergedEntriesByCriteria(mergedEntries, criteria);
+    assert.strictEqual(filterResult.ok, true);
+    if (!filterResult.ok) {
+      throw new Error("unreachable");
+    }
+    const expected = formatMergedLogWithLineSources(filterResult.entries);
+
+    assert.strictEqual(result.formatted.text, expected.text);
+    assert.deepStrictEqual(result.formatted.lineSources, expected.lineSources);
+  });
+
+  test("propagates a timeout failure from the ignore pattern stage", async () => {
+    const mergedEntries = mergeLogFiles([
+      { fileName: "app.log", text: "2024-01-02T03:04:05Z INFO hello" },
+    ]);
+
+    const result = await buildInteractiveMergedExportText(
+      mergedEntries,
+      { ignorePattern: /hello/ },
+      { ignorePatternTimeoutMs: 1 }
+    );
+
+    assert.strictEqual(result.ok, false);
+    if (!result.ok) {
+      assert.strictEqual(result.reason, "timeout");
+    }
   });
 });

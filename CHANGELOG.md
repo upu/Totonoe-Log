@@ -28,6 +28,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   restores it entirely inside the Webview, with no extension round-trip
   (issue #172, the next alpha step in #165). Collapsing is not yet
   available once two or more files are merged.
+- `Totonoe Log: Show Interactive View (Alpha)` now has an "Export as Virtual
+  Document" button that opens the current filter/merge/collapse state as a
+  regular read-only virtual document, reusing the existing normalized/merged
+  view infrastructure (search, copy, `Go to Source Line`, and `Compare Logs`
+  all work on it as-is; issue #175, the next alpha step in #165).
 
 ## [0.7.0] - 2026-07-23
 

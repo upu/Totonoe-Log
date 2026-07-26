@@ -44,7 +44,8 @@ export interface SerializedFilterCriteria {
 export type WebviewToExtensionMessage =
   | { readonly type: "ready" }
   | { readonly type: "filterChanged"; readonly criteria: SerializedFilterCriteria }
-  | { readonly type: "addFiles" };
+  | { readonly type: "addFiles" }
+  | { readonly type: "exportVirtualDocument" };
 
 /**
  * 拡張機能本体 → Webview のメッセージ。`criteria` は絞り込み条件の解析結果

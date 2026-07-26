@@ -78,9 +78,11 @@ function formatNormalizedWithGap(
 /**
  * 正規化ビュー系コマンドが共有する、仮想ドキュメントの発行・登録・表示処理。
  * 同じ元ファイルに対して繰り返しコマンドを実行しても、連番付きの新しい URI
- * を発行して既存タブと衝突しないようにする。
+ * を発行して既存タブと衝突しないようにする。Interactive View (Alpha) の
+ * 「仮想ドキュメントとして書き出す」操作（issue #175）からも、単一ファイル
+ * 表示中の書き出し先として同じ処理を再利用するためexportする。
  */
-async function openVirtualNormalizedDocument(
+export async function openVirtualNormalizedDocument(
   provider: NormalizedViewContentProvider,
   sourceDocument: vscode.TextDocument,
   formatted: FormattedLogWithLineSources,

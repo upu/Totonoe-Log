@@ -3,11 +3,15 @@ import { randomBytes } from "node:crypto";
 import {
   buildInteractivePayload,
   buildInteractiveMergedPayload,
+  buildInteractiveExportText,
+  buildInteractiveMergedExportText,
   getDistinctSeverities,
   mergeLogFiles,
   DEFAULT_COLLAPSE_THRESHOLD,
   type BuildInteractivePayloadOptions,
+  type BuildInteractiveExportTextOptions,
   type FilterCriteria,
+  type FormattedLogWithLineSources,
   type InteractivePayloadResult,
   type LogEntry,
   type LogFileInput,
@@ -24,6 +28,8 @@ import { readDisplayTimezone } from "./timezoneSettings";
 import { readGapThresholdMs } from "./gapThresholdSetting";
 import { readConfiguredTimestampFormats } from "./timestampFormatSettings";
 import { toFilterCriteria } from "./interactiveViewCriteria";
+import { NormalizedViewContentProvider, openVirtualNormalizedDocument } from "./normalizedView";
+import { MergedViewContentProvider } from "./mergedView";
 import type {
   ExtensionToWebviewMessage,
   SerializedFilterCriteria,
@@ -95,14 +101,23 @@ export class InteractiveViewPanelController implements vscode.Disposable {
   private singleEntries: readonly LogEntry[] = [];
   /** `additionalFiles.length > 0` の間だけ使う、マージ済みエントリのキャッシュ。 */
   private mergedEntries: readonly MergedEntry[] = [];
+  /** `loadedUriStrings` と同順の実URI一覧。書き出し（issue #175）でマージ表示の行対応情報を組み立てる際に使う。 */
+  private loadedUris: vscode.Uri[] = [];
   private criteria: SerializedFilterCriteria = createDefaultSerializedCriteria([]);
+  /** 「仮想ドキュメントとして書き出す」操作（issue #175）で発行するマージ用URIの連番。 */
+  private exportMergedCounter = 0;
 
-  constructor(private readonly extensionUri: vscode.Uri) {}
+  constructor(
+    private readonly extensionUri: vscode.Uri,
+    private readonly normalizedViewProvider: NormalizedViewContentProvider,
+    private readonly mergedViewProvider: MergedViewContentProvider
+  ) {}
 
   async showOrReveal(sourceDocument: vscode.TextDocument): Promise<void> {
     this.sourceDocument = sourceDocument;
     this.additionalFiles = [];
     this.loadedUriStrings = [sourceDocument.uri.toString()];
+    this.loadedUris = [sourceDocument.uri];
     this.recomputeEntries();
     this.criteria = createDefaultSerializedCriteria(this.singleEntries);
 
@@ -153,6 +168,10 @@ export class InteractiveViewPanelController implements vscode.Disposable {
       await this.addFiles();
       return;
     }
+    if (message.type === "exportVirtualDocument") {
+      await this.exportVirtualDocument();
+      return;
+    }
     this.criteria = message.criteria;
     await this.postState();
   }
@@ -198,6 +217,7 @@ export class InteractiveViewPanelController implements vscode.Disposable {
 
     this.additionalFiles.push(...newFiles);
     this.loadedUriStrings.push(...newUriStrings);
+    this.loadedUris.push(...newUris);
     this.recomputeEntries();
     await this.postState();
   }
@@ -318,6 +338,90 @@ export class InteractiveViewPanelController implements vscode.Disposable {
     await this.panel.webview.postMessage(message);
   }
 
+  /**
+   * 現在の絞り込み/マージ/折りたたみ状態を、既存の仮想ドキュメント方式
+   * （正規化ビュー・マージビューと同じ `TextDocumentContentProvider`）で
+   * 新規タブとして開く（issue #175）。検索・コピー・`Go to Source Line`・
+   * `Compare Logs` は、書き出し後は仮想ドキュメント側の既存導線をそのまま
+   * 使う想定で、Webview側には作り込まない。
+   */
+  private async exportVirtualDocument(): Promise<void> {
+    if (!this.sourceDocument) {
+      return;
+    }
+
+    const displayTimezone = readDisplayTimezone();
+    const { criteria } = toFilterCriteria(this.criteria, displayTimezone);
+    // マージ表示（2ファイル以上）は折りたたみ非対応（issue #172と同じ判断）。
+    const collapsibleSupported = this.additionalFiles.length === 0;
+    const options: BuildInteractiveExportTextOptions = {
+      gapThresholdMs: readGapThresholdMs(),
+      displayTimezone,
+      collapseThreshold:
+        collapsibleSupported && this.criteria.collapseEnabled ? readCollapseThreshold() : undefined,
+    };
+
+    const formatted = await this.computeExportFormatted(criteria, options);
+    if (!formatted) {
+      return;
+    }
+
+    if (this.additionalFiles.length === 0) {
+      await openVirtualNormalizedDocument(
+        this.normalizedViewProvider,
+        this.sourceDocument,
+        formatted,
+        "interactive-export"
+      );
+      return;
+    }
+
+    this.exportMergedCounter += 1;
+    await this.mergedViewProvider.openDocument(
+      formatted,
+      this.loadedUris,
+      `/interactive-export-merged-${this.exportMergedCounter}.log`
+    );
+  }
+
+  /**
+   * 単一ファイル用/マージ用いずれかの書き出しテキストを組み立てる。無視
+   * パターンの評価がタイムアウト/エラーになった場合は、`postState` と同じく
+   * そのパターンだけを外して再計算し、警告を表示した上で書き出す（絞り込み
+   * その場トグルの表示と書き出し結果がなるべく一致するようにするため）。
+   */
+  private async computeExportFormatted(
+    criteria: FilterCriteria,
+    options: BuildInteractiveExportTextOptions
+  ): Promise<FormattedLogWithLineSources | undefined> {
+    const result =
+      this.additionalFiles.length === 0
+        ? await buildInteractiveExportText(this.singleEntries, criteria, options)
+        : await buildInteractiveMergedExportText(this.mergedEntries, criteria, options);
+    if (result.ok) {
+      return result.formatted;
+    }
+
+    const fallbackCriteria: FilterCriteria = { ...criteria, ignorePattern: undefined };
+    const fallbackResult =
+      this.additionalFiles.length === 0
+        ? await buildInteractiveExportText(this.singleEntries, fallbackCriteria, options)
+        : await buildInteractiveMergedExportText(this.mergedEntries, fallbackCriteria, options);
+    if (!fallbackResult.ok) {
+      vscode.window.showWarningMessage(
+        "Totonoe Log: 書き出しに失敗しました。無視パターンを見直してから再度お試しください。"
+      );
+      return undefined;
+    }
+
+    const reason =
+      result.reason === "timeout"
+        ? "入力されたパターンの処理に時間がかかりすぎたため、無視パターンを適用せずに書き出しました。"
+        : "無視パターンの評価中にエラーが発生したため、無視パターンを適用せずに書き出しました。";
+    vscode.window.showWarningMessage(`Totonoe Log: ${reason}`);
+    return fallbackResult.formatted;
+  }
+
   private renderHtml(webview: vscode.Webview, nonce: string): string {
     const scriptUri = webview.asWebviewUri(
       vscode.Uri.joinPath(this.extensionUri, ...WEBVIEW_SCRIPT_RELATIVE_PATH)
@@ -407,6 +511,7 @@ export class InteractiveViewPanelController implements vscode.Disposable {
 <body>
   <div id="files-panel">
     <button id="add-files-button" type="button">+ Add Files...</button>
+    <button id="export-button" type="button">Export as Virtual Document</button>
     <span id="loaded-files"></span>
   </div>
   <div id="filter-panel">

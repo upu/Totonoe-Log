@@ -77,3 +77,11 @@ export type {
   BuildInteractiveCollapsedLinesOptions,
 } from "./buildInteractiveCollapsedLines";
 export { buildInteractiveCollapsedLines } from "./buildInteractiveCollapsedLines";
+export type {
+  BuildInteractiveExportTextOptions,
+  InteractiveExportTextResult,
+} from "./buildInteractiveExportText";
+export {
+  buildInteractiveExportText,
+  buildInteractiveMergedExportText,
+} from "./buildInteractiveExportText";
