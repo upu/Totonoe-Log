@@ -29,7 +29,12 @@ import {
   resolveExplorerSelectionUris,
   type LoadedLogFile,
 } from "./logFileReading";
-import { selectNewFileUris } from "./interactiveViewFiles";
+import {
+  normalizeFileVisibility,
+  removeFileVisibilityAt,
+  selectNewFileUris,
+  toVisibleFileIndices,
+} from "./interactiveViewFiles";
 import { readDisplayTimezone } from "./timezoneSettings";
 import { readGapThresholdMs } from "./gapThresholdSetting";
 import { readMaxDisplayLines } from "./interactiveViewSettings";
@@ -68,7 +73,8 @@ const COLLAPSE_CONFIG_SECTION = "totonoeLog.collapse";
  * この設定は「マスクをONにしたときに何を伏せるか」の初期選択として効く。
  */
 function createDefaultSerializedCriteria(
-  distinctSeverities: readonly string[]
+  distinctSeverities: readonly string[],
+  fileCount: number
 ): SerializedFilterCriteria {
   const configured = readMaskOptions();
   return {
@@ -82,6 +88,8 @@ function createDefaultSerializedCriteria(
       maskTimestamp: configured.maskTimestamp ?? true,
       maskHost: configured.maskHost ?? true,
     },
+    // 読み込んだファイルは全て表示から始める（issue #170）。
+    visibleFiles: normalizeFileVisibility([], fileCount),
   };
 }
 
@@ -147,7 +155,7 @@ export class InteractiveViewPanelController implements vscode.Disposable {
   private singleEntries: readonly LogEntry[] = [];
   /** `loadedFiles.length > 1` の間だけ使う、マージ済みエントリのキャッシュ。 */
   private mergedEntries: readonly MergedEntry[] = [];
-  private criteria: SerializedFilterCriteria = createDefaultSerializedCriteria([]);
+  private criteria: SerializedFilterCriteria = createDefaultSerializedCriteria([], 0);
   /** 「仮想ドキュメントとして書き出す」操作（issue #175）で発行するマージ用URIの連番。 */
   private exportMergedCounter = 0;
 
@@ -169,7 +177,10 @@ export class InteractiveViewPanelController implements vscode.Disposable {
 
     this.loadedFiles = [...files];
     this.recomputeEntries();
-    this.criteria = createDefaultSerializedCriteria(this.distinctSeverities());
+    this.criteria = createDefaultSerializedCriteria(
+      this.distinctSeverities(),
+      this.loadedFiles.length
+    );
 
     if (this.panel) {
       this.panel.title = this.buildTitle();
@@ -221,6 +232,10 @@ export class InteractiveViewPanelController implements vscode.Disposable {
       await this.addFiles();
       return;
     }
+    if (message.type === "removeFile") {
+      await this.removeFile(message.fileIndex);
+      return;
+    }
     if (message.type === "exportVirtualDocument") {
       await this.exportVirtualDocument();
       return;
@@ -229,7 +244,12 @@ export class InteractiveViewPanelController implements vscode.Disposable {
       await this.revealClickedSourceLine(message.lineSource);
       return;
     }
-    this.criteria = message.criteria;
+    // ファイルの追加・取り消しと絞り込みのメッセージが前後しても表示状態が
+    // ずれないよう、ファイル選択だけは現在のファイル数に合わせ直して受け取る。
+    this.criteria = {
+      ...message.criteria,
+      visibleFiles: normalizeFileVisibility(message.criteria.visibleFiles, this.loadedFiles.length),
+    };
     await this.postState();
   }
 
@@ -314,8 +334,43 @@ export class InteractiveViewPanelController implements vscode.Disposable {
         previousDistinct,
         this.distinctSeverities()
       ),
+      // 追加したファイルは表示ONで並びに足す（issue #170）。
+      visibleFiles: normalizeFileVisibility(this.criteria.visibleFiles, this.loadedFiles.length),
     };
+    this.refreshTitle();
     await this.postState();
+  }
+
+  /**
+   * 「+ Add Files...」で追加したファイルを取り消す（issue #170）。ファイル単位の
+   * 表示トグルと違い、読み込み自体を取り消すのでセベリティ一覧や行数の分母も
+   * そのファイルを含まない状態に戻る。
+   *
+   * 最後の1件は取り消せない——ファイルが0件になるとタイトルも「+ Add Files...」
+   * の起点（{@link addFiles} は0件で何もしない）も失われ、パネルを閉じる以外に
+   * 復帰できなくなるため。「一時的に消したいだけ」はファイル単位の表示トグルで
+   * 足りるので、Webview側でも最後の1件の取り消しボタンは無効化してある。
+   */
+  private async removeFile(fileIndex: number): Promise<void> {
+    if (this.loadedFiles.length <= 1 || fileIndex < 0 || fileIndex >= this.loadedFiles.length) {
+      return;
+    }
+
+    this.loadedFiles.splice(fileIndex, 1);
+    this.recomputeEntries();
+    this.criteria = {
+      ...this.criteria,
+      visibleFiles: removeFileVisibilityAt(this.criteria.visibleFiles, fileIndex),
+    };
+    this.refreshTitle();
+    await this.postState();
+  }
+
+  /** 読み込み済みファイルが増減したときに、タブのタイトル（先頭ファイル名 +N）を追従させる。 */
+  private refreshTitle(): void {
+    if (this.panel) {
+      this.panel.title = this.buildTitle();
+    }
   }
 
   /**
@@ -394,6 +449,7 @@ export class InteractiveViewPanelController implements vscode.Disposable {
       collapseThreshold:
         collapsibleSupported && this.criteria.collapseEnabled ? readCollapseThreshold() : undefined,
       mask: toDisplayMaskOptions(this.criteria),
+      visibleFileIndices: toVisibleFileIndices(this.criteria.visibleFiles),
     };
 
     const payload = await this.computePayload(criteria, formatOptions);
@@ -483,6 +539,7 @@ export class InteractiveViewPanelController implements vscode.Disposable {
         collapsibleSupported && this.criteria.collapseEnabled ? readCollapseThreshold() : undefined,
       // 書き出しは表示の状態を引き継ぐ（issue #194、絞り込み・折りたたみと同じ扱い）。
       mask: toDisplayMaskOptions(this.criteria),
+      visibleFileIndices: toVisibleFileIndices(this.criteria.visibleFiles),
     };
 
     const formatted = await this.computeExportFormatted(criteria, options);
@@ -565,6 +622,7 @@ export class InteractiveViewPanelController implements vscode.Disposable {
   }
   #files-panel {
     display: flex;
+    flex-wrap: wrap;
     align-items: center;
     gap: 8px;
     padding-bottom: 8px;
@@ -581,9 +639,48 @@ export class InteractiveViewPanelController implements vscode.Disposable {
   button:hover {
     background-color: var(--vscode-button-hoverBackground);
   }
+  /* 読み込み済みファイルは、表示ON/OFFのチェックボックスと取り消しボタンを
+     持つ「チップ」として1件ずつ並べる（issue #170）。 */
   #loaded-files {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 8px;
+    font-size: 0.9em;
+  }
+  #loaded-files-label {
     font-size: 0.9em;
     opacity: 0.8;
+  }
+  .loaded-file {
+    display: inline-flex;
+    align-items: center;
+    gap: 2px;
+  }
+  .loaded-file label {
+    display: inline-flex;
+    align-items: center;
+    gap: 2px;
+  }
+  /* 取り消しはファイル名の隣に添える小さな操作なので、上部の主要ボタン
+     （追加・書き出し・マスク）と同じ塗りにはせず、地の色に溶かしておく。 */
+  .remove-file {
+    background-color: transparent;
+    color: inherit;
+    padding: 0 4px;
+    opacity: 0.7;
+  }
+  .remove-file:hover:enabled {
+    background-color: var(--vscode-toolbar-hoverBackground, var(--vscode-list-hoverBackground));
+    opacity: 1;
+  }
+  /* 最後の1件は取り消せない（読み込み0件になると復帰できないため）。 */
+  .remove-file:disabled {
+    opacity: 0.3;
+    cursor: default;
+  }
+  .remove-file:disabled:hover {
+    background-color: transparent;
   }
   /* マスクパネルはボタンに重ねて開く（issue #194）。絞り込み列に対象を並べると
      #195 で対象が増えたときに横へ伸び続けるため、開閉するパネルに畳んでおく。 */
@@ -697,7 +794,8 @@ export class InteractiveViewPanelController implements vscode.Disposable {
         <label><input type="checkbox" id="mask-host">ホスト名 / IPアドレス</label>
       </div>
     </div>
-    <span id="loaded-files"></span>
+    <span id="loaded-files-label">読み込み済み:</span>
+    <div id="loaded-files"></div>
   </div>
   <div id="filter-panel">
     <div id="severities"></div>

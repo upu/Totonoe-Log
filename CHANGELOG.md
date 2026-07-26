@@ -70,6 +70,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   folders (the same reasoning as issue #151). Running it from the command
   palette still targets the active editor's log, including unsaved changes.
 
+- The loaded-file list in `Totonoe Log: Show Interactive View (Alpha)` is now
+  interactive: each file has a checkbox that hides or shows just that file's
+  lines, and a "✕" button that undoes loading it altogether (issue #170, the
+  next alpha step in #165). The per-file checkbox is a filter axis of its own,
+  so it combines with the severity / date-range / ignore-pattern filters, and
+  "Export as Virtual Document" writes out only the files that are shown.
+  Hiding a file keeps its severities in the filter panel and keeps the "N / M
+  lines" denominator intact, exactly like unchecking a severity does. The last
+  remaining file cannot be removed (with none loaded, "+ Add Files..." would
+  have nothing to add to) — uncheck it instead to hide it temporarily. The
+  panel's tab title now also follows along as files are added or removed.
+
 ## [0.7.0] - 2026-07-23
 
 ### Added

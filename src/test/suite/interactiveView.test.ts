@@ -6,7 +6,12 @@ import {
   toFilterCriteria,
 } from "../../interactiveViewCriteria";
 import { mergeLogFiles, parseLog } from "../../normalize";
-import { selectNewFileUris } from "../../interactiveViewFiles";
+import {
+  normalizeFileVisibility,
+  removeFileVisibilityAt,
+  selectNewFileUris,
+  toVisibleFileIndices,
+} from "../../interactiveViewFiles";
 import { parseWebviewLineSource } from "../../interactiveViewContext";
 import type { SerializedFilterCriteria } from "../../webview/interactiveView/protocol";
 
@@ -24,6 +29,7 @@ function serializedCriteria(
     ignorePattern: "",
     collapseEnabled: false,
     mask: { enabled: false, maskTimestamp: true, maskHost: true },
+    visibleFiles: [],
     ...overrides,
   };
 }
@@ -148,6 +154,41 @@ suite("interactiveViewFiles / selectNewFileUris (#168)", () => {
   test("returns an empty array when every candidate is already loaded", () => {
     const result = selectNewFileUris(["file:///a.log"], ["file:///a.log"]);
     assert.deepStrictEqual(result, []);
+  });
+});
+
+suite("interactiveViewFiles / file visibility (#170)", () => {
+  test("fills in newly loaded files as visible", () => {
+    assert.deepStrictEqual(normalizeFileVisibility([false], 3), [false, true, true]);
+  });
+
+  test("drops the flags of files that are no longer loaded", () => {
+    assert.deepStrictEqual(normalizeFileVisibility([true, false, true], 2), [true, false]);
+  });
+
+  test("keeps the flags untouched when the length already matches", () => {
+    assert.deepStrictEqual(normalizeFileVisibility([true, false], 2), [true, false]);
+  });
+
+  test("starts from an empty state as everything visible", () => {
+    assert.deepStrictEqual(normalizeFileVisibility([], 2), [true, true]);
+  });
+
+  test("collects the indices of the files that are visible", () => {
+    assert.deepStrictEqual(toVisibleFileIndices([true, false, true]), new Set([0, 2]));
+  });
+
+  test("collects no index when every file is hidden", () => {
+    assert.deepStrictEqual(toVisibleFileIndices([false, false]), new Set());
+  });
+
+  test("shifts the remaining flags down when a file is removed", () => {
+    assert.deepStrictEqual(removeFileVisibilityAt([true, false, true], 0), [false, true]);
+    assert.deepStrictEqual(removeFileVisibilityAt([true, false, true], 1), [true, true]);
+  });
+
+  test("leaves the flags untouched when the removed index does not exist", () => {
+    assert.deepStrictEqual(removeFileVisibilityAt([true, false], 5), [true, false]);
   });
 });
 

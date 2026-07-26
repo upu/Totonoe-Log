@@ -77,6 +77,17 @@ export interface SerializedFilterCriteria {
    * なく表示方法の切り替えだが、Webviewフォームの状態としてまとめて送り返す。
    */
   readonly mask: SerializedMaskCriteria;
+  /**
+   * 読み込み済みファイルの表示ON/OFF（issue #170）。
+   * {@link ExtensionToWebviewMessage.loadedFileNames} と同じ並びで、`false` の
+   * ファイル由来の行だけが表示から外れる。セベリティ等と同じ絞り込みの一軸
+   * （組み合わせて効く）だが、対象がエントリの中身ではなくファイルなので
+   * `FilterCriteria` ではなく整形時のファイル選択として扱う。
+   *
+   * ファイルの追加・取り消しでこの並びは変わるため、拡張機能本体側は受け取った
+   * 配列を必ず現在のファイル数へ整えてから使う（`normalizeFileVisibility`）。
+   */
+  readonly visibleFiles: readonly boolean[];
 }
 
 /** Webview → 拡張機能本体 のメッセージ。 */
@@ -84,6 +95,8 @@ export type WebviewToExtensionMessage =
   | { readonly type: "ready" }
   | { readonly type: "filterChanged"; readonly criteria: SerializedFilterCriteria }
   | { readonly type: "addFiles" }
+  /** 読み込み済みファイル1件を取り消す要求（issue #170）。`fileIndex` は `loadedFileNames` の位置。 */
+  | { readonly type: "removeFile"; readonly fileIndex: number }
   | { readonly type: "exportVirtualDocument" }
   /** 行のダブルクリックで、対応する元ログファイルの行を開く要求（issue #179、#191）。 */
   | { readonly type: "revealSourceLine"; readonly lineSource: LineSource };

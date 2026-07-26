@@ -18,6 +18,9 @@ import {
   filterEntriesByIgnorePattern,
   filterEntriesByCriteria,
   filterMergedEntriesByCriteria,
+  filterMergedEntriesByFileIndex,
+  isFileIndexVisible,
+  SINGLE_FILE_INDEX,
   assessTimestampRecognition,
   LOW_RECOGNITION_MIN_LINE_COUNT,
   LOW_RECOGNITION_RATIO_THRESHOLD,
@@ -3226,6 +3229,111 @@ suite("normalize / buildInteractiveMergedExportText (#175)", () => {
     if (!result.ok) {
       assert.strictEqual(result.reason, "timeout");
     }
+  });
+});
+
+suite("normalize / file visibility (#170)", () => {
+  const files = [
+    { fileName: "app.log", text: "2024-01-02T03:04:05Z ERROR from app" },
+    { fileName: "worker.log", text: "2024-01-02T03:04:06Z INFO from worker" },
+  ];
+
+  test("keeps only the entries whose file is visible", () => {
+    const mergedEntries = mergeLogFiles(files);
+
+    const kept = filterMergedEntriesByFileIndex(mergedEntries, new Set([1]));
+
+    assert.deepStrictEqual(
+      kept.map((merged) => merged.fileName),
+      ["worker.log"]
+    );
+  });
+
+  test("keeps every entry when no file selection is given", () => {
+    const mergedEntries = mergeLogFiles(files);
+
+    assert.deepStrictEqual(filterMergedEntriesByFileIndex(mergedEntries, undefined), mergedEntries);
+  });
+
+  test("drops every entry when no file is visible", () => {
+    const mergedEntries = mergeLogFiles(files);
+
+    assert.deepStrictEqual(filterMergedEntriesByFileIndex(mergedEntries, new Set()), []);
+  });
+
+  test("treats a missing file selection as everything visible", () => {
+    assert.strictEqual(isFileIndexVisible(undefined, SINGLE_FILE_INDEX), true);
+  });
+
+  test("reports whether a single index is visible", () => {
+    assert.strictEqual(isFileIndexVisible(new Set([0]), SINGLE_FILE_INDEX), true);
+    assert.strictEqual(isFileIndexVisible(new Set([1]), SINGLE_FILE_INDEX), false);
+  });
+
+  test("hides a merged file's lines while keeping the severities and total of every loaded file", async () => {
+    const mergedEntries = mergeLogFiles(files);
+
+    const payload = await buildInteractiveMergedPayload(
+      mergedEntries,
+      {},
+      { visibleFileIndices: new Set([0]) }
+    );
+
+    assert.strictEqual(payload.ok, true);
+    if (!payload.ok) {
+      throw new Error("unreachable");
+    }
+    assert.match(payload.text, /from app/);
+    assert.doesNotMatch(payload.text, /from worker/);
+    // 非表示にしたファイルのセベリティも、チェックボックスを消さないよう残す
+    // （セベリティ絞り込みで0件になったときと同じ扱い）。
+    assert.deepStrictEqual(payload.distinctSeverities, ["ERROR", "INFO"]);
+    assert.strictEqual(payload.totalLineCount, 2);
+    assert.strictEqual(payload.visibleLineCount, 1);
+  });
+
+  test("hides the only file of a single-file view without losing its severities or total", async () => {
+    const entries = parseLog("2024-01-02T03:04:05Z ERROR from app");
+
+    const payload = await buildInteractivePayload(entries, {}, { visibleFileIndices: new Set() });
+
+    assert.strictEqual(payload.ok, true);
+    if (!payload.ok) {
+      throw new Error("unreachable");
+    }
+    assert.strictEqual(payload.text, "");
+    assert.deepStrictEqual(payload.distinctSeverities, ["ERROR"]);
+    assert.strictEqual(payload.totalLineCount, 1);
+    assert.strictEqual(payload.visibleLineCount, 0);
+  });
+
+  test("writes out only the visible files when exporting a merged view", async () => {
+    const mergedEntries = mergeLogFiles(files);
+
+    const result = await buildInteractiveMergedExportText(
+      mergedEntries,
+      {},
+      { visibleFileIndices: new Set([1]) }
+    );
+
+    assert.strictEqual(result.ok, true);
+    if (!result.ok) {
+      throw new Error("unreachable");
+    }
+    assert.match(result.formatted.text, /from worker/);
+    assert.doesNotMatch(result.formatted.text, /from app/);
+  });
+
+  test("writes out nothing when the only file of a single-file view is hidden", async () => {
+    const entries = parseLog("2024-01-02T03:04:05Z ERROR from app");
+
+    const result = await buildInteractiveExportText(entries, {}, { visibleFileIndices: new Set() });
+
+    assert.strictEqual(result.ok, true);
+    if (!result.ok) {
+      throw new Error("unreachable");
+    }
+    assert.strictEqual(result.formatted.text, "");
   });
 });
 

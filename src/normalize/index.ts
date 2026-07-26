@@ -46,6 +46,11 @@ export type {
 export { filterEntriesByCriteria } from "./filterEntries";
 export type { FilterMergedEntriesResult } from "./filterMergedEntries";
 export { filterMergedEntriesByCriteria } from "./filterMergedEntries";
+export {
+  SINGLE_FILE_INDEX,
+  filterMergedEntriesByFileIndex,
+  isFileIndexVisible,
+} from "./filterByFile";
 export type { SyslogFormatOptions } from "./timestampFormats";
 export {
   ISO_8601_FORMAT,
