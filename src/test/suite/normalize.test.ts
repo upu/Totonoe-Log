@@ -6,6 +6,7 @@ import {
   formatNormalizedLog,
   formatMaskedLogForCompare,
   maskLogTextForCopy,
+  maskDisplayTextForCopy,
   collapseRepeatedEntries,
   formatCollapsedLog,
   deriveLogKind,
@@ -1619,6 +1620,101 @@ suite("normalize / maskLogTextForCopy", () => {
 
   test("returns an empty string for no entries", () => {
     assert.strictEqual(maskLogTextForCopy([]), "");
+  });
+});
+
+suite("normalize / maskDisplayTextForCopy (#180)", () => {
+  test("masks the body of a normalized display line, keeping the gutter prefix", () => {
+    assert.strictEqual(
+      maskDisplayTextForCopy("1 | 2024-01-02T03:04:05.000Z ERROR connect to 10.0.0.1 failed"),
+      "1 | <TIMESTAMP> ERROR connect to <HOST> failed"
+    );
+  });
+
+  test("keeps right-aligned gutters and continuation lines aligned", () => {
+    const displayText = [
+      " 9 | 2024-01-02T03:04:05.000Z ERROR Unhandled exception",
+      "10 |     at com.example.Foo.bar(10.0.0.5:42)",
+    ].join("\n");
+
+    assert.strictEqual(
+      maskDisplayTextForCopy(displayText),
+      [" 9 | <TIMESTAMP> ERROR Unhandled exception", "10 |     at com.example.Foo.bar(<HOST>:42)"].join(
+        "\n"
+      )
+    );
+  });
+
+  test("keeps the file name / kind columns of a merged display line", () => {
+    assert.strictEqual(
+      maskDisplayTextForCopy("app.log  | server | 12 | 2024-01-02T03:04:05.000Z INFO from 10.0.0.1"),
+      "app.log  | server | 12 | <TIMESTAMP> INFO from <HOST>"
+    );
+  });
+
+  test("keeps the collapse arrow and range gutter of a collapsed display row", () => {
+    const displayText = [
+      "▶ 1-5 | 2024-01-02T03:04:05.000Z INFO connect to 10.0.0.1 ok",
+      "  6 | 2024-01-02T03:04:10.000Z ERROR boom",
+    ].join("\n");
+
+    assert.strictEqual(
+      maskDisplayTextForCopy(displayText),
+      ["▶ 1-5 | <TIMESTAMP> INFO connect to <HOST> ok", "  6 | <TIMESTAMP> ERROR boom"].join("\n")
+    );
+  });
+
+  test("passes a gap marker row through untouched", () => {
+    assert.strictEqual(maskDisplayTextForCopy("  ... | 30秒の空白"), "  ... | 30秒の空白");
+  });
+
+  test("masks a selection fragment that starts on a continuation line", () => {
+    assert.strictEqual(
+      maskDisplayTextForCopy("10 |     at com.example.Foo.bar(10.0.0.5:42)"),
+      "10 |     at com.example.Foo.bar(<HOST>:42)"
+    );
+  });
+
+  test("masks a line that carries no display prefix at all", () => {
+    assert.strictEqual(
+      maskDisplayTextForCopy("2024-01-02T03:04:05.000Z ERROR boom"),
+      "<TIMESTAMP> ERROR boom"
+    );
+  });
+
+  test("masks display timestamps rendered with an offset suffix", () => {
+    assert.strictEqual(
+      maskDisplayTextForCopy("1 | 2024-01-02T12:04:05.000+09:00 ERROR boom"),
+      "1 | <TIMESTAMP> ERROR boom"
+    );
+  });
+
+  test("honors the maskTimestamp / maskHost options independently", () => {
+    const displayText = "1 | 2024-01-02T03:04:05.000Z INFO from 10.0.0.1";
+
+    assert.strictEqual(
+      maskDisplayTextForCopy(displayText, { maskTimestamp: false }),
+      "1 | 2024-01-02T03:04:05.000Z INFO from <HOST>"
+    );
+    assert.strictEqual(
+      maskDisplayTextForCopy(displayText, { maskHost: false }),
+      "1 | <TIMESTAMP> INFO from 10.0.0.1"
+    );
+  });
+
+  test("forwards the timestamp format list used to recognize the body", () => {
+    // 形式一覧を空にすると本文のタイムスタンプが認識されなくなる（= 設定由来の
+    // フォーマット一覧がそのまま解析に渡っていることの確認）。
+    assert.strictEqual(
+      maskDisplayTextForCopy("1 | 2024-01-02T03:04:05.000Z INFO from 10.0.0.1", {
+        timestampFormats: [],
+      }),
+      "1 | 2024-01-02T03:04:05.000Z INFO from <HOST>"
+    );
+  });
+
+  test("returns an empty string for empty display text", () => {
+    assert.strictEqual(maskDisplayTextForCopy(""), "");
   });
 });
 

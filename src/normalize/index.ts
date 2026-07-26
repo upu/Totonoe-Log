@@ -25,6 +25,8 @@ export type {
 export { compileClockSkewRules, resolveClockSkewMs, applyClockSkew } from "./clockSkew";
 export type { MaskForCopyOptions } from "./maskForCompare";
 export { formatMaskedLogForCompare, maskLogTextForCopy } from "./maskForCompare";
+export type { MaskDisplayTextForCopyOptions } from "./maskDisplayTextForCopy";
+export { maskDisplayTextForCopy } from "./maskDisplayTextForCopy";
 export type { CollapseOptions, CollapsedItem } from "./collapseRepeatedEntries";
 export { DEFAULT_COLLAPSE_THRESHOLD, collapseRepeatedEntries } from "./collapseRepeatedEntries";
 export type { FormatCollapsedLogOptions } from "./formatCollapsedLog";

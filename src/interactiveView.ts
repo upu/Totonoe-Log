@@ -7,6 +7,7 @@ import {
   buildInteractiveMergedExportText,
   getDistinctSeverities,
   limitInteractiveDisplay,
+  maskDisplayTextForCopy,
   mergeLogFiles,
   DEFAULT_COLLAPSE_THRESHOLD,
   type BuildInteractivePayloadOptions,
@@ -30,6 +31,7 @@ import { readDisplayTimezone } from "./timezoneSettings";
 import { readGapThresholdMs } from "./gapThresholdSetting";
 import { readMaxDisplayLines } from "./interactiveViewSettings";
 import { readConfiguredTimestampFormats } from "./timestampFormatSettings";
+import { readMaskOptions, writeMaskedTextToClipboard } from "./copyMasked";
 import { toFilterCriteria } from "./interactiveViewCriteria";
 import { revealSourceLine } from "./revealSourceLine";
 import { parseWebviewLineSource } from "./interactiveViewContext";
@@ -181,6 +183,10 @@ export class InteractiveViewPanelController implements vscode.Disposable {
       await this.revealClickedSourceLine(message.lineSource);
       return;
     }
+    if (message.type === "copyMasked") {
+      await this.copyMaskedDisplayText(message.text);
+      return;
+    }
     this.criteria = message.criteria;
     await this.postState();
   }
@@ -214,6 +220,24 @@ export class InteractiveViewPanelController implements vscode.Disposable {
       return;
     }
     await revealSourceLine(sourceUri, lineSource.line);
+  }
+
+  /**
+   * Webviewから届いた表示テキスト（選択範囲、または選択が無ければ表示全体）を
+   * マスクしてクリップボードへコピーする（issue #180）。マスク対象の切り替えは
+   * `Copy Masked Text` コマンドと同じ `totonoeLog.copyMasked.*` 設定を使い、
+   * 仮想ドキュメント側と挙動を揃える（新しい設定は増やさない）。
+   *
+   * 対象を「表示テキスト」にしているため、コピー結果には絞り込み・折りたたみ・
+   * ガター欄がそのまま残る——貼り付け先で欲しいのは画面で見ていた状態であり、
+   * 行番号は元ログを追う手がかりとして役に立つため。
+   */
+  private async copyMaskedDisplayText(displayText: string): Promise<void> {
+    const maskedText = maskDisplayTextForCopy(displayText, {
+      ...readMaskOptions(),
+      timestampFormats: readConfiguredTimestampFormats(),
+    });
+    await writeMaskedTextToClipboard(maskedText);
   }
 
   /**
@@ -577,6 +601,7 @@ export class InteractiveViewPanelController implements vscode.Disposable {
   <div id="files-panel">
     <button id="add-files-button" type="button">+ Add Files...</button>
     <button id="export-button" type="button">Export as Virtual Document</button>
+    <button id="copy-masked-button" type="button" title="選択範囲（未選択なら表示全体）のタイムスタンプ・ホスト名/IPアドレスをマスクしてコピーします">Copy Masked</button>
     <span id="loaded-files"></span>
   </div>
   <div id="filter-panel">

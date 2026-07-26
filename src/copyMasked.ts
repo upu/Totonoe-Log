@@ -6,12 +6,24 @@ import { parseLogWithConfiguredFormats } from "./timestampFormatSettings";
 /** マスク対象のON/OFFを読み込むVSCode設定のセクション名。 */
 const CONFIG_SECTION = "totonoeLog.copyMasked";
 
-function readMaskOptions(): MaskForCopyOptions {
+/**
+ * `totonoeLog.copyMasked.*` 設定を読む。Interactive View の `Copy Masked`
+ * ボタン（issue #180）とも共有し、設定を増やさずマスクの挙動を揃える。
+ */
+export function readMaskOptions(): MaskForCopyOptions {
   const config = vscode.workspace.getConfiguration(CONFIG_SECTION);
   return {
     maskTimestamp: config.get<boolean>("maskTimestamp", true),
     maskHost: config.get<boolean>("maskHost", true),
   };
+}
+
+/** コピー完了の通知も呼び出し元で二重に持たないよう、書き込みと合わせて共有する（issue #180）。 */
+export async function writeMaskedTextToClipboard(maskedText: string): Promise<void> {
+  await vscode.env.clipboard.writeText(maskedText);
+  vscode.window.showInformationMessage(
+    "Totonoe Log: マスク済みテキストをクリップボードにコピーしました。"
+  );
 }
 
 /**
@@ -39,10 +51,5 @@ export async function copyMaskedLogText(): Promise<void> {
   const sourceText = selection.isEmpty ? document.getText() : document.getText(selection);
 
   const entries = parseLogWithConfiguredFormats(sourceText);
-  const maskedText = maskLogTextForCopy(entries, readMaskOptions());
-  await vscode.env.clipboard.writeText(maskedText);
-
-  vscode.window.showInformationMessage(
-    "Totonoe Log: マスク済みテキストをクリップボードにコピーしました。"
-  );
+  await writeMaskedTextToClipboard(maskLogTextForCopy(entries, readMaskOptions()));
 }

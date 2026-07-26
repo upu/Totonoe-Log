@@ -24,6 +24,7 @@ const vscodeApi = acquireVsCodeApi<WebviewToExtensionMessage>();
 
 const addFilesButton = document.getElementById("add-files-button") as HTMLButtonElement;
 const exportButton = document.getElementById("export-button") as HTMLButtonElement;
+const copyMaskedButton = document.getElementById("copy-masked-button") as HTMLButtonElement;
 const loadedFilesElement = document.getElementById("loaded-files") as HTMLSpanElement;
 const severitiesContainer = document.getElementById("severities") as HTMLDivElement;
 const dateStartInput = document.getElementById("date-start") as HTMLInputElement;
@@ -85,6 +86,35 @@ addFilesButton.addEventListener("click", () => {
 // 書き出しも離散的な操作なので、テキスト入力と違いデバウンスせず即座に送る。
 exportButton.addEventListener("click", () => {
   vscodeApi.postMessage({ type: "exportVirtualDocument" });
+});
+
+/**
+ * マスクしてコピーする対象のテキストを決める（issue #180）。本文の一部を
+ * 選択していればその範囲、していなければ本文全体を対象にする。
+ *
+ * 選択が本文（`#log-output`）の外——絞り込みフォームや警告文——にある場合は
+ * 選択なしとして扱う。ログ以外の文字列をコピーしても貼り付け先で役に立たず、
+ * 「選択せずに押したら全体がコピーされる」という素直な既定の方が誤操作時の
+ * 結果が読みやすいため。
+ *
+ * 全体のときに `textContent` ではなく `innerText` を使うのは、折りたたみ中の
+ * グループが隠し要素（`hidden`）として DOM に残っているため。`innerText` は
+ * 非表示要素を含めないので、コピー結果は「畳んだ見た目そのまま」になる
+ * （展開して初めてその中身がコピー対象に入る）。
+ */
+function collectTextToCopy(): string {
+  const selection = window.getSelection();
+  if (selection && !selection.isCollapsed && selection.rangeCount > 0) {
+    const range = selection.getRangeAt(0);
+    if (logOutputElement.contains(range.commonAncestorContainer)) {
+      return selection.toString();
+    }
+  }
+  return logOutputElement.innerText;
+}
+
+copyMaskedButton.addEventListener("click", () => {
+  vscodeApi.postMessage({ type: "copyMasked", text: collectTextToCopy() });
 });
 
 function renderSeverities(distinctSeverities: readonly string[], checked: readonly string[]): void {
