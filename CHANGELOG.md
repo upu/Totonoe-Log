@@ -62,6 +62,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   settings shared with `Totonoe Log: Copy Masked Text`; no new settings were
   added.
 
+- `Totonoe Log: Show Interactive View (Alpha)` can now be opened straight from
+  the Explorer: select two or more log files, right-click, and pick it to open
+  them merged in a single panel (issue #181, the next alpha step in #165).
+  Unlike the panel's "+ Add Files..." dialog, an Explorer selection can span
+  folders (the same reasoning as issue #151). Running it from the command
+  palette still targets the active editor's log, including unsaved changes.
+
 ## [0.7.0] - 2026-07-23
 
 ### Added

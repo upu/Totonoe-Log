@@ -118,6 +118,11 @@
           "command": "totonoeLog.mergeSelectedFilesFiltered",
           "when": "listMultiSelection",
           "group": "totonoeLog@2"
+        },
+        {
+          "command": "totonoeLog.showInteractiveViewAlpha",
+          "when": "listMultiSelection",
+          "group": "totonoeLog@3"
         }
       ],
       "editor/context": [

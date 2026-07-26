@@ -17,15 +17,19 @@ import {
   type InteractivePayloadResult,
   type LineSource,
   type LogEntry,
-  type LogFileInput,
   type MergedEntry,
 } from "./normalize";
 import {
   getSourceDocumentOrWarn,
-  parseSourceLog,
+  parseLogFileInput,
   buildLogFileInputFromDocument,
 } from "./logSourceDocument";
-import { readLogFiles, filterOutFolders } from "./logFileReading";
+import {
+  filterOutFolders,
+  loadLogFiles,
+  resolveExplorerSelectionUris,
+  type LoadedLogFile,
+} from "./logFileReading";
 import { selectNewFileUris } from "./interactiveViewFiles";
 import { readDisplayTimezone } from "./timezoneSettings";
 import { readGapThresholdMs } from "./gapThresholdSetting";
@@ -117,25 +121,27 @@ function baseName(uri: vscode.Uri): string {
  * （拡張機能本体側、Node実行）が一手に引き受ける。Webview側は届いた結果を
  * 描画するだけの薄いレンダラーにとどめる。
  *
- * パネルはシングルトン。ファイルは「+ Add Files...」（issue #168）で追加
- * でき、1ファイルの間は正規化ビュー相当の表示、2ファイル以上になった時点で
- * マージビュー相当（ファイル名/種別列付き）の表示に切り替わる（デュアルパス）。
- * 別のログファイルに対してコマンドを再実行すると、既存パネルの表示内容が
- * そのファイル1つにリセットされる。
+ * パネルはシングルトン。最初に開く時点で1件（コマンドパレット経由）にも複数件
+ * （エクスプローラの複数選択経由、issue #181）にもなり、さらに「+ Add Files...」
+ * （issue #168）で追加できる。1ファイルの間は正規化ビュー相当の表示、2ファイル
+ * 以上になった時点でマージビュー相当（ファイル名/種別列付き）の表示に切り替わる
+ * （デュアルパス）。コマンドを再実行すると、既存パネルの表示内容がその実行で
+ * 選ばれたファイルにリセットされる。
  */
 export class InteractiveViewPanelController implements vscode.Disposable {
   private panel: vscode.WebviewPanel | undefined;
-  private sourceDocument: vscode.TextDocument | undefined;
-  /** 2ファイル目以降に追加されたファイル。1ファイル目（`sourceDocument`）はここに含めない。 */
-  private additionalFiles: LogFileInput[] = [];
-  /** 重複読み込み防止用。先頭は `sourceDocument` のURI文字列。 */
-  private loadedUriStrings: string[] = [];
-  /** `additionalFiles.length === 0` の間だけ使う、単一ファイルパスのキャッシュ。 */
+  /**
+   * 読み込み済みファイルの一覧（読み込み順）。`LineSource.fileIndex` はこの
+   * 配列のインデックスを指す。1ファイル目とそれ以降を別々の状態で持たず1本に
+   * 揃えている（issue #181）——エクスプローラから複数ファイルを一度に開く場合に
+   * 1ファイル目を特別扱いできず、ファイル単位の取り消し（#170）でも先頭だけ
+   * 消せない構造は扱いにくいため。
+   */
+  private loadedFiles: LoadedLogFile[] = [];
+  /** `loadedFiles.length === 1` の間だけ使う、単一ファイルパスのキャッシュ。 */
   private singleEntries: readonly LogEntry[] = [];
-  /** `additionalFiles.length > 0` の間だけ使う、マージ済みエントリのキャッシュ。 */
+  /** `loadedFiles.length > 1` の間だけ使う、マージ済みエントリのキャッシュ。 */
   private mergedEntries: readonly MergedEntry[] = [];
-  /** `loadedUriStrings` と同順の実URI一覧。書き出し（issue #175）でマージ表示の行対応情報を組み立てる際に使う。 */
-  private loadedUris: vscode.Uri[] = [];
   private criteria: SerializedFilterCriteria = createDefaultSerializedCriteria([]);
   /** 「仮想ドキュメントとして書き出す」操作（issue #175）で発行するマージ用URIの連番。 */
   private exportMergedCounter = 0;
@@ -146,16 +152,22 @@ export class InteractiveViewPanelController implements vscode.Disposable {
     private readonly mergedViewProvider: MergedViewContentProvider
   ) {}
 
-  async showOrReveal(sourceDocument: vscode.TextDocument): Promise<void> {
-    this.sourceDocument = sourceDocument;
-    this.additionalFiles = [];
-    this.loadedUriStrings = [sourceDocument.uri.toString()];
-    this.loadedUris = [sourceDocument.uri];
+  /**
+   * 読み込み済みファイルを丸ごと差し替えてパネルを表示する。1件なら正規化
+   * ビュー相当、2件以上ならマージビュー相当の表示になる（issue #181 で
+   * エクスプローラの複数選択から複数件で開かれるようになった）。
+   */
+  async showOrReveal(files: readonly LoadedLogFile[]): Promise<void> {
+    if (files.length === 0) {
+      return;
+    }
+
+    this.loadedFiles = [...files];
     this.recomputeEntries();
     this.criteria = createDefaultSerializedCriteria(this.singleEntries);
 
     if (this.panel) {
-      this.panel.title = this.buildTitle(sourceDocument);
+      this.panel.title = this.buildTitle();
       this.panel.reveal();
       await this.postState();
       return;
@@ -164,7 +176,7 @@ export class InteractiveViewPanelController implements vscode.Disposable {
     const nonce = generateNonce();
     const panel = vscode.window.createWebviewPanel(
       INTERACTIVE_VIEW_TYPE,
-      this.buildTitle(sourceDocument),
+      this.buildTitle(),
       vscode.ViewColumn.Active,
       {
         enableScripts: true,
@@ -188,8 +200,11 @@ export class InteractiveViewPanelController implements vscode.Disposable {
     this.panel = undefined;
   }
 
-  private buildTitle(sourceDocument: vscode.TextDocument): string {
-    return `Totonoe Log (Alpha): ${baseName(sourceDocument.uri)}`;
+  /** 2件以上のときは先頭のファイル名に残り件数を添える（タブ幅に全部は収まらないため）。 */
+  private buildTitle(): string {
+    const [first, ...rest] = this.loadedFiles;
+    const suffix = rest.length > 0 ? ` +${rest.length}` : "";
+    return `Totonoe Log (Alpha): ${baseName(first.uri)}${suffix}`;
   }
 
   private async handleMessage(message: WebviewToExtensionMessage): Promise<void> {
@@ -228,11 +243,11 @@ export class InteractiveViewPanelController implements vscode.Disposable {
 
   /**
    * Webviewで選ばれた行から、対応する元ログファイルの行へジャンプする
-   * （issue #179）。`fileIndex` は `loadedUris`（読み込み順）の位置なので、
+   * （issue #179）。`fileIndex` は `loadedFiles`（読み込み順）の位置なので、
    * ここでURIに解決してから `Go to Source Line` と共通のジャンプ処理へ渡す。
    */
   private async revealClickedSourceLine(lineSource: LineSource): Promise<void> {
-    const sourceUri = this.loadedUris[lineSource.fileIndex];
+    const sourceUri = this.loadedFiles[lineSource.fileIndex]?.uri;
     if (!sourceUri) {
       // 送信後にファイル集合が変わった場合など、`fileIndex` が現在の読み込み
       // 済みファイルに対応しないとき（`Go to Source Line` と同じ案内にする）。
@@ -256,7 +271,7 @@ export class InteractiveViewPanelController implements vscode.Disposable {
    * （フォルダをまたぐ場合は複数回に分けて追加すればよい）。
    */
   private async addFiles(): Promise<void> {
-    if (!this.sourceDocument) {
+    if (this.loadedFiles.length === 0) {
       return;
     }
 
@@ -272,7 +287,7 @@ export class InteractiveViewPanelController implements vscode.Disposable {
 
     const candidates = await filterOutFolders(picked);
     const newUriStrings = selectNewFileUris(
-      this.loadedUriStrings,
+      this.loadedFiles.map((file) => file.uri.toString()),
       candidates.map((uri) => uri.toString())
     );
     if (newUriStrings.length === 0) {
@@ -281,40 +296,44 @@ export class InteractiveViewPanelController implements vscode.Disposable {
 
     const newUriStringSet = new Set(newUriStrings);
     const newUris = candidates.filter((uri) => newUriStringSet.has(uri.toString()));
-    const newFiles = await readLogFiles(newUris);
 
-    this.additionalFiles.push(...newFiles);
-    this.loadedUriStrings.push(...newUriStrings);
-    this.loadedUris.push(...newUris);
+    this.loadedFiles.push(...(await loadLogFiles(newUris)));
     this.recomputeEntries();
     await this.postState();
   }
 
   /**
-   * ファイル集合（`sourceDocument` + `additionalFiles`）が変わった時だけ
-   * 呼ぶ、パース/マージのやり直し。絞り込み条件が変わるだけの再描画
-   * （`postState`）では呼ばない — `mergeLogFiles` は差分追加ができず毎回
-   * 全件処理になるため、無駄な再マージを避ける。
+   * ファイル集合（`loadedFiles`）が変わった時だけ呼ぶ、パース/マージのやり直し。
+   * 絞り込み条件が変わるだけの再描画（`postState`）では呼ばない —
+   * `mergeLogFiles` は差分追加ができず毎回全件処理になるため、無駄な再マージを
+   * 避ける。
+   *
+   * 1ファイルのときにマージ経路を通さないのは、`mergeLogFiles` がタイムスタンプ
+   * 順に並べ替えるため——時系列に並んでいないログを1ファイルだけ開いた場合に、
+   * 元ファイルと行順が変わってしまう。
    */
   private recomputeEntries(): void {
-    if (!this.sourceDocument) {
+    const [first, ...rest] = this.loadedFiles;
+    if (!first) {
       return;
     }
 
-    if (this.additionalFiles.length === 0) {
-      this.singleEntries = parseSourceLog(this.sourceDocument);
+    if (rest.length === 0) {
+      this.singleEntries = parseLogFileInput(first.input, first.uri);
       this.mergedEntries = [];
       return;
     }
 
-    const files: LogFileInput[] = [
-      buildLogFileInputFromDocument(this.sourceDocument),
-      ...this.additionalFiles,
-    ];
-    this.mergedEntries = mergeLogFiles(files, {
-      timestampFormats: readConfiguredTimestampFormats(),
-    });
+    this.mergedEntries = mergeLogFiles(
+      this.loadedFiles.map((file) => file.input),
+      { timestampFormats: readConfiguredTimestampFormats() }
+    );
     this.singleEntries = [];
+  }
+
+  /** 単一ファイル表示中か（マージ表示は折りたたみ非対応で、整形経路も別）。 */
+  private isSingleFile(): boolean {
+    return this.loadedFiles.length === 1;
   }
 
   /** 現在のファイル集合に応じて、単一ファイル用/マージ用いずれかの合成処理を呼ぶ。 */
@@ -322,17 +341,14 @@ export class InteractiveViewPanelController implements vscode.Disposable {
     criteria: FilterCriteria,
     options: BuildInteractivePayloadOptions
   ): Promise<InteractivePayloadResult> {
-    if (this.additionalFiles.length === 0) {
+    if (this.isSingleFile()) {
       return buildInteractivePayload(this.singleEntries, criteria, options);
     }
     return buildInteractiveMergedPayload(this.mergedEntries, criteria, options);
   }
 
   private loadedFileNames(): string[] {
-    if (!this.sourceDocument) {
-      return [];
-    }
-    return [baseName(this.sourceDocument.uri), ...this.additionalFiles.map((file) => file.fileName)];
+    return this.loadedFiles.map((file) => file.input.fileName);
   }
 
   /**
@@ -350,7 +366,7 @@ export class InteractiveViewPanelController implements vscode.Disposable {
     const displayTimezone = readDisplayTimezone();
     const { criteria, errors } = toFilterCriteria(this.criteria, displayTimezone);
     // マージ表示（2ファイル以上）は折りたたみ非対応（issue #172、#158の未解決課題を踏まえた判断）。
-    const collapsibleSupported = this.additionalFiles.length === 0;
+    const collapsibleSupported = this.isSingleFile();
     const formatOptions: BuildInteractivePayloadOptions = {
       gapThresholdMs: readGapThresholdMs(),
       displayTimezone,
@@ -409,7 +425,7 @@ export class InteractiveViewPanelController implements vscode.Disposable {
       visibleLineCount: payload.visibleLineCount,
       loadedFileNames: this.loadedFileNames(),
       // ホバー表示用のフルパス（issue #179）。`fileIndex` はこの並びを指す。
-      sourceFilePaths: this.loadedUris.map((uri) => uri.fsPath),
+      sourceFilePaths: this.loadedFiles.map((file) => file.uri.fsPath),
       lineSources: limited.lineSources,
       warning: errors.length > 0 ? errors.join(" / ") : undefined,
       collapsibleSupported,
@@ -430,14 +446,15 @@ export class InteractiveViewPanelController implements vscode.Disposable {
    * 使う想定で、Webview側には作り込まない。
    */
   private async exportVirtualDocument(): Promise<void> {
-    if (!this.sourceDocument) {
+    const [firstFile] = this.loadedFiles;
+    if (!firstFile) {
       return;
     }
 
     const displayTimezone = readDisplayTimezone();
     const { criteria } = toFilterCriteria(this.criteria, displayTimezone);
     // マージ表示（2ファイル以上）は折りたたみ非対応（issue #172と同じ判断）。
-    const collapsibleSupported = this.additionalFiles.length === 0;
+    const collapsibleSupported = this.isSingleFile();
     const options: BuildInteractiveExportTextOptions = {
       gapThresholdMs: readGapThresholdMs(),
       displayTimezone,
@@ -452,10 +469,10 @@ export class InteractiveViewPanelController implements vscode.Disposable {
       return;
     }
 
-    if (this.additionalFiles.length === 0) {
+    if (this.isSingleFile()) {
       await openVirtualNormalizedDocument(
         this.normalizedViewProvider,
-        this.sourceDocument,
+        firstFile.uri,
         formatted,
         "interactive-export"
       );
@@ -465,7 +482,7 @@ export class InteractiveViewPanelController implements vscode.Disposable {
     this.exportMergedCounter += 1;
     await this.mergedViewProvider.openDocument(
       formatted,
-      this.loadedUris,
+      this.loadedFiles.map((file) => file.uri),
       `/interactive-export-merged-${this.exportMergedCounter}.log`
     );
   }
@@ -481,7 +498,7 @@ export class InteractiveViewPanelController implements vscode.Disposable {
     options: BuildInteractiveExportTextOptions
   ): Promise<FormattedLogWithLineSources | undefined> {
     const result =
-      this.additionalFiles.length === 0
+      this.isSingleFile()
         ? await buildInteractiveExportText(this.singleEntries, criteria, options)
         : await buildInteractiveMergedExportText(this.mergedEntries, criteria, options);
     if (result.ok) {
@@ -490,7 +507,7 @@ export class InteractiveViewPanelController implements vscode.Disposable {
 
     const fallbackCriteria: FilterCriteria = { ...criteria, ignorePattern: undefined };
     const fallbackResult =
-      this.additionalFiles.length === 0
+      this.isSingleFile()
         ? await buildInteractiveExportText(this.singleEntries, fallbackCriteria, options)
         : await buildInteractiveMergedExportText(this.mergedEntries, fallbackCriteria, options);
     if (!fallbackResult.ok) {
@@ -680,17 +697,41 @@ export class InteractiveViewPanelController implements vscode.Disposable {
 
 /**
  * `Totonoe Log: Show Interactive View (Alpha)` コマンドのハンドラを作る。
- * 正規化ビュー系コマンドと同じ手順（{@link getSourceDocumentOrWarn}）で
- * アクティブなログファイルを取得し、コントローラにパネルの表示を委譲する。
+ * エクスプローラのコンテキストメニュー（複数選択、issue #181）とコマンド
+ * パレットの両方から呼ばれる1つのコマンドで、引数の有無で入力経路を切り替える:
+ *
+ * - エクスプローラ経由 — VSCode が `(クリックされた項目, 選択項目全体)` を渡す。
+ *   選ばれたファイルをディスクから読み込んで開く（複数フォルダにまたがる選択も
+ *   問題なく扱える。ダイアログ方式の制限は #151 の教訓）
+ * - コマンドパレット経由 — 引数が無いので、正規化ビュー系コマンドと同じ手順
+ *   （{@link getSourceDocumentOrWarn}）でアクティブなログファイルを対象にする。
+ *   エディタの内容をそのまま使うため、未保存の変更も反映される
+ *
+ * 用途ごとにコマンドを増やさず1つに寄せているのは、パレットに同じ機能の項目が
+ * 並ぶのを避けるため。
  */
 export function createShowInteractiveViewAlphaCommand(
   controller: InteractiveViewPanelController
-): () => Promise<void> {
-  return async function showInteractiveViewAlpha(): Promise<void> {
+): (clickedUri?: vscode.Uri, selectedUris?: vscode.Uri[]) => Promise<void> {
+  return async function showInteractiveViewAlpha(
+    clickedUri?: vscode.Uri,
+    selectedUris?: vscode.Uri[]
+  ): Promise<void> {
+    const explorerUris = await resolveExplorerSelectionUris(clickedUri, selectedUris);
+    if (explorerUris.length > 0) {
+      await controller.showOrReveal(await loadLogFiles(explorerUris));
+      return;
+    }
+
     const sourceDocument = getSourceDocumentOrWarn("表示する");
     if (!sourceDocument) {
       return;
     }
-    await controller.showOrReveal(sourceDocument);
+    await controller.showOrReveal([
+      {
+        uri: sourceDocument.uri,
+        input: buildLogFileInputFromDocument(sourceDocument),
+      },
+    ]);
   };
 }
