@@ -1,10 +1,49 @@
 import {
+  getDistinctSeverities,
   parseDateBoundary,
   type DateRange,
   type DisplayTimezone,
   type FilterCriteria,
+  type LogEntry,
+  type MergedEntry,
 } from "./normalize";
 import type { SerializedFilterCriteria } from "./webview/interactiveView/protocol";
+
+/**
+ * 読み込み済みエントリのセベリティ一覧を返す。Interactive View は単一ファイル
+ * 表示とマージ表示でエントリのキャッシュを持ち替えるため、「今使われている方」を
+ * ここで吸収する（issue #200）——マージ表示中は単一ファイル側が空になるので、
+ * そちらだけを見ていると全セベリティが未チェックのまま開いてしまい、ログが
+ * 1行も表示されない。
+ */
+export function getLoadedDistinctSeverities(
+  singleEntries: readonly LogEntry[],
+  mergedEntries: readonly MergedEntry[]
+): string[] {
+  const entries =
+    singleEntries.length > 0 ? singleEntries : mergedEntries.map((merged) => merged.entry);
+  return getDistinctSeverities(entries);
+}
+
+/**
+ * ファイル追加後のチェック済みセベリティを求める（issue #200）。追加によって
+ * **新しく現れた**セベリティはチェック済みに足すが、追加前から存在していて
+ * 外されているものは外したままにする——後者はユーザーが明示的に選んだ状態
+ * なので尊重し、前者は「まだ選択の機会が無かった」ものとして既定のON側に寄せる
+ * （初期状態が全ONであることと揃える）。
+ */
+export function addNewlyAppearedSeverities(
+  checked: readonly string[],
+  previousDistinct: readonly string[],
+  nextDistinct: readonly string[]
+): string[] {
+  const known = new Set(previousDistinct);
+  const alreadyChecked = new Set(checked);
+  const newlyAppeared = nextDistinct.filter(
+    (severity) => !known.has(severity) && !alreadyChecked.has(severity)
+  );
+  return [...checked, ...newlyAppeared];
+}
 
 /** {@link toFilterCriteria} の結果。 */
 export interface ToFilterCriteriaResult {
