@@ -106,6 +106,9 @@ exportButton.addEventListener("click", () => {
 function setMaskEnabled(enabled: boolean): void {
   maskButton.setAttribute("aria-pressed", String(enabled));
   maskButton.classList.toggle("toggled-on", enabled);
+  // 状態は色だけでなくラベルにも出す（issue #197、色の違いだけでは
+  // ON/OFF が判別しづらかった）。
+  maskButton.textContent = enabled ? "🔒 マスク: ON" : "🔓 マスク: OFF";
 }
 
 /** マスク対象の選択パネルの開閉。閉じても選択内容とマスクのON/OFFは保たれる。 */
