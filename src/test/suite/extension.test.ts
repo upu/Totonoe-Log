@@ -3474,3 +3474,90 @@ suite("Totonoe Log go to source line (#137)", () => {
     provider.dispose();
   });
 });
+
+suite("logFileReading / explorer selection helpers (#181)", () => {
+  async function withTempDir(
+    run: (tempDir: string) => Promise<void>
+  ): Promise<void> {
+    const fs = await import("node:fs/promises");
+    const os = await import("node:os");
+    const path = await import("node:path");
+    const tempDir = await fs.mkdtemp(path.join(os.tmpdir(), "totonoe-log-selection-"));
+    try {
+      await run(tempDir);
+    } finally {
+      await fs.rm(tempDir, { recursive: true, force: true });
+    }
+  }
+
+  test("resolves the selected uris, dropping folders", async () => {
+    const { resolveExplorerSelectionUris } = await import("../../logFileReading");
+    await withTempDir(async (tempDir) => {
+      const fs = await import("node:fs/promises");
+      const path = await import("node:path");
+      const logPath = path.join(tempDir, "app.log");
+      const nestedDir = path.join(tempDir, "nested");
+      await fs.writeFile(logPath, "2024-01-02T03:04:05Z INFO hello");
+      await fs.mkdir(nestedDir);
+
+      const resolved = await resolveExplorerSelectionUris(vscode.Uri.file(logPath), [
+        vscode.Uri.file(logPath),
+        vscode.Uri.file(nestedDir),
+      ]);
+
+      assert.deepStrictEqual(
+        resolved.map((uri) => uri.fsPath),
+        [vscode.Uri.file(logPath).fsPath]
+      );
+    });
+  });
+
+  test("falls back to the clicked uri when the selection array is absent", async () => {
+    const { resolveExplorerSelectionUris } = await import("../../logFileReading");
+    await withTempDir(async (tempDir) => {
+      const fs = await import("node:fs/promises");
+      const path = await import("node:path");
+      const logPath = path.join(tempDir, "app.log");
+      await fs.writeFile(logPath, "2024-01-02T03:04:05Z INFO hello");
+
+      const resolved = await resolveExplorerSelectionUris(vscode.Uri.file(logPath), undefined);
+
+      assert.deepStrictEqual(
+        resolved.map((uri) => uri.fsPath),
+        [vscode.Uri.file(logPath).fsPath]
+      );
+    });
+  });
+
+  test("returns an empty array when invoked with no uris at all (command palette)", async () => {
+    const { resolveExplorerSelectionUris } = await import("../../logFileReading");
+
+    assert.deepStrictEqual(await resolveExplorerSelectionUris(undefined, undefined), []);
+    assert.deepStrictEqual(await resolveExplorerSelectionUris(undefined, []), []);
+  });
+
+  test("loadLogFiles keeps each uri paired with the file it was read from", async () => {
+    const { loadLogFiles } = await import("../../logFileReading");
+    await withTempDir(async (tempDir) => {
+      const fs = await import("node:fs/promises");
+      const path = await import("node:path");
+      const appLogPath = path.join(tempDir, "app.log");
+      const dbLogPath = path.join(tempDir, "db.log");
+      await fs.writeFile(appLogPath, "2024-01-02T03:04:05Z INFO hello");
+      await fs.writeFile(dbLogPath, "2024-01-02T03:04:04Z ERROR boom");
+
+      const loaded = await loadLogFiles([
+        vscode.Uri.file(appLogPath),
+        vscode.Uri.file(dbLogPath),
+      ]);
+
+      assert.deepStrictEqual(
+        loaded.map((file) => [file.uri.fsPath, file.input.fileName, file.input.text]),
+        [
+          [vscode.Uri.file(appLogPath).fsPath, "app.log", "2024-01-02T03:04:05Z INFO hello"],
+          [vscode.Uri.file(dbLogPath).fsPath, "db.log", "2024-01-02T03:04:04Z ERROR boom"],
+        ]
+      );
+    });
+  });
+});

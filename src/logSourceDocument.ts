@@ -41,14 +41,22 @@ export function getSourceDocumentOrWarn(actionLabel: string): vscode.TextDocumen
  * まとめる。
  */
 export function parseSourceLog(sourceDocument: vscode.TextDocument): LogEntry[] {
-  const fileName = sourceDocument.uri.path.split("/").pop() ?? "";
-  const sourceUtcOffsetMinutes = createSourceOffsetResolver()(fileName);
-  const parsedEntries = parseLogWithConfiguredFormats(
-    sourceDocument.getText(),
-    sourceUtcOffsetMinutes
-  );
-  const entries = applyClockSkew(parsedEntries, createClockSkewResolver()(fileName));
-  warnIfLowTimestampRecognition(sourceDocument.uri, entries);
+  return parseLogFileInput(buildLogFileInputFromDocument(sourceDocument), sourceDocument.uri);
+}
+
+/**
+ * {@link parseSourceLog} と同じ手順（設定反映済みフォーマット・ソースオフセット・
+ * クロックスキュー補正・認識率の警告）を、既に読み込み済みの
+ * {@link LogFileInput} に対して行う（issue #181）。エクスプローラから選んだ
+ * ファイルはエディタで開かれていないため `TextDocument` を用意できず、
+ * ディスクから読んだ入力をそのままパースする経路が必要になる。
+ *
+ * `uri` は認識率の警告表示（issue #101）で対象ファイルを示すためだけに使う。
+ */
+export function parseLogFileInput(input: LogFileInput, uri: vscode.Uri): LogEntry[] {
+  const parsedEntries = parseLogWithConfiguredFormats(input.text, input.sourceUtcOffsetMinutes);
+  const entries = applyClockSkew(parsedEntries, input.clockSkewMs ?? 0);
+  warnIfLowTimestampRecognition(uri, entries);
   return entries;
 }
 

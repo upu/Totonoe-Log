@@ -189,6 +189,61 @@ suite("Totonoe Log interactive view (alpha, #166)", () => {
     assert.strictEqual(paletteEntry!.when, "false");
   });
 
+  test("offers an explorer context menu entry for multi-selection (#181)", async () => {
+    const extension = vscode.extensions.getExtension("upu.totonoe-log");
+    await extension!.activate();
+
+    const menus = extension!.packageJSON.contributes.menus as Record<
+      string,
+      Array<{ command: string; when?: string }>
+    >;
+    const explorerEntry = menus["explorer/context"].find(
+      (item) => item.command === "totonoeLog.showInteractiveViewAlpha"
+    );
+    assert.ok(explorerEntry, "explorer/context should have an Interactive View entry");
+    assert.strictEqual(explorerEntry!.when, "listMultiSelection");
+  });
+
+  test("opens a webview tab from an explorer multi-selection, with no active editor (#181)", async function () {
+    this.timeout(10000);
+    const extension = vscode.extensions.getExtension("upu.totonoe-log");
+    await extension!.activate();
+
+    const fs = await import("node:fs/promises");
+    const os = await import("node:os");
+    const path = await import("node:path");
+
+    const tempDir = await fs.mkdtemp(path.join(os.tmpdir(), "totonoe-log-interactive-"));
+    try {
+      const appLogPath = path.join(tempDir, "app.log");
+      const dbLogPath = path.join(tempDir, "db.log");
+      await fs.writeFile(appLogPath, "2024-01-02T03:04:05Z INFO hello");
+      await fs.writeFile(dbLogPath, "2024-01-02T03:04:04Z ERROR boom");
+      const appLogUri = vscode.Uri.file(appLogPath);
+      const dbLogUri = vscode.Uri.file(dbLogPath);
+
+      // エクスプローラ経由はアクティブエディタを前提にできないため、
+      // 開いているエディタが無い状態から開けることまで含めて確認する。
+      await vscode.commands.executeCommand("workbench.action.closeAllEditors");
+
+      await vscode.commands.executeCommand(
+        "totonoeLog.showInteractiveViewAlpha",
+        appLogUri,
+        [appLogUri, dbLogUri]
+      );
+
+      const hasWebviewTab = (): boolean =>
+        vscode.window.tabGroups.all
+          .flatMap((group) => group.tabs)
+          .some((tab) => tab.input instanceof vscode.TabInputWebview);
+      assert.ok(await waitFor(hasWebviewTab), "a webview tab should be opened");
+
+      await vscode.commands.executeCommand("workbench.action.closeAllEditors");
+    } finally {
+      await fs.rm(tempDir, { recursive: true, force: true });
+    }
+  });
+
   test("opens a webview tab when invoked against an active log editor", async function () {
     this.timeout(10000);
     const extension = vscode.extensions.getExtension("upu.totonoe-log");

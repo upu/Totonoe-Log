@@ -109,6 +109,52 @@ export async function readLogFiles(fileUris: readonly vscode.Uri[]): Promise<Log
   );
 }
 
+/**
+ * 読み込み済みのログファイル1件。{@link LogFileInput} は整形パイプラインへの
+ * 入力、`uri` は行ジャンプ（issue #179）・書き出し（issue #175）で元ファイルを
+ * 解決するために保持する。`LineSource.fileIndex` は、この型の配列のインデックス
+ * を指す。
+ */
+export interface LoadedLogFile {
+  readonly uri: vscode.Uri;
+  readonly input: LogFileInput;
+}
+
+/**
+ * {@link readLogFiles} の結果を、読み込み元の URI と対にして返す。URI と入力を
+ * 別々の配列で持ち回ると並びがずれたときに気付けないため、対にして扱う
+ * （issue #181）。
+ */
+export async function loadLogFiles(
+  fileUris: readonly vscode.Uri[]
+): Promise<LoadedLogFile[]> {
+  const inputs = await readLogFiles(fileUris);
+  return inputs.map((input, index) => ({ uri: fileUris[index], input }));
+}
+
+/**
+ * エクスプローラのコンテキストメニューコマンドが受け取る `(クリックされた項目,
+ * 選択項目全体の配列)` から、フォルダを除いた対象ファイルの URI 一覧を解決する
+ * （issue #151、#181）。`selectedUris` を優先し、単一クリック時のフォールバック
+ * として `clickedUri` を使う。
+ *
+ * コマンドパレットから実行された場合はどちらも `undefined` で渡ってくるため
+ * 空配列を返す——呼び出し側はそれを「エクスプローラ経由ではない」の判定に使う。
+ * 必要な選択数（マージは2つ以上、Interactive View は1つ以上）は用途ごとに
+ * 違うため、ここでは件数を検査しない。
+ */
+export async function resolveExplorerSelectionUris(
+  clickedUri: vscode.Uri | undefined,
+  selectedUris: readonly vscode.Uri[] | undefined
+): Promise<vscode.Uri[]> {
+  const candidateUris =
+    selectedUris && selectedUris.length > 0 ? selectedUris : clickedUri ? [clickedUri] : [];
+  if (candidateUris.length === 0) {
+    return [];
+  }
+  return filterOutFolders(candidateUris);
+}
+
 /** フォルダを除いたファイルの URI だけを残す。 */
 export async function filterOutFolders(uris: readonly vscode.Uri[]): Promise<vscode.Uri[]> {
   const files: vscode.Uri[] = [];

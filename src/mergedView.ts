@@ -24,7 +24,7 @@ import { readConfiguredTimestampFormats } from "./timestampFormatSettings";
 import { readDisplayTimezone } from "./timezoneSettings";
 import { warnIfLowTimestampRecognition } from "./timestampRecognitionWarning";
 import { readGapThresholdMs } from "./gapThresholdSetting";
-import { readLogFiles, filterOutFolders } from "./logFileReading";
+import { readLogFiles, resolveExplorerSelectionUris } from "./logFileReading";
 
 // スキーム定義は virtualDocumentContentProvider.ts に集約している
 // （既存の import 元を変えずに済むよう、ここから再エクスポートする）。
@@ -255,9 +255,7 @@ async function resolveSelectedLogFileUris(
   clickedUri: vscode.Uri,
   selectedUris: vscode.Uri[] | undefined
 ): Promise<vscode.Uri[] | undefined> {
-  const candidateUris =
-    selectedUris && selectedUris.length > 0 ? selectedUris : clickedUri ? [clickedUri] : [];
-  const fileUris = await filterOutFolders(candidateUris);
+  const fileUris = await resolveExplorerSelectionUris(clickedUri, selectedUris);
 
   if (fileUris.length < 2) {
     await vscode.window.showWarningMessage(

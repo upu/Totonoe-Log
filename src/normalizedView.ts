@@ -84,11 +84,11 @@ function formatNormalizedWithGap(
  */
 export async function openVirtualNormalizedDocument(
   provider: NormalizedViewContentProvider,
-  sourceDocument: vscode.TextDocument,
+  sourceUri: vscode.Uri,
   formatted: FormattedLogWithLineSources,
   fileTag: string
 ): Promise<void> {
-  const sourceBaseName = sourceDocument.uri.path.split("/").pop() ?? "log";
+  const sourceBaseName = sourceUri.path.split("/").pop() ?? "log";
   // 先頭のドット（`.env` などのドットファイル）は拡張子とみなさず、
   // 直前に別の文字がある最後の拡張子だけを除去する。
   const sourceNameWithoutExtension = sourceBaseName.replace(/(?<=[^.])\.[^./]+$/, "");
@@ -98,7 +98,7 @@ export async function openVirtualNormalizedDocument(
   });
 
   provider.register(uri, formatted.text, {
-    sourceUris: [sourceDocument.uri],
+    sourceUris: [sourceUri],
     lineSources: formatted.lineSources,
   });
 
@@ -144,7 +144,7 @@ export function createShowNormalizedViewCommand(
     const entries = parseSourceLog(sourceDocument);
     const formatted = formatNormalizedWithGap(entries);
 
-    await openVirtualNormalizedDocument(provider, sourceDocument, formatted, "normalized");
+    await openVirtualNormalizedDocument(provider, sourceDocument.uri, formatted, "normalized");
   };
 }
 
@@ -172,7 +172,7 @@ export function createShowNormalizedViewFilteredBySeverityCommand(
     const filteredEntries = filterEntriesBySeverity(entries, selectedSeverities);
     const formatted = formatNormalizedWithGap(filteredEntries);
 
-    await openVirtualNormalizedDocument(provider, sourceDocument, formatted, "severity-filtered");
+    await openVirtualNormalizedDocument(provider, sourceDocument.uri, formatted, "severity-filtered");
   };
 }
 
@@ -206,7 +206,7 @@ export function createShowNormalizedViewFilteredByDateRangeCommand(
     const filteredEntries = filterEntriesByDateRange(entries, { startMs, endMs });
     const formatted = formatNormalizedWithGap(filteredEntries, displayTimezone);
 
-    await openVirtualNormalizedDocument(provider, sourceDocument, formatted, "date-range-filtered");
+    await openVirtualNormalizedDocument(provider, sourceDocument.uri, formatted, "date-range-filtered");
 
     reportHiddenLineCount("指定範囲外の", entries, filteredEntries);
   };
@@ -257,7 +257,7 @@ export function createShowNormalizedViewFilteredByDateRangeAndSeverityCommand(
 
     await openVirtualNormalizedDocument(
       provider,
-      sourceDocument,
+      sourceDocument.uri,
       formatted,
       "date-range-severity-filtered"
     );
@@ -302,7 +302,7 @@ export function createShowNormalizedViewFilteredByIgnorePatternCommand(
 
     await openVirtualNormalizedDocument(
       provider,
-      sourceDocument,
+      sourceDocument.uri,
       formatted,
       "ignore-pattern-filtered"
     );
@@ -386,7 +386,7 @@ export function createShowNormalizedViewFilteredCommand(
     const filteredEntries = filterResult.entries;
     const formatted = formatNormalizedWithGap(filteredEntries, displayTimezone);
 
-    await openVirtualNormalizedDocument(provider, sourceDocument, formatted, "filtered");
+    await openVirtualNormalizedDocument(provider, sourceDocument.uri, formatted, "filtered");
 
     reportHiddenLineCount("条件に合わない", entries, filteredEntries);
   };
@@ -422,6 +422,6 @@ export function createShowCollapsedViewCommand(
       displayTimezone: readDisplayTimezone(),
     });
 
-    await openVirtualNormalizedDocument(provider, sourceDocument, formatted, "collapsed");
+    await openVirtualNormalizedDocument(provider, sourceDocument.uri, formatted, "collapsed");
   };
 }
