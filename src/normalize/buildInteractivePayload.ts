@@ -4,6 +4,7 @@ import type { LineSource } from "./lineSources";
 import type { DisplayMaskOptions } from "./displayMask";
 import { getDistinctSeverities } from "./filterBySeverity";
 import { filterEntriesByCriteria, type FilterCriteria } from "./filterEntries";
+import { isFileIndexVisible, SINGLE_FILE_INDEX } from "./filterByFile";
 import { formatNormalizedLogWithLineSources } from "./formatNormalizedLog";
 import { buildInteractiveCollapsedLines, type InteractiveDisplayItem } from "./buildInteractiveCollapsedLines";
 
@@ -26,6 +27,17 @@ export interface BuildInteractivePayloadOptions {
    * マスク前のエントリに対して行うため、マスクのON/OFFで絞り込み結果は変わらない。
    */
   readonly mask?: DisplayMaskOptions;
+
+  /**
+   * 表示ONにしている読み込み済みファイルのインデックス集合（issue #170、
+   * Interactive View のファイル単位のトグル）。未指定なら全ファイルを表示する。
+   *
+   * `distinctSeverities` と `totalLineCount` はこの絞り込みより前の全エントリ
+   * から求める——セベリティ絞り込みと同じく、非表示にしたファイルにしか無い
+   * セベリティのチェックボックスが消えたり、「何行中何行」の分母が動いたり
+   * しないようにするため。
+   */
+  readonly visibleFileIndices?: ReadonlySet<number>;
 }
 
 export type InteractivePayloadResult =
@@ -61,7 +73,10 @@ export async function buildInteractivePayload(
 ): Promise<InteractivePayloadResult> {
   const distinctSeverities = getDistinctSeverities(entries);
 
-  const filterResult = await filterEntriesByCriteria(entries, criteria, {
+  const fileVisibleEntries = isFileIndexVisible(options.visibleFileIndices, SINGLE_FILE_INDEX)
+    ? entries
+    : [];
+  const filterResult = await filterEntriesByCriteria(fileVisibleEntries, criteria, {
     ignorePatternTimeoutMs: options.ignorePatternTimeoutMs,
   });
   if (!filterResult.ok) {

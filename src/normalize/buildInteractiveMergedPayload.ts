@@ -3,6 +3,7 @@ import type { MergedEntry } from "./mergeLogFiles";
 import type { BuildInteractivePayloadOptions, InteractivePayloadResult } from "./buildInteractivePayload";
 import { getDistinctSeverities } from "./filterBySeverity";
 import { filterMergedEntriesByCriteria } from "./filterMergedEntries";
+import { filterMergedEntriesByFileIndex } from "./filterByFile";
 import type { FilterCriteria } from "./filterEntries";
 import { formatMergedLogWithLineSources } from "./formatMergedLog";
 
@@ -31,9 +32,11 @@ export async function buildInteractiveMergedPayload(
 ): Promise<InteractivePayloadResult> {
   const distinctSeverities = getDistinctSeverities(mergedEntries.map((merged) => merged.entry));
 
-  const filterResult = await filterMergedEntriesByCriteria(mergedEntries, criteria, {
-    ignorePatternTimeoutMs: options.ignorePatternTimeoutMs,
-  });
+  const filterResult = await filterMergedEntriesByCriteria(
+    filterMergedEntriesByFileIndex(mergedEntries, options.visibleFileIndices),
+    criteria,
+    { ignorePatternTimeoutMs: options.ignorePatternTimeoutMs }
+  );
   if (!filterResult.ok) {
     return filterResult;
   }

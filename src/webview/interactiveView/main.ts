@@ -29,7 +29,7 @@ const maskOptionsButton = document.getElementById("mask-options-button") as HTML
 const maskPanel = document.getElementById("mask-panel") as HTMLDivElement;
 const maskTimestampToggle = document.getElementById("mask-timestamp") as HTMLInputElement;
 const maskHostToggle = document.getElementById("mask-host") as HTMLInputElement;
-const loadedFilesElement = document.getElementById("loaded-files") as HTMLSpanElement;
+const loadedFilesElement = document.getElementById("loaded-files") as HTMLDivElement;
 const severitiesContainer = document.getElementById("severities") as HTMLDivElement;
 const dateStartInput = document.getElementById("date-start") as HTMLInputElement;
 const dateEndInput = document.getElementById("date-end") as HTMLInputElement;
@@ -68,6 +68,12 @@ function collectCriteria(): SerializedFilterCriteria {
       maskTimestamp: maskTimestampToggle.checked,
       maskHost: maskHostToggle.checked,
     },
+    // チェック済みだけを集めるセベリティと違い、ファイルは読み込み順の並びを
+    // そのまま拡張機能側の一覧に対応させるため、全件の真偽値として送る。
+    visibleFiles: Array.from(
+      loadedFilesElement.querySelectorAll<HTMLInputElement>("input[type='checkbox']"),
+      (checkbox) => checkbox.checked
+    ),
   };
 }
 
@@ -80,6 +86,7 @@ function postFilterChanged(): void {
 const postFilterChangedDebounced = debounce(postFilterChanged, 300);
 
 severitiesContainer.addEventListener("change", postFilterChanged);
+loadedFilesElement.addEventListener("change", postFilterChanged);
 dateStartInput.addEventListener("input", postFilterChangedDebounced);
 dateEndInput.addEventListener("input", postFilterChangedDebounced);
 ignorePatternInput.addEventListener("input", postFilterChangedDebounced);
@@ -159,8 +166,56 @@ function syncTextInputIfNotFocused(input: HTMLInputElement, value: string): void
   }
 }
 
-function renderLoadedFiles(fileNames: readonly string[]): void {
-  loadedFilesElement.textContent = `読み込み済み: ${fileNames.join(", ")}`;
+/**
+ * 読み込み済みファイルを、表示ON/OFFのチェックボックスと取り消しボタンを
+ * 添えて1件ずつ並べる（issue #170）。ファイル名は非信頼な外部データなので
+ * 必ず `textContent` で設定する。ホバーでフルパスを見せるのは、行のホバー
+ * （issue #179）と同じく別フォルダの同名ファイルを見分けられるようにするため。
+ *
+ * 最後の1件の取り消しボタンは無効化する——読み込みが0件になると
+ * 「+ Add Files...」も効かなくなり、パネルを閉じる以外に復帰できないため
+ * （拡張機能本体側でも同じ条件で弾く）。一時的に外したいだけならチェック
+ * ボックスで足りる。
+ */
+function renderLoadedFiles(
+  fileNames: readonly string[],
+  filePaths: readonly string[],
+  visibleFiles: readonly boolean[]
+): void {
+  loadedFilesElement.textContent = "";
+  fileNames.forEach((fileName, index) => {
+    const label = document.createElement("label");
+    const checkbox = document.createElement("input");
+    checkbox.type = "checkbox";
+    checkbox.checked = visibleFiles[index] ?? true;
+    label.appendChild(checkbox);
+    label.appendChild(document.createTextNode(fileName));
+    const filePath = filePaths[index];
+    label.title =
+      filePath !== undefined
+        ? `${filePath}（チェックを外すとこのファイルの行を隠します）`
+        : "チェックを外すとこのファイルの行を隠します";
+
+    const removeButton = document.createElement("button");
+    removeButton.type = "button";
+    removeButton.className = "remove-file";
+    removeButton.textContent = "✕";
+    removeButton.disabled = fileNames.length <= 1;
+    const removeLabel = removeButton.disabled
+      ? "最後の1ファイルは取り消せません（一時的に隠すにはチェックを外してください）"
+      : `${fileName} を読み込みから取り消す`;
+    removeButton.title = removeLabel;
+    removeButton.setAttribute("aria-label", removeLabel);
+    removeButton.addEventListener("click", () => {
+      vscodeApi.postMessage({ type: "removeFile", fileIndex: index });
+    });
+
+    const chip = document.createElement("span");
+    chip.className = "loaded-file";
+    chip.appendChild(label);
+    chip.appendChild(removeButton);
+    loadedFilesElement.appendChild(chip);
+  });
 }
 
 /**
@@ -346,7 +401,7 @@ function renderDisplayLimit(displayLimit: ExtensionToWebviewMessage["displayLimi
 function renderState(state: ExtensionToWebviewMessage): void {
   // 本文の描画（ホバー表示）より先に更新する必要がある。
   sourceFilePaths = state.sourceFilePaths;
-  renderLoadedFiles(state.loadedFileNames);
+  renderLoadedFiles(state.loadedFileNames, state.sourceFilePaths, state.criteria.visibleFiles);
   renderSeverities(state.distinctSeverities, state.criteria.severities);
   syncTextInputIfNotFocused(dateStartInput, state.criteria.dateRangeStart);
   syncTextInputIfNotFocused(dateEndInput, state.criteria.dateRangeEnd);

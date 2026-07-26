@@ -5,6 +5,7 @@ import type { FormattedLogWithLineSources } from "./lineSources";
 import type { DisplayMaskOptions } from "./displayMask";
 import { filterEntriesByCriteria, type FilterCriteria } from "./filterEntries";
 import { filterMergedEntriesByCriteria } from "./filterMergedEntries";
+import { filterMergedEntriesByFileIndex, isFileIndexVisible, SINGLE_FILE_INDEX } from "./filterByFile";
 import { formatNormalizedLogWithLineSources } from "./formatNormalizedLog";
 import { formatMergedLogWithLineSources } from "./formatMergedLog";
 import { formatCollapsedLogWithLineSources } from "./formatCollapsedLog";
@@ -31,6 +32,13 @@ export interface BuildInteractiveExportTextOptions {
    * マスク前のエントリに対して行うため、マスクのON/OFFで絞り込み結果は変わらない。
    */
   readonly mask?: DisplayMaskOptions;
+
+  /**
+   * 表示ONにしている読み込み済みファイルのインデックス集合（issue #170）。
+   * 未指定なら全ファイルを書き出す。表示中の状態をそのまま書き出すため、
+   * 絞り込み・折りたたみ・マスクと同じく画面のファイル選択にも従う。
+   */
+  readonly visibleFileIndices?: ReadonlySet<number>;
 }
 
 export type InteractiveExportTextResult =
@@ -48,7 +56,10 @@ export async function buildInteractiveExportText(
   criteria: FilterCriteria,
   options: BuildInteractiveExportTextOptions = {}
 ): Promise<InteractiveExportTextResult> {
-  const filterResult = await filterEntriesByCriteria(entries, criteria, {
+  const fileVisibleEntries = isFileIndexVisible(options.visibleFileIndices, SINGLE_FILE_INDEX)
+    ? entries
+    : [];
+  const filterResult = await filterEntriesByCriteria(fileVisibleEntries, criteria, {
     ignorePatternTimeoutMs: options.ignorePatternTimeoutMs,
   });
   if (!filterResult.ok) {
@@ -88,9 +99,11 @@ export async function buildInteractiveMergedExportText(
   criteria: FilterCriteria,
   options: BuildInteractiveExportTextOptions = {}
 ): Promise<InteractiveExportTextResult> {
-  const filterResult = await filterMergedEntriesByCriteria(mergedEntries, criteria, {
-    ignorePatternTimeoutMs: options.ignorePatternTimeoutMs,
-  });
+  const filterResult = await filterMergedEntriesByCriteria(
+    filterMergedEntriesByFileIndex(mergedEntries, options.visibleFileIndices),
+    criteria,
+    { ignorePatternTimeoutMs: options.ignorePatternTimeoutMs }
+  );
   if (!filterResult.ok) {
     return filterResult;
   }
