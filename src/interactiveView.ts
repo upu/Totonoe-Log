@@ -5,7 +5,6 @@ import {
   buildInteractiveMergedPayload,
   buildInteractiveExportText,
   buildInteractiveMergedExportText,
-  getDistinctSeverities,
   limitInteractiveDisplay,
   mergeLogFiles,
   DEFAULT_COLLAPSE_THRESHOLD,
@@ -36,7 +35,11 @@ import { readGapThresholdMs } from "./gapThresholdSetting";
 import { readMaxDisplayLines } from "./interactiveViewSettings";
 import { readConfiguredTimestampFormats } from "./timestampFormatSettings";
 import { readMaskOptions } from "./copyMasked";
-import { toFilterCriteria } from "./interactiveViewCriteria";
+import {
+  addNewlyAppearedSeverities,
+  getLoadedDistinctSeverities,
+  toFilterCriteria,
+} from "./interactiveViewCriteria";
 import { revealSourceLine } from "./revealSourceLine";
 import { parseWebviewLineSource } from "./interactiveViewContext";
 import { NormalizedViewContentProvider, openVirtualNormalizedDocument } from "./normalizedView";
@@ -64,10 +67,12 @@ const COLLAPSE_CONFIG_SECTION = "totonoeLog.collapse";
  * `totonoeLog.copyMasked.*` 設定から読む。マスク自体は既定でOFFなので、
  * この設定は「マスクをONにしたときに何を伏せるか」の初期選択として効く。
  */
-function createDefaultSerializedCriteria(entries: readonly LogEntry[]): SerializedFilterCriteria {
+function createDefaultSerializedCriteria(
+  distinctSeverities: readonly string[]
+): SerializedFilterCriteria {
   const configured = readMaskOptions();
   return {
-    severities: getDistinctSeverities(entries),
+    severities: [...distinctSeverities],
     dateRangeStart: "",
     dateRangeEnd: "",
     ignorePattern: "",
@@ -164,7 +169,7 @@ export class InteractiveViewPanelController implements vscode.Disposable {
 
     this.loadedFiles = [...files];
     this.recomputeEntries();
-    this.criteria = createDefaultSerializedCriteria(this.singleEntries);
+    this.criteria = createDefaultSerializedCriteria(this.distinctSeverities());
 
     if (this.panel) {
       this.panel.title = this.buildTitle();
@@ -297,8 +302,19 @@ export class InteractiveViewPanelController implements vscode.Disposable {
     const newUriStringSet = new Set(newUriStrings);
     const newUris = candidates.filter((uri) => newUriStringSet.has(uri.toString()));
 
+    const previousDistinct = this.distinctSeverities();
     this.loadedFiles.push(...(await loadLogFiles(newUris)));
     this.recomputeEntries();
+    // 追加したファイルにしか無いセベリティは、外されたままだと行が黙って
+    // 隠れてしまうためチェック済みに足す（issue #200）。
+    this.criteria = {
+      ...this.criteria,
+      severities: addNewlyAppearedSeverities(
+        this.criteria.severities,
+        previousDistinct,
+        this.distinctSeverities()
+      ),
+    };
     await this.postState();
   }
 
@@ -334,6 +350,11 @@ export class InteractiveViewPanelController implements vscode.Disposable {
   /** 単一ファイル表示中か（マージ表示は折りたたみ非対応で、整形経路も別）。 */
   private isSingleFile(): boolean {
     return this.loadedFiles.length === 1;
+  }
+
+  /** 現在読み込まれているエントリのセベリティ一覧（単一ファイル/マージのどちらでも同じ結果になる）。 */
+  private distinctSeverities(): string[] {
+    return getLoadedDistinctSeverities(this.singleEntries, this.mergedEntries);
   }
 
   /** 現在のファイル集合に応じて、単一ファイル用/マージ用いずれかの合成処理を呼ぶ。 */

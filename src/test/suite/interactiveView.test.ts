@@ -1,6 +1,11 @@
 import * as assert from "node:assert";
 import * as vscode from "vscode";
-import { toFilterCriteria } from "../../interactiveViewCriteria";
+import {
+  addNewlyAppearedSeverities,
+  getLoadedDistinctSeverities,
+  toFilterCriteria,
+} from "../../interactiveViewCriteria";
+import { mergeLogFiles, parseLog } from "../../normalize";
 import { selectNewFileUris } from "../../interactiveViewFiles";
 import { parseWebviewLineSource } from "../../interactiveViewContext";
 import type { SerializedFilterCriteria } from "../../webview/interactiveView/protocol";
@@ -72,6 +77,52 @@ suite("interactiveViewCriteria / toFilterCriteria (#166)", () => {
     assert.strictEqual(criteria.ignorePattern, undefined);
     assert.strictEqual(errors.length, 1);
     assert.match(errors[0], /正規表現として解釈できませんでした/);
+  });
+});
+
+suite("interactiveViewCriteria / severity defaults (#200)", () => {
+  const single = parseLog("2024-01-02T03:04:05Z ERROR boom");
+  const merged = mergeLogFiles([
+    { fileName: "app.log", text: "2024-01-02T03:04:05Z WARN slow" },
+    { fileName: "db.log", text: "2024-01-02T03:04:06Z INFO ok" },
+  ]);
+
+  test("reads the severities from the merged cache when that is the one in use", () => {
+    // マージ表示中は単一ファイルのキャッシュが空になる。そこだけを見ていたため
+    // 全セベリティがOFFで開いてしまっていた（issue #200）。
+    // 並びはマージ後の時系列順（WARN のエントリの方が早い）。
+    assert.deepStrictEqual(getLoadedDistinctSeverities([], merged), ["WARN", "INFO"]);
+  });
+
+  test("reads the severities from the single-file cache when that is the one in use", () => {
+    assert.deepStrictEqual(getLoadedDistinctSeverities(single, []), ["ERROR"]);
+  });
+
+  test("returns an empty list when nothing is loaded", () => {
+    assert.deepStrictEqual(getLoadedDistinctSeverities([], []), []);
+  });
+
+  test("checks severities that only appear after loading more files", () => {
+    // 追加前は ERROR だけ、追加後に WARN が現れたケース。
+    assert.deepStrictEqual(
+      addNewlyAppearedSeverities(["ERROR"], ["ERROR"], ["ERROR", "WARN"]),
+      ["ERROR", "WARN"]
+    );
+  });
+
+  test("keeps severities the user had explicitly unchecked", () => {
+    // INFO は既に現れていて外されている（明示的な操作なので尊重する）。
+    assert.deepStrictEqual(
+      addNewlyAppearedSeverities(["ERROR"], ["ERROR", "INFO"], ["ERROR", "INFO", "WARN"]),
+      ["ERROR", "WARN"]
+    );
+  });
+
+  test("does not duplicate a severity that is already checked", () => {
+    assert.deepStrictEqual(
+      addNewlyAppearedSeverities(["ERROR", "WARN"], ["ERROR", "WARN"], ["ERROR", "WARN"]),
+      ["ERROR", "WARN"]
+    );
   });
 });
 
