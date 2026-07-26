@@ -1286,7 +1286,51 @@ suite("normalize / buildInteractiveCollapsedLines (#172)", () => {
       items,
       formatNormalizedLog(entries)
         .split("\n")
-        .map((text) => ({ kind: "line", text }))
+        .map((text, index) => ({ kind: "line", text, lineSource: { fileIndex: 0, line: index + 1 } }))
+    );
+  });
+
+  test("attaches the original physical line of each line item (#179)", () => {
+    const text = [
+      "2024-01-02T03:04:05Z INFO A",
+      "  detail",
+      "2024-01-02T03:04:06Z INFO B",
+    ].join("\n");
+    const entries = parseLog(text);
+
+    const items = buildInteractiveCollapsedLines(entries, { threshold: 3 });
+
+    assert.deepStrictEqual(
+      items.map((item) => (item.kind === "line" ? item.lineSource : undefined)),
+      [
+        { fileIndex: 0, line: 1 },
+        { fileIndex: 0, line: 2 },
+        { fileIndex: 0, line: 3 },
+      ]
+    );
+  });
+
+  test("attaches source lines aligned with a group's expanded lines (#179)", () => {
+    const text = [
+      "2024-01-02T03:04:05Z ERROR boom",
+      "  detail",
+      "2024-01-02T03:04:06Z ERROR boom",
+      "  detail",
+      "2024-01-02T03:04:07Z ERROR boom",
+      "  detail",
+    ].join("\n");
+    const entries = parseLog(text);
+
+    const items = buildInteractiveCollapsedLines(entries, { threshold: 3 });
+
+    const [item] = items;
+    assert.strictEqual(item.kind, "group");
+    if (item.kind !== "group") {
+      throw new Error("unreachable");
+    }
+    assert.deepStrictEqual(
+      item.lineSources,
+      [1, 2, 3, 4, 5, 6].map((line) => ({ fileIndex: 0, line }))
     );
   });
 
@@ -1329,7 +1373,11 @@ suite("normalize / buildInteractiveCollapsedLines (#172)", () => {
     const items = buildInteractiveCollapsedLines(entries, { threshold: 3 });
 
     assert.strictEqual(items.length, 2);
-    assert.deepStrictEqual(items[0], { kind: "line", text: "  1 | ==== banner ====" });
+    assert.deepStrictEqual(items[0], {
+      kind: "line",
+      text: "  1 | ==== banner ====",
+      lineSource: { fileIndex: 0, line: 1 },
+    });
     assert.strictEqual(items[1].kind, "group");
     if (items[1].kind !== "group") {
       throw new Error("unreachable");
@@ -3089,5 +3137,52 @@ suite("normalize / limitInteractiveDisplay (#178)", () => {
     assert.strictEqual(limited.text, ["l1", "l2"].join("\n"));
     assert.deepStrictEqual(limited.items, [content.items[0], content.items[1]]);
     assert.strictEqual(limited.displayedLineCount, 2);
+  });
+
+  test("truncates lineSources together with the text they describe (#179)", () => {
+    const content = {
+      text: ["l1", "l2", "l3"].join("\n"),
+      lineSources: [
+        { fileIndex: 0, line: 1 },
+        undefined,
+        { fileIndex: 0, line: 2 },
+      ] as const,
+    };
+
+    const limited = limitInteractiveDisplay(content, 2);
+
+    assert.deepStrictEqual(limited.lineSources, [{ fileIndex: 0, line: 1 }, undefined]);
+  });
+
+  test("truncates a group's lineSources together with its lines (#179)", () => {
+    const content = {
+      text: "",
+      items: [
+        {
+          kind: "group",
+          headerText: "g1",
+          lines: ["l1", "l2", "l3"],
+          lineSources: [
+            { fileIndex: 0, line: 1 },
+            { fileIndex: 0, line: 2 },
+            { fileIndex: 0, line: 3 },
+          ],
+        },
+      ] as const,
+    };
+
+    const limited = limitInteractiveDisplay(content, 2);
+
+    assert.deepStrictEqual(limited.items, [
+      {
+        kind: "group",
+        headerText: "g1",
+        lines: ["l1", "l2"],
+        lineSources: [
+          { fileIndex: 0, line: 1 },
+          { fileIndex: 0, line: 2 },
+        ],
+      },
+    ]);
   });
 });

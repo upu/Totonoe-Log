@@ -1,4 +1,5 @@
 import type { LogEntry } from "./types";
+import type { LineSource } from "./lineSources";
 import { computeMaxLineNumber, formatGutter } from "./gutter";
 import { formatTimestampForDisplay, type DisplayTimezone } from "./timezone";
 import { collapseRepeatedEntries, DEFAULT_COLLAPSE_THRESHOLD, type CollapsedItem } from "./collapseRepeatedEntries";
@@ -16,10 +17,20 @@ const TIMESTAMP_SPAN_SEPARATOR = " 〜 ";
  * 各エントリを {@link formatNormalizedLog} と同じ見た目で個別整形した行を
  * あらかじめ含めておく——Webview側は拡張機能本体との通信なしに、この
  * `lines` の表示/非表示を切り替えるだけで展開/復元を完結させる。
+ *
+ * `lineSource` / `lineSources` は行クリックでのジャンプとホバー表示
+ * （issue #179）が使う元ログ上の位置。表示テキストと1対1で対応させるため、
+ * `group` では `lines` と同じ長さ・同じ並びの配列で持つ。行対応情報を
+ * 持たない呼び出し元（切り詰めのテスト等）もあるため任意とする。
  */
 export type InteractiveDisplayItem =
-  | { readonly kind: "line"; readonly text: string }
-  | { readonly kind: "group"; readonly headerText: string; readonly lines: readonly string[] };
+  | { readonly kind: "line"; readonly text: string; readonly lineSource?: LineSource }
+  | {
+      readonly kind: "group";
+      readonly headerText: string;
+      readonly lines: readonly string[];
+      readonly lineSources?: readonly LineSource[];
+    };
 
 /** {@link buildInteractiveCollapsedLines} の挙動を調整するオプション。 */
 export interface BuildInteractiveCollapsedLinesOptions {
@@ -52,20 +63,38 @@ function computeGutterWidth(entries: readonly LogEntry[], items: readonly Collap
   return width;
 }
 
-/** 1エントリを {@link formatNormalizedLog} と同じ見た目（ガター＋タイムスタンプ＋severity＋継続行）に整形する。 */
+/** 整形済みの1行と、その行が由来する元ログ上の位置（issue #179）のペア。 */
+interface FormattedEntryLine {
+  readonly text: string;
+  readonly lineSource: LineSource;
+}
+
+/**
+ * 1エントリを {@link formatNormalizedLog} と同じ見た目（ガター＋タイムスタンプ
+ * ＋severity＋継続行）に整形する。折りたたみ表示は単一ファイル読み込み中しか
+ * 使わないため、`fileIndex` は常に 0 でよい。
+ */
 function formatEntryLines(
   entry: LogEntry,
   gutterWidth: number,
   displayTimezone: DisplayTimezone
-): string[] {
+): FormattedEntryLine[] {
   const messageLines = entry.message.split("\n");
   const headerText = entry.matched && entry.timestampMs !== undefined
     ? `${formatTimestampForDisplay(entry.timestampMs, displayTimezone)} ${entry.severity ?? SEVERITY_PLACEHOLDER} ${messageLines[0]}`
     : messageLines[0];
 
-  const lines = [formatGutter(entry.startLine, gutterWidth) + headerText];
+  const lines: FormattedEntryLine[] = [
+    {
+      text: formatGutter(entry.startLine, gutterWidth) + headerText,
+      lineSource: { fileIndex: 0, line: entry.startLine },
+    },
+  ];
   for (let i = 1; i < messageLines.length; i++) {
-    lines.push(formatGutter(entry.startLine + i, gutterWidth) + messageLines[i]);
+    lines.push({
+      text: formatGutter(entry.startLine + i, gutterWidth) + messageLines[i],
+      lineSource: { fileIndex: 0, line: entry.startLine + i },
+    });
   }
   return lines;
 }
@@ -126,16 +155,20 @@ export function buildInteractiveCollapsedLines(
   const result: InteractiveDisplayItem[] = [];
   for (const item of items) {
     if (item.kind === "single") {
-      for (const text of formatEntryLines(item.entry, gutterWidth, displayTimezone)) {
-        result.push({ kind: "line", text });
+      for (const { text, lineSource } of formatEntryLines(item.entry, gutterWidth, displayTimezone)) {
+        result.push({ kind: "line", text, lineSource });
       }
       continue;
     }
 
+    const groupLines = item.entries.flatMap((entry) =>
+      formatEntryLines(entry, gutterWidth, displayTimezone)
+    );
     result.push({
       kind: "group",
       headerText: formatGroupHeaderText(item.entries, gutterWidth, displayTimezone),
-      lines: item.entries.flatMap((entry) => formatEntryLines(entry, gutterWidth, displayTimezone)),
+      lines: groupLines.map((line) => line.text),
+      lineSources: groupLines.map((line) => line.lineSource),
     });
   }
   return result;

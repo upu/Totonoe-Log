@@ -17,6 +17,9 @@ const UNRECOGNIZED_SEVERITY_LABEL = "(no severity)";
 /** {@link ExtensionToWebviewMessage.items} の要素の型（Webview側は `normalize` を直接importできないため、メッセージ型からの導出で参照する）。 */
 type DisplayItem = NonNullable<ExtensionToWebviewMessage["items"]>[number];
 
+/** 行1件分の元ログ上の位置（{@link DisplayItem} と同じ理由でメッセージ型から導出する）。 */
+type LineSource = NonNullable<NonNullable<ExtensionToWebviewMessage["lineSources"]>[number]>;
+
 const vscodeApi = acquireVsCodeApi<WebviewToExtensionMessage>();
 
 const addFilesButton = document.getElementById("add-files-button") as HTMLButtonElement;
@@ -123,6 +126,45 @@ const EXPANDED_PREFIX = "▼ ";
 /** 折りたためない通常行・展開後2行目以降の左余白（矢印列の幅に合わせる）。 */
 const PLAIN_ROW_PREFIX = " ".repeat(COLLAPSED_PREFIX.length);
 
+/** 直近に届いた状態の元ファイルのフルパス一覧（issue #179、`LineSource.fileIndex` で引く）。 */
+let sourceFilePaths: readonly string[] = [];
+
+/**
+ * 元ログの行に対応づいた1行を、クリックでジャンプできる要素として作る
+ * （issue #179）。ジャンプ先の解決は拡張機能本体側に任せ、ここは押された行の
+ * `lineSource` をそのまま送り返すだけにする。ホバーでは、マージビューの
+ * HoverProvider（issue #150）と同じくフルパスを見せる——ファイル名列だけでは
+ * 別フォルダの同名ファイルを見分けられないため。
+ *
+ * ログ本文は非信頼な外部データのため、必ず `textContent` で設定する。
+ */
+function createSourceLineElement(text: string, lineSource: LineSource): HTMLSpanElement {
+  const row = document.createElement("span");
+  row.className = "source-line";
+  row.textContent = text;
+
+  const sourceFilePath = sourceFilePaths[lineSource.fileIndex];
+  if (sourceFilePath !== undefined) {
+    row.title = `${sourceFilePath}:${lineSource.line}`;
+  }
+  row.addEventListener("click", () => {
+    vscodeApi.postMessage({ type: "revealSourceLine", lineSource });
+  });
+  return row;
+}
+
+/**
+ * 1行を、元ログの行に対応づいていればクリック可能な要素として、そうでなければ
+ * ただのテキストとして追加する。ギャップマーカー等の生成行には対応する元行が
+ * 無いため、クリックもホバーもできない見た目にする（`Go to Source Line` が
+ * 「対応する元ログの行がありません」と案内するのと扱いを揃える）。
+ */
+function appendLine(parent: Node, text: string, lineSource: LineSource | undefined): void {
+  parent.appendChild(
+    lineSource ? createSourceLineElement(text, lineSource) : document.createTextNode(text)
+  );
+}
+
 /**
  * 折りたたみグループ1件をDOMに追加する。展開/復元はここに閉じたローカル
  * 状態だけで完結させ、拡張機能本体へは何も送らない（issue #172、届いた
@@ -133,6 +175,10 @@ const PLAIN_ROW_PREFIX = " ".repeat(COLLAPSED_PREFIX.length);
  * を戻す操作は、展開後の先頭行（グループの最初のエントリ）自体をクリック
  * 対象にする。専用の「折りたたむ」行を別途挟むと、代表エントリの内容が
  * 展開後の本文と二重に見えて読みにくいという指摘（#172 PRレビュー）への対応。
+ *
+ * 見出し行と展開後の先頭行は展開/復元のクリック対象なので、元ファイルへの
+ * ジャンプ（issue #179）は展開後の2行目以降にだけ付ける——1つの行に2つの
+ * クリック動作を持たせると、どちらが起きるか予測できなくなるため。
  */
 function appendGroupItem(item: Extract<DisplayItem, { kind: "group" }>): void {
   const [firstLine, ...restLines] = item.lines;
@@ -150,8 +196,10 @@ function appendGroupItem(item: Extract<DisplayItem, { kind: "group" }>): void {
   expandedFirstRow.textContent = `${EXPANDED_PREFIX}${firstLine}\n`;
 
   const expandedRest = document.createElement("span");
-  // グループ本文もログ由来の非信頼データのため textContent で設定する。
-  expandedRest.textContent = restLines.map((line) => `${PLAIN_ROW_PREFIX}${line}\n`).join("");
+  restLines.forEach((line, index) => {
+    // `lineSources` は `lines` と同じ並びなので、先頭行のぶんだけずらして引く。
+    appendLine(expandedRest, `${PLAIN_ROW_PREFIX}${line}\n`, item.lineSources?.[index + 1]);
+  });
 
   let expanded = false;
   const applyExpandedState = (): void => {
@@ -185,11 +233,33 @@ function renderItems(items: readonly DisplayItem[]): void {
   for (const item of items) {
     if (item.kind === "line") {
       // 折りたたみ矢印の列幅ぶんだけ、折りたためない通常行も余白を揃える。
-      logOutputElement.appendChild(document.createTextNode(`${PLAIN_ROW_PREFIX}${item.text}\n`));
+      appendLine(logOutputElement, `${PLAIN_ROW_PREFIX}${item.text}\n`, item.lineSource);
       continue;
     }
     appendGroupItem(item);
   }
+}
+
+/**
+ * 折りたたみ表示でないときの本文描画。行対応情報（issue #179）が届いていれば
+ * 行ごとに要素を分けてクリック可能にし、無ければ従来どおり本文を1つの
+ * テキストとして流し込む（要素数を増やさずに済むため）。
+ */
+function renderText(text: string, lineSources: ExtensionToWebviewMessage["lineSources"]): void {
+  if (!lineSources) {
+    // ログ本文は非信頼な外部データのため、HTMLとして解釈されないよう
+    // 必ず textContent で設定する（innerHTML は使わない）。
+    logOutputElement.textContent = text;
+    return;
+  }
+
+  logOutputElement.textContent = "";
+  const lines = text === "" ? [] : text.split("\n");
+  lines.forEach((line, index) => {
+    // 末尾に余分な空行が出ないよう、最終行だけ改行を付けない。
+    const suffix = index === lines.length - 1 ? "" : "\n";
+    appendLine(logOutputElement, `${line}${suffix}`, lineSources[index]);
+  });
 }
 
 /**
@@ -208,6 +278,8 @@ function renderDisplayLimit(displayLimit: ExtensionToWebviewMessage["displayLimi
 }
 
 function renderState(state: ExtensionToWebviewMessage): void {
+  // 本文の描画（ホバー表示）より先に更新する必要がある。
+  sourceFilePaths = state.sourceFilePaths;
   renderLoadedFiles(state.loadedFileNames);
   renderSeverities(state.distinctSeverities, state.criteria.severities);
   syncTextInputIfNotFocused(dateStartInput, state.criteria.dateRangeStart);
@@ -222,9 +294,7 @@ function renderState(state: ExtensionToWebviewMessage): void {
   if (state.items) {
     renderItems(state.items);
   } else {
-    // ログ本文は非信頼な外部データのため、HTMLとして解釈されないよう
-    // 必ず textContent で設定する（innerHTML は使わない）。
-    logOutputElement.textContent = state.text;
+    renderText(state.text, state.lineSources);
   }
 }
 
