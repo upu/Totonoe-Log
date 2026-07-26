@@ -6,7 +6,6 @@ import {
   formatNormalizedLog,
   formatMaskedLogForCompare,
   maskLogTextForCopy,
-  maskDisplayTextForCopy,
   collapseRepeatedEntries,
   formatCollapsedLog,
   deriveLogKind,
@@ -1623,98 +1622,184 @@ suite("normalize / maskLogTextForCopy", () => {
   });
 });
 
-suite("normalize / maskDisplayTextForCopy (#180)", () => {
-  test("masks the body of a normalized display line, keeping the gutter prefix", () => {
+suite("normalize / display mask (#194)", () => {
+  const MASK_BOTH = { maskTimestamp: true, maskHost: true };
+
+  test("formatNormalizedLog leaves the output untouched when no mask is given", () => {
+    // マスクは Interactive View のトグル専用。既存コマンド（オプションを渡さない
+    // 呼び出し）の出力が変わらないことを固定する。
+    const entries = parseLog("2024-01-02T03:04:05Z ERROR connect to 10.0.0.1 failed");
+
     assert.strictEqual(
-      maskDisplayTextForCopy("1 | 2024-01-02T03:04:05.000Z ERROR connect to 10.0.0.1 failed"),
-      "1 | <TIMESTAMP> ERROR connect to <HOST> failed"
+      formatNormalizedLog(entries),
+      "1 | 2024-01-02T03:04:05.000Z ERROR connect to 10.0.0.1 failed"
     );
   });
 
-  test("keeps right-aligned gutters and continuation lines aligned", () => {
-    const displayText = [
-      " 9 | 2024-01-02T03:04:05.000Z ERROR Unhandled exception",
-      "10 |     at com.example.Foo.bar(10.0.0.5:42)",
-    ].join("\n");
+  test("formatNormalizedLog masks the timestamp, keeping the gutter and severity", () => {
+    const entries = parseLog("2024-01-02T03:04:05Z ERROR boom");
 
     assert.strictEqual(
-      maskDisplayTextForCopy(displayText),
-      [" 9 | <TIMESTAMP> ERROR Unhandled exception", "10 |     at com.example.Foo.bar(<HOST>:42)"].join(
-        "\n"
-      )
-    );
-  });
-
-  test("keeps the file name / kind columns of a merged display line", () => {
-    assert.strictEqual(
-      maskDisplayTextForCopy("app.log  | server | 12 | 2024-01-02T03:04:05.000Z INFO from 10.0.0.1"),
-      "app.log  | server | 12 | <TIMESTAMP> INFO from <HOST>"
-    );
-  });
-
-  test("keeps the collapse arrow and range gutter of a collapsed display row", () => {
-    const displayText = [
-      "▶ 1-5 | 2024-01-02T03:04:05.000Z INFO connect to 10.0.0.1 ok",
-      "  6 | 2024-01-02T03:04:10.000Z ERROR boom",
-    ].join("\n");
-
-    assert.strictEqual(
-      maskDisplayTextForCopy(displayText),
-      ["▶ 1-5 | <TIMESTAMP> INFO connect to <HOST> ok", "  6 | <TIMESTAMP> ERROR boom"].join("\n")
-    );
-  });
-
-  test("passes a gap marker row through untouched", () => {
-    assert.strictEqual(maskDisplayTextForCopy("  ... | 30秒の空白"), "  ... | 30秒の空白");
-  });
-
-  test("masks a selection fragment that starts on a continuation line", () => {
-    assert.strictEqual(
-      maskDisplayTextForCopy("10 |     at com.example.Foo.bar(10.0.0.5:42)"),
-      "10 |     at com.example.Foo.bar(<HOST>:42)"
-    );
-  });
-
-  test("masks a line that carries no display prefix at all", () => {
-    assert.strictEqual(
-      maskDisplayTextForCopy("2024-01-02T03:04:05.000Z ERROR boom"),
-      "<TIMESTAMP> ERROR boom"
-    );
-  });
-
-  test("masks display timestamps rendered with an offset suffix", () => {
-    assert.strictEqual(
-      maskDisplayTextForCopy("1 | 2024-01-02T12:04:05.000+09:00 ERROR boom"),
+      formatNormalizedLog(entries, { mask: { maskTimestamp: true } }),
       "1 | <TIMESTAMP> ERROR boom"
     );
   });
 
-  test("honors the maskTimestamp / maskHost options independently", () => {
-    const displayText = "1 | 2024-01-02T03:04:05.000Z INFO from 10.0.0.1";
+  test("formatNormalizedLog masks IP addresses in the header and continuation lines", () => {
+    const entries = parseLog(
+      [
+        "2024-01-02T03:04:05Z ERROR connect to 10.0.0.1 failed",
+        "    at com.example.Foo.bar(2001:db8::1)",
+      ].join("\n")
+    );
 
     assert.strictEqual(
-      maskDisplayTextForCopy(displayText, { maskTimestamp: false }),
-      "1 | 2024-01-02T03:04:05.000Z INFO from <HOST>"
-    );
-    assert.strictEqual(
-      maskDisplayTextForCopy(displayText, { maskHost: false }),
-      "1 | <TIMESTAMP> INFO from 10.0.0.1"
-    );
-  });
-
-  test("forwards the timestamp format list used to recognize the body", () => {
-    // 形式一覧を空にすると本文のタイムスタンプが認識されなくなる（= 設定由来の
-    // フォーマット一覧がそのまま解析に渡っていることの確認）。
-    assert.strictEqual(
-      maskDisplayTextForCopy("1 | 2024-01-02T03:04:05.000Z INFO from 10.0.0.1", {
-        timestampFormats: [],
-      }),
-      "1 | 2024-01-02T03:04:05.000Z INFO from <HOST>"
+      formatNormalizedLog(entries, { mask: { maskHost: true } }),
+      [
+        "1 | 2024-01-02T03:04:05.000Z ERROR connect to <HOST> failed",
+        "2 |     at com.example.Foo.bar(<HOST>)",
+      ].join("\n")
     );
   });
 
-  test("returns an empty string for empty display text", () => {
-    assert.strictEqual(maskDisplayTextForCopy(""), "");
+  test("formatNormalizedLog masks the RFC3164 hostname token when masking hosts", () => {
+    // 生ログでのみ位置が確定するホスト名トークンを、整形の段階でマスクできる
+    // ことの確認（#180 の表示テキスト後段マスクでは届かなかった箇所）。
+    const entries = parseLog("Jan  2 03:04:05  web01 myapp: hello", {
+      timestampFormats: [createSyslogFormat({ assumedYear: 2024 })],
+    });
+
+    assert.strictEqual(
+      formatNormalizedLog(entries, { mask: MASK_BOTH }),
+      "1 | <TIMESTAMP> - <HOST> myapp: hello"
+    );
+  });
+
+  test("formatNormalizedLog keeps the line count and line sources stable under masking", () => {
+    // 行数・行構成が変わらないことが、行ジャンプ（#179）と表示上限（#178）が
+    // マスク中もそのまま成立する前提になっている。
+    const entries = parseLog(
+      [
+        "2024-01-02T03:04:05Z ERROR boom from 10.0.0.1",
+        "    at com.example.Foo.bar(Foo.java:42)",
+        "2024-01-02T03:05:05Z INFO done",
+      ].join("\n")
+    );
+    const options = { gapThresholdMs: 30_000 };
+
+    const plain = formatNormalizedLogWithLineSources(entries, options);
+    const masked = formatNormalizedLogWithLineSources(entries, { ...options, mask: MASK_BOTH });
+
+    assert.strictEqual(masked.text.split("\n").length, plain.text.split("\n").length);
+    assert.deepStrictEqual(masked.lineSources, plain.lineSources);
+  });
+
+  test("formatMergedLog masks the body while keeping the file name / kind columns", () => {
+    const merged = mergeLogFiles([
+      { fileName: "app.log", text: "2024-01-02T03:04:05Z INFO from 10.0.0.1" },
+    ]);
+
+    assert.strictEqual(
+      formatMergedLog(merged, { mask: MASK_BOTH }),
+      "app.log | app | 1 | <TIMESTAMP> INFO from <HOST>"
+    );
+  });
+
+  test("buildInteractiveCollapsedLines masks group headers and expanded lines", () => {
+    const text = [
+      "2024-01-02T03:04:05Z INFO connect to 10.0.0.1 ok",
+      "2024-01-02T03:04:06Z INFO connect to 10.0.0.1 ok",
+      "2024-01-02T03:04:07Z INFO connect to 10.0.0.1 ok",
+    ].join("\n");
+    const items = buildInteractiveCollapsedLines(parseLog(text), {
+      threshold: 3,
+      mask: MASK_BOTH,
+    });
+
+    assert.strictEqual(items.length, 1);
+    assert.strictEqual(items[0].kind, "group");
+    if (items[0].kind !== "group") {
+      return;
+    }
+    // 開始/終了が異なるグループはスパン表示のままにする（マスクしても「範囲」
+    // であることは残す）。
+    assert.strictEqual(
+      items[0].headerText,
+      "1-3 | <TIMESTAMP> 〜 <TIMESTAMP> INFO connect to <HOST> ok (×3)"
+    );
+    assert.deepStrictEqual(items[0].lines, [
+      "  1 | <TIMESTAMP> INFO connect to <HOST> ok",
+      "  2 | <TIMESTAMP> INFO connect to <HOST> ok",
+      "  3 | <TIMESTAMP> INFO connect to <HOST> ok",
+    ]);
+  });
+
+  test("buildInteractivePayload forwards the mask to both the text and the collapsed items", async () => {
+    const text = [
+      "2024-01-02T03:04:05Z INFO connect to 10.0.0.1 ok",
+      "2024-01-02T03:04:06Z ERROR boom",
+    ].join("\n");
+    const result = await buildInteractivePayload(parseLog(text), {}, {
+      collapseThreshold: 3,
+      mask: MASK_BOTH,
+    });
+
+    assert.ok(result.ok);
+    if (!result.ok) {
+      return;
+    }
+    assert.strictEqual(
+      result.text,
+      ["1 | <TIMESTAMP> INFO connect to <HOST> ok", "2 | <TIMESTAMP> ERROR boom"].join("\n")
+    );
+    assert.deepStrictEqual(
+      result.items?.map((item) => (item.kind === "line" ? item.text : item.headerText)),
+      ["1 | <TIMESTAMP> INFO connect to <HOST> ok", "2 | <TIMESTAMP> ERROR boom"]
+    );
+  });
+
+  test("buildInteractiveMergedPayload forwards the mask", async () => {
+    const merged = mergeLogFiles([
+      { fileName: "app.log", text: "2024-01-02T03:04:05Z INFO from 10.0.0.1" },
+    ]);
+    const result = await buildInteractiveMergedPayload(merged, {}, { mask: MASK_BOTH });
+
+    assert.ok(result.ok);
+    assert.strictEqual(
+      result.ok ? result.text : "",
+      "app.log | app | 1 | <TIMESTAMP> INFO from <HOST>"
+    );
+  });
+
+  test("buildInteractiveExportText forwards the mask, collapsed and uncollapsed", async () => {
+    const entries = parseLog("2024-01-02T03:04:05Z INFO from 10.0.0.1");
+
+    const plain = await buildInteractiveExportText(entries, {}, { mask: MASK_BOTH });
+    assert.ok(plain.ok);
+    assert.strictEqual(
+      plain.ok ? plain.formatted.text : "",
+      "1 | <TIMESTAMP> INFO from <HOST>"
+    );
+
+    const collapsed = await buildInteractiveExportText(entries, {}, {
+      collapseThreshold: 3,
+      mask: MASK_BOTH,
+    });
+    assert.ok(collapsed.ok);
+    assert.match(collapsed.ok ? collapsed.formatted.text : "", /<TIMESTAMP> INFO from <HOST>/);
+  });
+
+  test("buildInteractiveMergedExportText forwards the mask", async () => {
+    const merged = mergeLogFiles([
+      { fileName: "app.log", text: "2024-01-02T03:04:05Z INFO from 10.0.0.1" },
+    ]);
+    const result = await buildInteractiveMergedExportText(merged, {}, { mask: MASK_BOTH });
+
+    assert.ok(result.ok);
+    assert.strictEqual(
+      result.ok ? result.formatted.text : "",
+      "app.log | app | 1 | <TIMESTAMP> INFO from <HOST>"
+    );
   });
 });
 

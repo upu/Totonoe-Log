@@ -7,11 +7,11 @@ import {
   buildInteractiveMergedExportText,
   getDistinctSeverities,
   limitInteractiveDisplay,
-  maskDisplayTextForCopy,
   mergeLogFiles,
   DEFAULT_COLLAPSE_THRESHOLD,
   type BuildInteractivePayloadOptions,
   type BuildInteractiveExportTextOptions,
+  type DisplayMaskOptions,
   type FilterCriteria,
   type FormattedLogWithLineSources,
   type InteractivePayloadResult,
@@ -31,7 +31,7 @@ import { readDisplayTimezone } from "./timezoneSettings";
 import { readGapThresholdMs } from "./gapThresholdSetting";
 import { readMaxDisplayLines } from "./interactiveViewSettings";
 import { readConfiguredTimestampFormats } from "./timestampFormatSettings";
-import { readMaskOptions, writeMaskedTextToClipboard } from "./copyMasked";
+import { readMaskOptions } from "./copyMasked";
 import { toFilterCriteria } from "./interactiveViewCriteria";
 import { revealSourceLine } from "./revealSourceLine";
 import { parseWebviewLineSource } from "./interactiveViewContext";
@@ -52,15 +52,41 @@ const WEBVIEW_SCRIPT_RELATIVE_PATH = ["out", "webview", "interactiveView", "main
 /** 折りたたみのしきい値を読み込むVSCode設定のセクション名（`normalizedView.ts` の `Show Collapsed View` と共有）。 */
 const COLLAPSE_CONFIG_SECTION = "totonoeLog.collapse";
 
-/** チェック済みセベリティ・空の日付範囲・空の無視パターン・折りたたみONという初期状態を作る（issue #172、デフォルトON）。 */
+/**
+ * チェック済みセベリティ・空の日付範囲・空の無視パターン・折りたたみONという
+ * 初期状態を作る（issue #172、デフォルトON）。
+ *
+ * マスクの対象選択（issue #194）は `Copy Masked Text` と共有する
+ * `totonoeLog.copyMasked.*` 設定から読む。マスク自体は既定でOFFなので、
+ * この設定は「マスクをONにしたときに何を伏せるか」の初期選択として効く。
+ */
 function createDefaultSerializedCriteria(entries: readonly LogEntry[]): SerializedFilterCriteria {
+  const configured = readMaskOptions();
   return {
     severities: getDistinctSeverities(entries),
     dateRangeStart: "",
     dateRangeEnd: "",
     ignorePattern: "",
     collapseEnabled: true,
+    mask: {
+      enabled: false,
+      maskTimestamp: configured.maskTimestamp ?? true,
+      maskHost: configured.maskHost ?? true,
+    },
   };
+}
+
+/**
+ * Webviewから届いたマスクの状態を、整形オプションへ渡す形に直す。マスクOFF、
+ * または対象が1つも選ばれていない場合は `undefined` を返し、マスクを一切
+ * 通さない整形（既存コマンドと同じ経路）にする。
+ */
+function toDisplayMaskOptions(criteria: SerializedFilterCriteria): DisplayMaskOptions | undefined {
+  const { enabled, maskTimestamp, maskHost } = criteria.mask;
+  if (!enabled || (!maskTimestamp && !maskHost)) {
+    return undefined;
+  }
+  return { maskTimestamp, maskHost };
 }
 
 /** `totonoeLog.collapse.threshold` 設定を読む（`normalizedView.ts` の `Show Collapsed View` と同じ読み取り方）。 */
@@ -183,10 +209,6 @@ export class InteractiveViewPanelController implements vscode.Disposable {
       await this.revealClickedSourceLine(message.lineSource);
       return;
     }
-    if (message.type === "copyMasked") {
-      await this.copyMaskedDisplayText(message.text);
-      return;
-    }
     this.criteria = message.criteria;
     await this.postState();
   }
@@ -220,24 +242,6 @@ export class InteractiveViewPanelController implements vscode.Disposable {
       return;
     }
     await revealSourceLine(sourceUri, lineSource.line);
-  }
-
-  /**
-   * Webviewから届いた表示テキスト（選択範囲、または選択が無ければ表示全体）を
-   * マスクしてクリップボードへコピーする（issue #180）。マスク対象の切り替えは
-   * `Copy Masked Text` コマンドと同じ `totonoeLog.copyMasked.*` 設定を使い、
-   * 仮想ドキュメント側と挙動を揃える（新しい設定は増やさない）。
-   *
-   * 対象を「表示テキスト」にしているため、コピー結果には絞り込み・折りたたみ・
-   * ガター欄がそのまま残る——貼り付け先で欲しいのは画面で見ていた状態であり、
-   * 行番号は元ログを追う手がかりとして役に立つため。
-   */
-  private async copyMaskedDisplayText(displayText: string): Promise<void> {
-    const maskedText = maskDisplayTextForCopy(displayText, {
-      ...readMaskOptions(),
-      timestampFormats: readConfiguredTimestampFormats(),
-    });
-    await writeMaskedTextToClipboard(maskedText);
   }
 
   /**
@@ -352,6 +356,7 @@ export class InteractiveViewPanelController implements vscode.Disposable {
       displayTimezone,
       collapseThreshold:
         collapsibleSupported && this.criteria.collapseEnabled ? readCollapseThreshold() : undefined,
+      mask: toDisplayMaskOptions(this.criteria),
     };
 
     const payload = await this.computePayload(criteria, formatOptions);
@@ -438,6 +443,8 @@ export class InteractiveViewPanelController implements vscode.Disposable {
       displayTimezone,
       collapseThreshold:
         collapsibleSupported && this.criteria.collapseEnabled ? readCollapseThreshold() : undefined,
+      // 書き出しは表示の状態を引き継ぐ（issue #194、絞り込み・折りたたみと同じ扱い）。
+      mask: toDisplayMaskOptions(this.criteria),
     };
 
     const formatted = await this.computeExportFormatted(criteria, options);
@@ -540,6 +547,37 @@ export class InteractiveViewPanelController implements vscode.Disposable {
     font-size: 0.9em;
     opacity: 0.8;
   }
+  /* マスクパネルはボタンに重ねて開く（issue #194）。絞り込み列に対象を並べると
+     #195 で対象が増えたときに横へ伸び続けるため、開閉するパネルに畳んでおく。 */
+  #mask-container {
+    position: relative;
+    display: flex;
+    gap: 1px;
+  }
+  /* マスクONの間はボタンが押し込まれて見えるようにする（表示状態が一目で分かるように）。 */
+  #mask-button.toggled-on {
+    background-color: var(--vscode-button-secondaryBackground, var(--vscode-button-hoverBackground));
+    outline: 1px solid var(--vscode-focusBorder);
+  }
+  #mask-panel {
+    position: absolute;
+    z-index: 1;
+    top: 100%;
+    left: 0;
+    margin-top: 2px;
+    padding: 6px 10px;
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    white-space: nowrap;
+    background-color: var(--vscode-editorWidget-background, var(--vscode-editor-background));
+    border: 1px solid var(--vscode-editorWidget-border, var(--vscode-panel-border));
+  }
+  #mask-panel label {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+  }
   #filter-panel {
     display: flex;
     flex-wrap: wrap;
@@ -601,7 +639,14 @@ export class InteractiveViewPanelController implements vscode.Disposable {
   <div id="files-panel">
     <button id="add-files-button" type="button">+ Add Files...</button>
     <button id="export-button" type="button">Export as Virtual Document</button>
-    <button id="copy-masked-button" type="button" title="選択範囲（未選択なら表示全体）のタイムスタンプ・ホスト名/IPアドレスをマスクしてコピーします">Copy Masked</button>
+    <div id="mask-container">
+      <button id="mask-button" type="button" aria-pressed="false" title="タイムスタンプ・ホスト名/IPアドレスを伏せて表示します（そのままコピーできます）">🔒 マスク</button>
+      <button id="mask-options-button" type="button" aria-expanded="false" aria-controls="mask-panel" title="マスクする対象を選ぶ">▾</button>
+      <div id="mask-panel" hidden>
+        <label><input type="checkbox" id="mask-timestamp">タイムスタンプ</label>
+        <label><input type="checkbox" id="mask-host">ホスト名 / IPアドレス</label>
+      </div>
+    </div>
     <span id="loaded-files"></span>
   </div>
   <div id="filter-panel">

@@ -5,9 +5,9 @@ import { computeMaxLineNumber, formatGutter } from "./gutter";
 /** セベリティが認識できなかったエントリの見出しに表示するプレースホルダー。 */
 const SEVERITY_PLACEHOLDER = "-";
 /** マスクしたタイムスタンプの表示に使うプレースホルダー。 */
-const TIMESTAMP_PLACEHOLDER = "<TIMESTAMP>";
+export const TIMESTAMP_PLACEHOLDER = "<TIMESTAMP>";
 /** マスクしたホスト名/IPアドレスの表示に使うプレースホルダー。 */
-const HOST_PLACEHOLDER = "<HOST>";
+export const HOST_PLACEHOLDER = "<HOST>";
 
 // 各オクテットを 0-255 に限定することで、`999.999.999.999` のような
 // IPv4として不正な4分割の数値トークン（バージョン表記等）を誤マスクしない。

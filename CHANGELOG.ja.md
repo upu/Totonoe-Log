@@ -43,12 +43,15 @@
   設けた（`totonoeLog.interactiveView.maxDisplayLines`、既定値 `20000`、`0` で
   無効化）。上限を超えた場合はDOMを肥大させずに先頭のみを表示し、絞り込むか
   「Export as Virtual Document」で全体を開くよう案内する（issue #178）。
-- `Totonoe Log: Show Interactive View (Alpha)` に「Copy Masked」ボタンを追加。
-  表示中のログのタイムスタンプ・ホスト名/IPアドレスをプレースホルダーに
-  置き換えてコピーできるようにした（issue #180、#165 の次のアルファ版
-  フェーズ）。issueやチャットに貼るための導線で、対象は選択範囲、選択が
-  無ければ表示全体——絞り込み・折りたたみ・行番号は画面で見ていたとおりに
-  残る。マスク対象の切り替えは `Totonoe Log: Copy Masked Text` と共通の
+- `Totonoe Log: Show Interactive View (Alpha)` で、表示中のログをマスクできる
+  ようにした。「🔒 マスク」ボタンでタイムスタンプ・ホスト名/IPアドレスを
+  プレースホルダーに置き換えて表示し、隣の「▾」で2種のどちらを伏せるかを
+  選べる（issue #180・#194、#165 の次のアルファ版フェーズ）。ワンショットの
+  コピー操作ではなく表示状態なので、パネル上で通常どおりコピー（Ctrl+C）・
+  検索でき、「Export as Virtual Document」もマスク済みで書き出される。
+  絞り込み・折りたたみ・行番号は画面で見ていたとおりに残る。既定はOFF——
+  Interactive View は時系列を追うビューなので、言われるまでタイムスタンプを
+  伏せない。マスク対象の初期選択は `Totonoe Log: Copy Masked Text` と共通の
   `totonoeLog.copyMasked.maskTimestamp` / `totonoeLog.copyMasked.maskHost`
   設定に従う（新しい設定は追加していない）。
 

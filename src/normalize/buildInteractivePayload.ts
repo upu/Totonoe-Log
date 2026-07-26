@@ -1,6 +1,7 @@
 import type { LogEntry } from "./types";
 import type { DisplayTimezone } from "./timezone";
 import type { LineSource } from "./lineSources";
+import type { DisplayMaskOptions } from "./displayMask";
 import { getDistinctSeverities } from "./filterBySeverity";
 import { filterEntriesByCriteria, type FilterCriteria } from "./filterEntries";
 import { formatNormalizedLogWithLineSources } from "./formatNormalizedLog";
@@ -18,6 +19,13 @@ export interface BuildInteractivePayloadOptions {
    * （マージ表示モードは折りたたみ非対応のため、呼び出し側がこの値を渡さない）。
    */
   readonly collapseThreshold?: number;
+
+  /**
+   * 指定すると、整形時にタイムスタンプ・ホスト名/IPアドレスをプレースホルダーへ
+   * 置き換える（issue #194、Interactive View のマスクトグル）。絞り込みは
+   * マスク前のエントリに対して行うため、マスクのON/OFFで絞り込み結果は変わらない。
+   */
+  readonly mask?: DisplayMaskOptions;
 }
 
 export type InteractivePayloadResult =
@@ -63,12 +71,14 @@ export async function buildInteractivePayload(
   const formatted = formatNormalizedLogWithLineSources(filterResult.entries, {
     gapThresholdMs: options.gapThresholdMs,
     displayTimezone: options.displayTimezone,
+    mask: options.mask,
   });
 
   const items = options.collapseThreshold !== undefined
     ? buildInteractiveCollapsedLines(filterResult.entries, {
         threshold: options.collapseThreshold,
         displayTimezone: options.displayTimezone,
+        mask: options.mask,
       })
     : undefined;
 

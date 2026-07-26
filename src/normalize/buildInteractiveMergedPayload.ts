@@ -41,6 +41,7 @@ export async function buildInteractiveMergedPayload(
   const formatted = formatMergedLogWithLineSources(filterResult.entries, {
     gapThresholdMs: options.gapThresholdMs,
     displayTimezone: options.displayTimezone,
+    mask: options.mask,
   });
 
   return {

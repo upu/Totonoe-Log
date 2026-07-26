@@ -2,7 +2,12 @@ import type { LogEntry } from "./types";
 import type { FormattedLogWithLineSources, LineSource } from "./lineSources";
 import { computeMaxLineNumber, formatGutter } from "./gutter";
 import type { CollapsedItem } from "./collapseRepeatedEntries";
-import { formatTimestampForDisplay, type DisplayTimezone } from "./timezone";
+import { type DisplayTimezone } from "./timezone";
+import {
+  formatMaskableTimestamp,
+  maskDisplayMessageLines,
+  type DisplayMaskOptions,
+} from "./displayMask";
 
 /** タイムスタンプの開始〜終了を結ぶ区切り文字（issue #99）。 */
 const TIMESTAMP_SPAN_SEPARATOR = " 〜 ";
@@ -17,6 +22,13 @@ export interface FormatCollapsedLogOptions {
    * 表示）。指定するとその壁時計時刻＋オフセットサフィックスで表示する（issue #13）。
    */
   readonly displayTimezone?: DisplayTimezone;
+
+  /**
+   * 指定すると、タイムスタンプ・ホスト名/IPアドレスをプレースホルダーに
+   * 置き換えて整形する（issue #194）。Interactive View がマスク中に
+   * 「仮想ドキュメントとして書き出す」ときに、表示と同じ状態で書き出すために使う。
+   */
+  readonly mask?: DisplayMaskOptions;
 }
 
 function rangeLabel(entries: readonly LogEntry[]): string {
@@ -55,13 +67,14 @@ function computeGutterWidth(entries: readonly LogEntry[], items: readonly Collap
  */
 function formatHeaderTimestamp(
   item: CollapsedItem,
-  displayTimezone: DisplayTimezone
+  displayTimezone: DisplayTimezone,
+  mask: DisplayMaskOptions | undefined
 ): string | undefined {
   const first = item.kind === "single" ? item.entry : item.entries[0];
   if (!first.matched || first.timestampMs === undefined) {
     return undefined;
   }
-  const startText = formatTimestampForDisplay(first.timestampMs, displayTimezone);
+  const startText = formatMaskableTimestamp(first.timestampMs, displayTimezone, mask);
   if (item.kind === "single") {
     return startText;
   }
@@ -70,7 +83,7 @@ function formatHeaderTimestamp(
   if (last.timestampMs === undefined || last.timestampMs === first.timestampMs) {
     return startText;
   }
-  return `${startText}${TIMESTAMP_SPAN_SEPARATOR}${formatTimestampForDisplay(last.timestampMs, displayTimezone)}`;
+  return `${startText}${TIMESTAMP_SPAN_SEPARATOR}${formatMaskableTimestamp(last.timestampMs, displayTimezone, mask)}`;
 }
 
 /**
@@ -111,10 +124,14 @@ export function formatCollapsedLogWithLineSources(
 
   for (const item of items) {
     const representative = item.kind === "single" ? item.entry : item.entries[0];
-    const messageLines = representative.message.split("\n");
+    const messageLines = maskDisplayMessageLines(
+      representative.message.split("\n"),
+      representative.timestampFormat,
+      options.mask
+    );
     const suffix = item.kind === "group" ? ` (×${item.entries.length})` : "";
 
-    const headerTimestamp = formatHeaderTimestamp(item, displayTimezone);
+    const headerTimestamp = formatHeaderTimestamp(item, displayTimezone, options.mask);
     const headerText = headerTimestamp !== undefined
       ? `${headerTimestamp} ${representative.severity ?? SEVERITY_PLACEHOLDER} ${messageLines[0]}${suffix}`
       : `${messageLines[0]}${suffix}`;

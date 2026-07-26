@@ -1,8 +1,13 @@
 import { computeMaxLineNumber, formatGutter } from "./gutter";
 import type { FormattedLogWithLineSources, LineSource } from "./lineSources";
 import type { MergedEntry } from "./mergeLogFiles";
-import { formatTimestampForDisplay, type DisplayTimezone } from "./timezone";
+import { type DisplayTimezone } from "./timezone";
 import { computeGapMs, formatGapMarkerText, GAP_MARKER_LABEL } from "./gapDetection";
+import {
+  formatMaskableTimestamp,
+  maskDisplayMessageLines,
+  type DisplayMaskOptions,
+} from "./displayMask";
 
 /** セベリティが認識できなかったエントリの見出しに表示するプレースホルダー。 */
 const SEVERITY_PLACEHOLDER = "-";
@@ -22,6 +27,13 @@ export interface FormatMergedLogOptions {
    * （{@link computeGapMs}）を共有する（issue #102）。
    */
   readonly gapThresholdMs?: number;
+
+  /**
+   * 指定すると、タイムスタンプ・ホスト名/IPアドレスをプレースホルダーに
+   * 置き換えて整形する（issue #194）。ファイル名/種別列は元ファイルを
+   * 見分けるための構造的な列なのでマスクしない（#195 で改めて扱う）。
+   */
+  readonly mask?: DisplayMaskOptions;
 }
 
 function computeColumnWidth(
@@ -96,11 +108,15 @@ export function formatMergedLogWithLineSources(
       }
     }
 
-    const messageLines = entry.message.split("\n");
+    const messageLines = maskDisplayMessageLines(
+      entry.message.split("\n"),
+      entry.timestampFormat,
+      options.mask
+    );
     const headerPrefix = `${fileName.padEnd(fileNameWidth)} | ${kind.padEnd(kindWidth)} | `;
 
     const headerText = entry.matched && entry.timestampMs !== undefined
-      ? `${formatTimestampForDisplay(entry.timestampMs, displayTimezone)} ${entry.severity ?? SEVERITY_PLACEHOLDER} ${messageLines[0]}`
+      ? `${formatMaskableTimestamp(entry.timestampMs, displayTimezone, options.mask)} ${entry.severity ?? SEVERITY_PLACEHOLDER} ${messageLines[0]}`
       : messageLines[0];
     outputLines.push(headerPrefix + formatGutter(entry.startLine, gutterWidth) + headerText);
     lineSources.push({ fileIndex, line: entry.startLine });

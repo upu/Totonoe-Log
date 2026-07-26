@@ -1,7 +1,12 @@
 import type { LogEntry } from "./types";
 import type { LineSource } from "./lineSources";
 import { computeMaxLineNumber, formatGutter } from "./gutter";
-import { formatTimestampForDisplay, type DisplayTimezone } from "./timezone";
+import { type DisplayTimezone } from "./timezone";
+import {
+  formatMaskableTimestamp,
+  maskDisplayMessageLines,
+  type DisplayMaskOptions,
+} from "./displayMask";
 import { collapseRepeatedEntries, DEFAULT_COLLAPSE_THRESHOLD, type CollapsedItem } from "./collapseRepeatedEntries";
 
 /** セベリティが認識できなかったエントリの見出しに表示するプレースホルダー。 */
@@ -38,6 +43,12 @@ export interface BuildInteractiveCollapsedLinesOptions {
   readonly threshold?: number;
   /** タイムスタンプの表示タイムゾーン。省略時は UTC。 */
   readonly displayTimezone?: DisplayTimezone;
+  /**
+   * 指定すると、タイムスタンプ・ホスト名/IPアドレスをプレースホルダーに
+   * 置き換えて整形する（issue #194）。行内の置き換えなので `lines` の本数と
+   * `lineSources` の対応は変わらない。
+   */
+  readonly mask?: DisplayMaskOptions;
 }
 
 function rangeLabel(entries: readonly LogEntry[]): string {
@@ -77,11 +88,16 @@ interface FormattedEntryLine {
 function formatEntryLines(
   entry: LogEntry,
   gutterWidth: number,
-  displayTimezone: DisplayTimezone
+  displayTimezone: DisplayTimezone,
+  mask: DisplayMaskOptions | undefined
 ): FormattedEntryLine[] {
-  const messageLines = entry.message.split("\n");
+  const messageLines = maskDisplayMessageLines(
+    entry.message.split("\n"),
+    entry.timestampFormat,
+    mask
+  );
   const headerText = entry.matched && entry.timestampMs !== undefined
-    ? `${formatTimestampForDisplay(entry.timestampMs, displayTimezone)} ${entry.severity ?? SEVERITY_PLACEHOLDER} ${messageLines[0]}`
+    ? `${formatMaskableTimestamp(entry.timestampMs, displayTimezone, mask)} ${entry.severity ?? SEVERITY_PLACEHOLDER} ${messageLines[0]}`
     : messageLines[0];
 
   const lines: FormattedEntryLine[] = [
@@ -102,30 +118,36 @@ function formatEntryLines(
 /** グループ見出しのタイムスタンプ表示。開始・終了が異なる場合のみスパン表示する（{@link formatCollapsedLogWithLineSources} と同じ判定）。 */
 function formatHeaderTimestamp(
   entries: readonly LogEntry[],
-  displayTimezone: DisplayTimezone
+  displayTimezone: DisplayTimezone,
+  mask: DisplayMaskOptions | undefined
 ): string | undefined {
   const first = entries[0];
   if (!first.matched || first.timestampMs === undefined) {
     return undefined;
   }
-  const startText = formatTimestampForDisplay(first.timestampMs, displayTimezone);
+  const startText = formatMaskableTimestamp(first.timestampMs, displayTimezone, mask);
   const last = entries[entries.length - 1];
   if (last.timestampMs === undefined || last.timestampMs === first.timestampMs) {
     return startText;
   }
-  return `${startText}${TIMESTAMP_SPAN_SEPARATOR}${formatTimestampForDisplay(last.timestampMs, displayTimezone)}`;
+  return `${startText}${TIMESTAMP_SPAN_SEPARATOR}${formatMaskableTimestamp(last.timestampMs, displayTimezone, mask)}`;
 }
 
 function formatGroupHeaderText(
   entries: readonly LogEntry[],
   gutterWidth: number,
-  displayTimezone: DisplayTimezone
+  displayTimezone: DisplayTimezone,
+  mask: DisplayMaskOptions | undefined
 ): string {
   const first = entries[0];
-  const messageLines = first.message.split("\n");
+  const messageLines = maskDisplayMessageLines(
+    first.message.split("\n"),
+    first.timestampFormat,
+    mask
+  );
   const suffix = ` (×${entries.length})`;
 
-  const headerTimestamp = formatHeaderTimestamp(entries, displayTimezone);
+  const headerTimestamp = formatHeaderTimestamp(entries, displayTimezone, mask);
   const headerText = headerTimestamp !== undefined
     ? `${headerTimestamp} ${first.severity ?? SEVERITY_PLACEHOLDER} ${messageLines[0]}${suffix}`
     : `${messageLines[0]}${suffix}`;
@@ -155,18 +177,18 @@ export function buildInteractiveCollapsedLines(
   const result: InteractiveDisplayItem[] = [];
   for (const item of items) {
     if (item.kind === "single") {
-      for (const { text, lineSource } of formatEntryLines(item.entry, gutterWidth, displayTimezone)) {
+      for (const { text, lineSource } of formatEntryLines(item.entry, gutterWidth, displayTimezone, options.mask)) {
         result.push({ kind: "line", text, lineSource });
       }
       continue;
     }
 
     const groupLines = item.entries.flatMap((entry) =>
-      formatEntryLines(entry, gutterWidth, displayTimezone)
+      formatEntryLines(entry, gutterWidth, displayTimezone, options.mask)
     );
     result.push({
       kind: "group",
-      headerText: formatGroupHeaderText(item.entries, gutterWidth, displayTimezone),
+      headerText: formatGroupHeaderText(item.entries, gutterWidth, displayTimezone, options.mask),
       lines: groupLines.map((line) => line.text),
       lineSources: groupLines.map((line) => line.lineSource),
     });
