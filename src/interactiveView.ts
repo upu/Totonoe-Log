@@ -554,10 +554,16 @@ export class InteractiveViewPanelController implements vscode.Disposable {
     display: flex;
     gap: 1px;
   }
-  /* マスクONの間はボタンが押し込まれて見えるようにする（表示状態が一目で分かるように）。 */
+  /* マスクONの間の見た目は、VSCodeが検索ボックスのオプション（正規表現・
+     大文字小文字）のトグルに使っている色に合わせる（issue #197）。ボタンの
+     ラベル自体もON/OFFを文字で示すので、色だけに頼らない。 */
   #mask-button.toggled-on {
-    background-color: var(--vscode-button-secondaryBackground, var(--vscode-button-hoverBackground));
-    outline: 1px solid var(--vscode-focusBorder);
+    background-color: var(--vscode-inputOption-activeBackground, var(--vscode-button-hoverBackground));
+    color: var(--vscode-inputOption-activeForeground, var(--vscode-button-foreground));
+    /* 枠線は border ではなく outline で描く（border だとON/OFFでボタンの
+       寸法が変わり、隣の「▾」がずれるため）。 */
+    outline: 1px solid var(--vscode-inputOption-activeBorder, var(--vscode-focusBorder));
+    outline-offset: -1px;
   }
   #mask-panel {
     position: absolute;
@@ -572,6 +578,12 @@ export class InteractiveViewPanelController implements vscode.Disposable {
     white-space: nowrap;
     background-color: var(--vscode-editorWidget-background, var(--vscode-editor-background));
     border: 1px solid var(--vscode-editorWidget-border, var(--vscode-panel-border));
+  }
+  /* display を指定した要素では UA の [hidden] { display: none } が作者
+     スタイルに負けるため、閉じた状態を明示する（issue #197）。
+     このスタイルは template literal 内なのでバックティックは使えない。 */
+  #mask-panel[hidden] {
+    display: none;
   }
   #mask-panel label {
     display: inline-flex;
@@ -640,7 +652,7 @@ export class InteractiveViewPanelController implements vscode.Disposable {
     <button id="add-files-button" type="button">+ Add Files...</button>
     <button id="export-button" type="button">Export as Virtual Document</button>
     <div id="mask-container">
-      <button id="mask-button" type="button" aria-pressed="false" title="タイムスタンプ・ホスト名/IPアドレスを伏せて表示します（そのままコピーできます）">🔒 マスク</button>
+      <button id="mask-button" type="button" aria-pressed="false" title="タイムスタンプ・ホスト名/IPアドレスを伏せて表示します（そのままコピーできます）">🔓 マスク: OFF</button>
       <button id="mask-options-button" type="button" aria-expanded="false" aria-controls="mask-panel" title="マスクする対象を選ぶ">▾</button>
       <div id="mask-panel" hidden>
         <label><input type="checkbox" id="mask-timestamp">タイムスタンプ</label>

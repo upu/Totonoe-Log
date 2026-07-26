@@ -48,8 +48,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   whole thing with "Export as Virtual Document", instead of bogging the panel
   down with a huge DOM (issue #178).
 - `Totonoe Log: Show Interactive View (Alpha)` can now mask the log it displays,
-  ready to paste into an issue or chat: the "🔒 マスク" (mask) button replaces
-  timestamps and host names / IP addresses with placeholders in place, and the
+  ready to paste into an issue or chat: the mask button ("🔓 マスク: OFF" /
+  "🔒 マスク: ON") replaces timestamps and host names / IP addresses with
+  placeholders in place, and the
   "▾" beside it opens a panel for picking which of the two to hide (issues #180
   and #194, the next alpha step in #165). Masking is a display state rather than
   a one-shot copy action, so the panel's normal copy (Ctrl+C), search, and
