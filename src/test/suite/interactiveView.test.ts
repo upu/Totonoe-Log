@@ -240,7 +240,7 @@ suite("Totonoe Log interactive view (alpha, #166)", () => {
     assert.strictEqual(paletteEntry!.when, "false");
   });
 
-  test("offers an explorer context menu entry for multi-selection (#181)", async () => {
+  test("offers an explorer context menu entry for any file, single or multiple (#181, #201)", async () => {
     const extension = vscode.extensions.getExtension("upu.totonoe-log");
     await extension!.activate();
 
@@ -252,7 +252,42 @@ suite("Totonoe Log interactive view (alpha, #166)", () => {
       (item) => item.command === "totonoeLog.showInteractiveViewAlpha"
     );
     assert.ok(explorerEntry, "explorer/context should have an Interactive View entry");
-    assert.strictEqual(explorerEntry!.when, "listMultiSelection");
+    // マージ系（`listMultiSelection`）と違い1ファイルでも成立するため、
+    // フォルダ以外なら出す（issue #201）。
+    assert.strictEqual(explorerEntry!.when, "!explorerResourceIsFolder");
+  });
+
+  test("opens a single-file webview from an explorer single selection (#201)", async function () {
+    this.timeout(10000);
+    const extension = vscode.extensions.getExtension("upu.totonoe-log");
+    await extension!.activate();
+
+    const fs = await import("node:fs/promises");
+    const os = await import("node:os");
+    const path = await import("node:path");
+
+    const tempDir = await fs.mkdtemp(path.join(os.tmpdir(), "totonoe-log-interactive-single-"));
+    try {
+      const appLogPath = path.join(tempDir, "app.log");
+      await fs.writeFile(appLogPath, "2024-01-02T03:04:05Z INFO hello");
+      const appLogUri = vscode.Uri.file(appLogPath);
+
+      await vscode.commands.executeCommand("workbench.action.closeAllEditors");
+
+      // 単一クリックでは VSCode が選択配列を渡さないことがあるため、
+      // クリックされた項目だけで開けることを確認する。
+      await vscode.commands.executeCommand("totonoeLog.showInteractiveViewAlpha", appLogUri);
+
+      const hasWebviewTab = (): boolean =>
+        vscode.window.tabGroups.all
+          .flatMap((group) => group.tabs)
+          .some((tab) => tab.input instanceof vscode.TabInputWebview);
+      assert.ok(await waitFor(hasWebviewTab), "a webview tab should be opened");
+
+      await vscode.commands.executeCommand("workbench.action.closeAllEditors");
+    } finally {
+      await fs.rm(tempDir, { recursive: true, force: true });
+    }
   });
 
   test("opens a webview tab from an explorer multi-selection, with no active editor (#181)", async function () {
