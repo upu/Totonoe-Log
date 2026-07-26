@@ -38,6 +38,24 @@ export type InteractiveDisplayItem =
       readonly lineSources?: readonly LineSource[];
     };
 
+/**
+ * マスクパネル（issue #194）のチェックボックスの状態。`normalize` の
+ * `DisplayMaskOptions` と同じフィールド名にして、拡張機能本体側で整形
+ * オプションへそのまま渡せるようにする（あちらは省略可、こちらはUIの状態
+ * として常に真偽値が決まっているため必須）。
+ */
+export interface SerializedMaskCriteria {
+  /**
+   * マスクそのもののON/OFF（マスクボタンの押下状態）。既定はOFF——
+   * Interactive View は時系列を追うためのビューであり、開いた時点で
+   * タイムスタンプが伏せられていては用を成さないため。OFFの間も下の
+   * 対象選択は保たれるので、ボタン1つでマスクを出し入れできる。
+   */
+  readonly enabled: boolean;
+  readonly maskTimestamp: boolean;
+  readonly maskHost: boolean;
+}
+
 /** Webview側フォームの状態をJSON化した表現。 */
 export interface SerializedFilterCriteria {
   /** チェック済みのセベリティ（`normalize` の `UNRECOGNIZED_SEVERITY_KEY` を含みうる）。 */
@@ -54,6 +72,11 @@ export interface SerializedFilterCriteria {
    * Webviewフォームの状態としては他の入力と同じく丸ごと送り返す。
    */
   readonly collapseEnabled: boolean;
+  /**
+   * マスクパネルの状態（issue #194）。`collapseEnabled` と同じく絞り込み条件では
+   * なく表示方法の切り替えだが、Webviewフォームの状態としてまとめて送り返す。
+   */
+  readonly mask: SerializedMaskCriteria;
 }
 
 /** Webview → 拡張機能本体 のメッセージ。 */
@@ -63,13 +86,7 @@ export type WebviewToExtensionMessage =
   | { readonly type: "addFiles" }
   | { readonly type: "exportVirtualDocument" }
   /** 行のダブルクリックで、対応する元ログファイルの行を開く要求（issue #179、#191）。 */
-  | { readonly type: "revealSourceLine"; readonly lineSource: LineSource }
-  /**
-   * マスクしてクリップボードへコピーする要求（issue #180）。マスク処理は
-   * `node:net` を使うため、Webview側では実行できず本文をそのまま送る。
-   * `text` は選択範囲、または選択が無ければ画面に見えている本文全体。
-   */
-  | { readonly type: "copyMasked"; readonly text: string };
+  | { readonly type: "revealSourceLine"; readonly lineSource: LineSource };
 
 /**
  * 拡張機能本体 → Webview のメッセージ。`criteria` は絞り込み条件の解析結果

@@ -1,8 +1,13 @@
 import type { LogEntry } from "./types";
 import type { FormattedLogWithLineSources, LineSource } from "./lineSources";
 import { computeMaxLineNumber, formatGutter } from "./gutter";
-import { formatTimestampForDisplay, type DisplayTimezone } from "./timezone";
+import { type DisplayTimezone } from "./timezone";
 import { computeGapMs, formatGapMarkerText, GAP_MARKER_LABEL } from "./gapDetection";
+import {
+  formatMaskableTimestamp,
+  maskDisplayMessageLines,
+  type DisplayMaskOptions,
+} from "./displayMask";
 
 /** セベリティが認識できなかったエントリの見出しに表示するプレースホルダー。 */
 const SEVERITY_PLACEHOLDER = "-";
@@ -22,6 +27,13 @@ export interface FormatNormalizedLogOptions {
    * 表示）。指定するとその壁時計時刻＋オフセットサフィックスで表示する（issue #13）。
    */
   readonly displayTimezone?: DisplayTimezone;
+
+  /**
+   * 指定すると、タイムスタンプ・ホスト名/IPアドレスをプレースホルダーに
+   * 置き換えて整形する（issue #194、Interactive View のマスクトグル）。
+   * 置き換えは行内で行うため、行数・行構成・ガター欄は変わらない。
+   */
+  readonly mask?: DisplayMaskOptions;
 }
 
 /**
@@ -77,10 +89,14 @@ export function formatNormalizedLogWithLineSources(
       }
     }
 
-    const messageLines = entry.message.split("\n");
+    const messageLines = maskDisplayMessageLines(
+      entry.message.split("\n"),
+      entry.timestampFormat,
+      options.mask
+    );
 
     const headerText = entry.matched && entry.timestampMs !== undefined
-      ? `${formatTimestampForDisplay(entry.timestampMs, displayTimezone)} ${entry.severity ?? SEVERITY_PLACEHOLDER} ${messageLines[0]}`
+      ? `${formatMaskableTimestamp(entry.timestampMs, displayTimezone, options.mask)} ${entry.severity ?? SEVERITY_PLACEHOLDER} ${messageLines[0]}`
       : messageLines[0];
     outputLines.push(formatGutter(entry.startLine, gutterWidth) + headerText);
     lineSources.push({ fileIndex: 0, line: entry.startLine });

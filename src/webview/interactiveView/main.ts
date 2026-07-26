@@ -24,7 +24,11 @@ const vscodeApi = acquireVsCodeApi<WebviewToExtensionMessage>();
 
 const addFilesButton = document.getElementById("add-files-button") as HTMLButtonElement;
 const exportButton = document.getElementById("export-button") as HTMLButtonElement;
-const copyMaskedButton = document.getElementById("copy-masked-button") as HTMLButtonElement;
+const maskButton = document.getElementById("mask-button") as HTMLButtonElement;
+const maskOptionsButton = document.getElementById("mask-options-button") as HTMLButtonElement;
+const maskPanel = document.getElementById("mask-panel") as HTMLDivElement;
+const maskTimestampToggle = document.getElementById("mask-timestamp") as HTMLInputElement;
+const maskHostToggle = document.getElementById("mask-host") as HTMLInputElement;
 const loadedFilesElement = document.getElementById("loaded-files") as HTMLSpanElement;
 const severitiesContainer = document.getElementById("severities") as HTMLDivElement;
 const dateStartInput = document.getElementById("date-start") as HTMLInputElement;
@@ -59,6 +63,11 @@ function collectCriteria(): SerializedFilterCriteria {
     dateRangeEnd: dateEndInput.value,
     ignorePattern: ignorePatternInput.value,
     collapseEnabled: collapseToggle.checked,
+    mask: {
+      enabled: maskButton.getAttribute("aria-pressed") === "true",
+      maskTimestamp: maskTimestampToggle.checked,
+      maskHost: maskHostToggle.checked,
+    },
   };
 }
 
@@ -89,33 +98,39 @@ exportButton.addEventListener("click", () => {
 });
 
 /**
- * マスクしてコピーする対象のテキストを決める（issue #180）。本文の一部を
- * 選択していればその範囲、していなければ本文全体を対象にする。
- *
- * 選択が本文（`#log-output`）の外——絞り込みフォームや警告文——にある場合は
- * 選択なしとして扱う。ログ以外の文字列をコピーしても貼り付け先で役に立たず、
- * 「選択せずに押したら全体がコピーされる」という素直な既定の方が誤操作時の
- * 結果が読みやすいため。
- *
- * 全体のときに `textContent` ではなく `innerText` を使うのは、折りたたみ中の
- * グループが隠し要素（`hidden`）として DOM に残っているため。`innerText` は
- * 非表示要素を含めないので、コピー結果は「畳んだ見た目そのまま」になる
- * （展開して初めてその中身がコピー対象に入る）。
+ * マスクのON/OFF状態をボタンに反映する（issue #194）。押下状態は
+ * `aria-pressed` に持たせ、{@link collectCriteria} もそこから読む——マスクは
+ * 「押した瞬間に何かが起きる」操作ではなく、絞り込みや折りたたみと同じ
+ * 表示状態なので、ボタン自身がその状態の置き場になる。
  */
-function collectTextToCopy(): string {
-  const selection = window.getSelection();
-  if (selection && !selection.isCollapsed && selection.rangeCount > 0) {
-    const range = selection.getRangeAt(0);
-    if (logOutputElement.contains(range.commonAncestorContainer)) {
-      return selection.toString();
-    }
-  }
-  return logOutputElement.innerText;
+function setMaskEnabled(enabled: boolean): void {
+  maskButton.setAttribute("aria-pressed", String(enabled));
+  maskButton.classList.toggle("toggled-on", enabled);
 }
 
-copyMaskedButton.addEventListener("click", () => {
-  vscodeApi.postMessage({ type: "copyMasked", text: collectTextToCopy() });
+/** マスク対象の選択パネルの開閉。閉じても選択内容とマスクのON/OFFは保たれる。 */
+function setMaskPanelExpanded(expanded: boolean): void {
+  maskPanel.hidden = !expanded;
+  maskOptionsButton.setAttribute("aria-expanded", String(expanded));
+  maskOptionsButton.textContent = expanded ? "▴" : "▾";
+}
+
+// マスクの整形は拡張機能本体側で行う（`node:net` を使うホスト判定が
+// Webviewでは実行できない）。ボタン・チェックボックスは離散的な操作なので、
+// 絞り込みのチェックボックスと同じくデバウンスせず即座に送る。
+maskButton.addEventListener("click", () => {
+  setMaskEnabled(maskButton.getAttribute("aria-pressed") !== "true");
+  postFilterChanged();
 });
+
+maskOptionsButton.addEventListener("click", () => {
+  // 開閉状態は `hidden` ではなく `aria-expanded` から読む（`hidden` の型は
+  // `hidden="until-found"` を許すため真偽値として扱えない）。
+  setMaskPanelExpanded(maskOptionsButton.getAttribute("aria-expanded") !== "true");
+});
+
+maskTimestampToggle.addEventListener("change", postFilterChanged);
+maskHostToggle.addEventListener("change", postFilterChanged);
 
 function renderSeverities(distinctSeverities: readonly string[], checked: readonly string[]): void {
   const checkedSet = new Set(checked);
@@ -335,6 +350,9 @@ function renderState(state: ExtensionToWebviewMessage): void {
   syncTextInputIfNotFocused(ignorePatternInput, state.criteria.ignorePattern);
   collapseToggle.checked = state.criteria.collapseEnabled;
   collapseToggle.disabled = !state.collapsibleSupported;
+  setMaskEnabled(state.criteria.mask.enabled);
+  maskTimestampToggle.checked = state.criteria.mask.maskTimestamp;
+  maskHostToggle.checked = state.criteria.mask.maskHost;
 
   statusElement.textContent = `${state.visibleLineCount} / ${state.totalLineCount} 行を表示`;
   warningElement.textContent = state.warning ?? "";

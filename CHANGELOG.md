@@ -47,12 +47,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   lines and shows a notice pointing at narrowing the filters or opening the
   whole thing with "Export as Virtual Document", instead of bogging the panel
   down with a huge DOM (issue #178).
-- `Totonoe Log: Show Interactive View (Alpha)` now has a "Copy Masked" button
-  that copies the displayed log with timestamps and host names / IP addresses
-  replaced by placeholders, ready to paste into an issue or chat (issue #180,
-  the next alpha step in #165). It copies the current selection, or the whole
-  visible display when nothing is selected — filters, collapsed groups, and
-  line numbers stay exactly as shown. Masking honors the existing
+- `Totonoe Log: Show Interactive View (Alpha)` can now mask the log it displays,
+  ready to paste into an issue or chat: the "🔒 マスク" (mask) button replaces
+  timestamps and host names / IP addresses with placeholders in place, and the
+  "▾" beside it opens a panel for picking which of the two to hide (issues #180
+  and #194, the next alpha step in #165). Masking is a display state rather than
+  a one-shot copy action, so the panel's normal copy (Ctrl+C), search, and
+  "Export as Virtual Document" all operate on the masked text, while filters,
+  collapsed groups, and line numbers stay exactly as shown. It is off by
+  default — Interactive View is a timeline view, so it must not hide timestamps
+  until asked — and the initial target selection follows the existing
   `totonoeLog.copyMasked.maskTimestamp` / `totonoeLog.copyMasked.maskHost`
   settings shared with `Totonoe Log: Copy Masked Text`; no new settings were
   added.

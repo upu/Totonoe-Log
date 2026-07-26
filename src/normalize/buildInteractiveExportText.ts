@@ -2,6 +2,7 @@ import type { LogEntry } from "./types";
 import type { MergedEntry } from "./mergeLogFiles";
 import type { DisplayTimezone } from "./timezone";
 import type { FormattedLogWithLineSources } from "./lineSources";
+import type { DisplayMaskOptions } from "./displayMask";
 import { filterEntriesByCriteria, type FilterCriteria } from "./filterEntries";
 import { filterMergedEntriesByCriteria } from "./filterMergedEntries";
 import { formatNormalizedLogWithLineSources } from "./formatNormalizedLog";
@@ -23,6 +24,13 @@ export interface BuildInteractiveExportTextOptions {
    * 済みとして書き出す。
    */
   readonly collapseThreshold?: number;
+
+  /**
+   * 指定すると、整形時にタイムスタンプ・ホスト名/IPアドレスをプレースホルダーへ
+   * 置き換える（issue #194、Interactive View のマスクトグル）。絞り込みは
+   * マスク前のエントリに対して行うため、マスクのON/OFFで絞り込み結果は変わらない。
+   */
+  readonly mask?: DisplayMaskOptions;
 }
 
 export type InteractiveExportTextResult =
@@ -55,6 +63,7 @@ export async function buildInteractiveExportText(
       ok: true,
       formatted: formatCollapsedLogWithLineSources(filterResult.entries, items, {
         displayTimezone: options.displayTimezone,
+        mask: options.mask,
       }),
     };
   }
@@ -64,6 +73,7 @@ export async function buildInteractiveExportText(
     formatted: formatNormalizedLogWithLineSources(filterResult.entries, {
       gapThresholdMs: options.gapThresholdMs,
       displayTimezone: options.displayTimezone,
+      mask: options.mask,
     }),
   };
 }
@@ -90,6 +100,7 @@ export async function buildInteractiveMergedExportText(
     formatted: formatMergedLogWithLineSources(filterResult.entries, {
       gapThresholdMs: options.gapThresholdMs,
       displayTimezone: options.displayTimezone,
+      mask: options.mask,
     }),
   };
 }

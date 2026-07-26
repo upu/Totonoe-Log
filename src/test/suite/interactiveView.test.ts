@@ -3,19 +3,29 @@ import * as vscode from "vscode";
 import { toFilterCriteria } from "../../interactiveViewCriteria";
 import { selectNewFileUris } from "../../interactiveViewFiles";
 import { parseWebviewLineSource } from "../../interactiveViewContext";
+import type { SerializedFilterCriteria } from "../../webview/interactiveView/protocol";
+
+/**
+ * `toFilterCriteria` が見るのは絞り込み条件だけなので、表示状態のフィールド
+ * （折りたたみ・マスク）は既定値で埋め、各テストは関心のある入力だけを渡す。
+ */
+function serializedCriteria(
+  overrides: Partial<SerializedFilterCriteria> = {}
+): SerializedFilterCriteria {
+  return {
+    severities: [],
+    dateRangeStart: "",
+    dateRangeEnd: "",
+    ignorePattern: "",
+    collapseEnabled: false,
+    mask: { enabled: false, maskTimestamp: true, maskHost: true },
+    ...overrides,
+  };
+}
 
 suite("interactiveViewCriteria / toFilterCriteria (#166)", () => {
   test("converts checked severities into a Set as-is", () => {
-    const { criteria, errors } = toFilterCriteria(
-      {
-        severities: ["ERROR", "INFO"],
-        dateRangeStart: "",
-        dateRangeEnd: "",
-        ignorePattern: "",
-        collapseEnabled: false,
-      },
-      0
-    );
+    const { criteria, errors } = toFilterCriteria(serializedCriteria({ severities: ["ERROR", "INFO"] }), 0);
 
     assert.deepStrictEqual(criteria.severities, new Set(["ERROR", "INFO"]));
     assert.strictEqual(criteria.dateRange, undefined);
@@ -24,32 +34,14 @@ suite("interactiveViewCriteria / toFilterCriteria (#166)", () => {
   });
 
   test("omits dateRange entirely when both boundary inputs are blank", () => {
-    const { criteria, errors } = toFilterCriteria(
-      {
-        severities: [],
-        dateRangeStart: "  ",
-        dateRangeEnd: "",
-        ignorePattern: "",
-        collapseEnabled: false,
-      },
-      0
-    );
+    const { criteria, errors } = toFilterCriteria(serializedCriteria({ dateRangeStart: "  " }), 0);
 
     assert.strictEqual(criteria.dateRange, undefined);
     assert.deepStrictEqual(errors, []);
   });
 
   test("parses a valid date range boundary", () => {
-    const { criteria, errors } = toFilterCriteria(
-      {
-        severities: [],
-        dateRangeStart: "2024-01-02",
-        dateRangeEnd: "2024-01-03",
-        ignorePattern: "",
-        collapseEnabled: false,
-      },
-      0
-    );
+    const { criteria, errors } = toFilterCriteria(serializedCriteria({ dateRangeStart: "2024-01-02", dateRangeEnd: "2024-01-03" }), 0);
 
     assert.deepStrictEqual(criteria.dateRange, {
       startMs: Date.UTC(2024, 0, 2, 0, 0, 0, 0),
@@ -59,16 +51,7 @@ suite("interactiveViewCriteria / toFilterCriteria (#166)", () => {
   });
 
   test("drops an unparseable date boundary and reports an error", () => {
-    const { criteria, errors } = toFilterCriteria(
-      {
-        severities: [],
-        dateRangeStart: "not-a-date",
-        dateRangeEnd: "",
-        ignorePattern: "",
-        collapseEnabled: false,
-      },
-      0
-    );
+    const { criteria, errors } = toFilterCriteria(serializedCriteria({ dateRangeStart: "not-a-date" }), 0);
 
     assert.deepStrictEqual(criteria.dateRange, { startMs: undefined, endMs: undefined });
     assert.strictEqual(errors.length, 1);
@@ -76,16 +59,7 @@ suite("interactiveViewCriteria / toFilterCriteria (#166)", () => {
   });
 
   test("compiles a valid ignore pattern case-insensitively", () => {
-    const { criteria, errors } = toFilterCriteria(
-      {
-        severities: [],
-        dateRangeStart: "",
-        dateRangeEnd: "",
-        ignorePattern: "heartbeat",
-        collapseEnabled: false,
-      },
-      0
-    );
+    const { criteria, errors } = toFilterCriteria(serializedCriteria({ ignorePattern: "heartbeat" }), 0);
 
     assert.ok(criteria.ignorePattern instanceof RegExp);
     assert.strictEqual(criteria.ignorePattern!.test("HEARTBEAT"), true);
@@ -93,16 +67,7 @@ suite("interactiveViewCriteria / toFilterCriteria (#166)", () => {
   });
 
   test("drops an invalid regex and reports an error", () => {
-    const { criteria, errors } = toFilterCriteria(
-      {
-        severities: [],
-        dateRangeStart: "",
-        dateRangeEnd: "",
-        ignorePattern: "(unterminated",
-        collapseEnabled: false,
-      },
-      0
-    );
+    const { criteria, errors } = toFilterCriteria(serializedCriteria({ ignorePattern: "(unterminated" }), 0);
 
     assert.strictEqual(criteria.ignorePattern, undefined);
     assert.strictEqual(errors.length, 1);
