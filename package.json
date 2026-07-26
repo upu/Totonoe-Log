@@ -88,9 +88,26 @@
       {
         "command": "totonoeLog.showInteractiveViewAlpha",
         "title": "Totonoe Log: Show Interactive View (Alpha)"
+      },
+      {
+        "command": "totonoeLog.goToSourceLineFromInteractiveView",
+        "title": "Totonoe Log: Go to Source Line"
       }
     ],
     "menus": {
+      "commandPalette": [
+        {
+          "command": "totonoeLog.goToSourceLineFromInteractiveView",
+          "when": "false"
+        }
+      ],
+      "webview/context": [
+        {
+          "command": "totonoeLog.goToSourceLineFromInteractiveView",
+          "when": "webviewSection == totonoeLogInteractiveLine",
+          "group": "totonoeLog@1"
+        }
+      ],
       "explorer/context": [
         {
           "command": "totonoeLog.mergeSelectedFiles",

@@ -130,11 +130,24 @@ const PLAIN_ROW_PREFIX = " ".repeat(COLLAPSED_PREFIX.length);
 let sourceFilePaths: readonly string[] = [];
 
 /**
- * 元ログの行に対応づいた1行を、クリックでジャンプできる要素として作る
- * （issue #179）。ジャンプ先の解決は拡張機能本体側に任せ、ここは押された行の
- * `lineSource` をそのまま送り返すだけにする。ホバーでは、マージビューの
+ * 行の右クリックメニュー（issue #191）を出すための `data-vscode-context` の
+ * `webviewSection` 値。`package.json` の `contributes.menus."webview/context"`
+ * の `when` 句、および `src/interactiveViewContext.ts` と一致させる。
+ */
+const LINE_CONTEXT_SECTION = "totonoeLogInteractiveLine";
+
+/**
+ * 元ログの行に対応づいた1行を、そこへジャンプできる要素として作る
+ * （issue #179）。ジャンプ先の解決は拡張機能本体側に任せ、ここは選ばれた行の
+ * `lineSource` を送り返すだけにする。ホバーでは、マージビューの
  * HoverProvider（issue #150）と同じくフルパスを見せる——ファイル名列だけでは
  * 別フォルダの同名ファイルを見分けられないため。
+ *
+ * ジャンプの操作はダブルクリックと右クリックメニューの2つ（issue #191）。
+ * シングルクリックはログ本文の選択・スクロールの起点として日常的に使われる
+ * ため、ジャンプのような画面が切り替わる操作を割り当てると誤操作になりやすい。
+ * 右クリックメニューは `data-vscode-context` 経由で VSCode 側のメニューに
+ * 項目を足す仕組みなので、Webview 内に独自メニューを作らなくてよい。
  *
  * ログ本文は非信頼な外部データのため、必ず `textContent` で設定する。
  */
@@ -147,16 +160,20 @@ function createSourceLineElement(text: string, lineSource: LineSource): HTMLSpan
   if (sourceFilePath !== undefined) {
     row.title = `${sourceFilePath}:${lineSource.line}`;
   }
-  row.addEventListener("click", () => {
+  row.dataset.vscodeContext = JSON.stringify({
+    webviewSection: LINE_CONTEXT_SECTION,
+    lineSource,
+  });
+  row.addEventListener("dblclick", () => {
     vscodeApi.postMessage({ type: "revealSourceLine", lineSource });
   });
   return row;
 }
 
 /**
- * 1行を、元ログの行に対応づいていればクリック可能な要素として、そうでなければ
+ * 1行を、元ログの行に対応づいていればジャンプできる要素として、そうでなければ
  * ただのテキストとして追加する。ギャップマーカー等の生成行には対応する元行が
- * 無いため、クリックもホバーもできない見た目にする（`Go to Source Line` が
+ * 無いため、ホバーもジャンプもできない見た目にする（`Go to Source Line` が
  * 「対応する元ログの行がありません」と案内するのと扱いを揃える）。
  */
 function appendLine(parent: Node, text: string, lineSource: LineSource | undefined): void {
@@ -176,9 +193,10 @@ function appendLine(parent: Node, text: string, lineSource: LineSource | undefin
  * 対象にする。専用の「折りたたむ」行を別途挟むと、代表エントリの内容が
  * 展開後の本文と二重に見えて読みにくいという指摘（#172 PRレビュー）への対応。
  *
- * 見出し行と展開後の先頭行は展開/復元のクリック対象なので、元ファイルへの
- * ジャンプ（issue #179）は展開後の2行目以降にだけ付ける——1つの行に2つの
- * クリック動作を持たせると、どちらが起きるか予測できなくなるため。
+ * 見出し行と展開後の先頭行はシングルクリックでの展開/復元が主役なので、
+ * 元ファイルへのジャンプ（issue #179、#191）は展開後の2行目以降にだけ付ける
+ * ——ダブルクリックすると展開/復元が2回起きてしまい、ジャンプと同時に成立
+ * させられないため。
  */
 function appendGroupItem(item: Extract<DisplayItem, { kind: "group" }>): void {
   const [firstLine, ...restLines] = item.lines;

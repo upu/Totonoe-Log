@@ -110,6 +110,12 @@ export function activate(context: vscode.ExtensionContext): void {
     vscode.commands.registerCommand(
       "totonoeLog.showInteractiveViewAlpha",
       createShowInteractiveViewAlphaCommand(interactiveViewController)
+    ),
+    // Interactive View の行の右クリックメニュー専用（issue #191）。メニューから
+    // 渡される `data-vscode-context` の内容を引数に受け取る。
+    vscode.commands.registerCommand(
+      "totonoeLog.goToSourceLineFromInteractiveView",
+      (context: unknown) => interactiveViewController.revealSourceLineFromContext(context)
     )
   );
 }

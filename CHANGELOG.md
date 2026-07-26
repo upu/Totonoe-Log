@@ -33,12 +33,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   regular read-only virtual document, reusing the existing normalized/merged
   view infrastructure (search, copy, `Go to Source Line`, and `Compare Logs`
   all work on it as-is; issue #175, the next alpha step in #165).
-- `Totonoe Log: Show Interactive View (Alpha)` now lets you click a log line to
-  jump to that line in the original file, and hovering a line shows the source
-  file's full path and line number (issue #179, the next alpha step in #165).
-  This reuses the same jump behavior as `Go to Source Line`. Generated lines
-  such as gap markers have no original line and stay non-clickable, and a
-  collapsed group's header line keeps its expand/restore click.
+- `Totonoe Log: Show Interactive View (Alpha)` can now jump from a log line to
+  that line in the original file: double-click the line, or right-click it and
+  pick "Totonoe Log: Go to Source Line". Hovering a line shows the source
+  file's full path and line number (issues #179 and #191, the next alpha step
+  in #165). This reuses the same jump behavior as `Go to Source Line`. A single
+  click never jumps, so selecting text stays safe. Generated lines such as gap
+  markers have no original line and are not jump targets, and a collapsed
+  group's header line keeps its expand/restore click.
 - `Totonoe Log: Show Interactive View (Alpha)` now caps how many lines it
   renders at once (`totonoeLog.interactiveView.maxDisplayLines`, default
   `20000`, `0` disables the cap). Beyond the cap it renders only the leading

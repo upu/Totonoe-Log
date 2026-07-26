@@ -62,7 +62,7 @@ export type WebviewToExtensionMessage =
   | { readonly type: "filterChanged"; readonly criteria: SerializedFilterCriteria }
   | { readonly type: "addFiles" }
   | { readonly type: "exportVirtualDocument" }
-  /** 行クリックで、対応する元ログファイルの行を開く要求（issue #179）。 */
+  /** 行のダブルクリックで、対応する元ログファイルの行を開く要求（issue #179、#191）。 */
   | { readonly type: "revealSourceLine"; readonly lineSource: LineSource };
 
 /**
@@ -87,7 +87,7 @@ export interface ExtensionToWebviewMessage {
   readonly sourceFilePaths: readonly string[];
   /**
    * `text` の各行（0始まり）に対応する元ログ上の位置（issue #179）。
-   * ギャップマーカー等の生成行は `undefined`（クリック不可・ホバーなし）。
+   * ギャップマーカー等の生成行は `undefined`（ジャンプ対象外・ホバーなし）。
    * `items` を描画する場合は各 `InteractiveDisplayItem` 側が持つ。
    */
   readonly lineSources?: readonly (LineSource | undefined)[];

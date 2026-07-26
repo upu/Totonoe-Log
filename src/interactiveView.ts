@@ -32,6 +32,7 @@ import { readMaxDisplayLines } from "./interactiveViewSettings";
 import { readConfiguredTimestampFormats } from "./timestampFormatSettings";
 import { toFilterCriteria } from "./interactiveViewCriteria";
 import { revealSourceLine } from "./revealSourceLine";
+import { parseWebviewLineSource } from "./interactiveViewContext";
 import { NormalizedViewContentProvider, openVirtualNormalizedDocument } from "./normalizedView";
 import { MergedViewContentProvider } from "./mergedView";
 import type {
@@ -185,7 +186,20 @@ export class InteractiveViewPanelController implements vscode.Disposable {
   }
 
   /**
-   * Webviewでクリックされた行から、対応する元ログファイルの行へジャンプする
+   * 行の右クリックメニュー（issue #191）から呼ばれる。`webview/context` の
+   * コマンドには `data-vscode-context` の内容がそのまま渡るため、非信頼な値
+   * として検証してからジャンプする。
+   */
+  async revealSourceLineFromContext(context: unknown): Promise<void> {
+    const lineSource = parseWebviewLineSource(context);
+    if (!lineSource) {
+      return;
+    }
+    await this.revealClickedSourceLine(lineSource);
+  }
+
+  /**
+   * Webviewで選ばれた行から、対応する元ログファイルの行へジャンプする
    * （issue #179）。`fileIndex` は `loadedUris`（読み込み順）の位置なので、
    * ここでURIに解決してから `Go to Source Line` と共通のジャンプ処理へ渡す。
    */
@@ -551,9 +565,9 @@ export class InteractiveViewPanelController implements vscode.Disposable {
   .collapse-group-header:hover {
     background-color: var(--vscode-list-hoverBackground);
   }
-  .source-line {
-    cursor: pointer;
-  }
+  /* ジャンプはダブルクリック/右クリックメニュー（issue #191）なので、
+     シングルクリックを促す cursor: pointer は付けず、行が対象であることは
+     ホバーの背景色だけで示す。 */
   .source-line:hover {
     background-color: var(--vscode-list-hoverBackground);
   }
