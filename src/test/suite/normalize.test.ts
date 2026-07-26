@@ -36,6 +36,7 @@ import {
   buildInteractiveCollapsedLines,
   buildInteractiveExportText,
   buildInteractiveMergedExportText,
+  limitInteractiveDisplay,
 } from "../../normalize";
 import * as maskForCompare from "../../normalize/maskForCompare";
 
@@ -2996,5 +2997,97 @@ suite("normalize / buildInteractiveMergedExportText (#175)", () => {
     if (!result.ok) {
       assert.strictEqual(result.reason, "timeout");
     }
+  });
+});
+
+suite("normalize / limitInteractiveDisplay (#178)", () => {
+  test("returns the content unchanged when the line count is within the limit", () => {
+    const content = { text: ["a", "b", "c"].join("\n") };
+
+    const limited = limitInteractiveDisplay(content, 3);
+
+    assert.strictEqual(limited.text, content.text);
+    assert.strictEqual(limited.displayedLineCount, undefined);
+  });
+
+  test("keeps only the leading lines of text when the limit is exceeded", () => {
+    const content = { text: ["a", "b", "c", "d"].join("\n") };
+
+    const limited = limitInteractiveDisplay(content, 2);
+
+    assert.strictEqual(limited.text, ["a", "b"].join("\n"));
+    assert.strictEqual(limited.displayedLineCount, 2);
+  });
+
+  test("treats a non-positive limit as unlimited", () => {
+    const content = { text: ["a", "b", "c"].join("\n") };
+
+    const limited = limitInteractiveDisplay(content, 0);
+
+    assert.strictEqual(limited.text, content.text);
+    assert.strictEqual(limited.displayedLineCount, undefined);
+  });
+
+  test("counts a collapsed group by its expanded line count", () => {
+    const content = {
+      text: "",
+      items: [
+        { kind: "group", headerText: "g1", lines: ["l1", "l2", "l3"] },
+        { kind: "line", text: "l4" },
+      ] as const,
+    };
+
+    const limited = limitInteractiveDisplay(content, 3);
+
+    assert.deepStrictEqual(limited.items, [content.items[0]]);
+    assert.strictEqual(limited.displayedLineCount, 3);
+  });
+
+  test("keeps whole items and stops before the one that would exceed the limit", () => {
+    const content = {
+      text: "",
+      items: [
+        { kind: "line", text: "l1" },
+        { kind: "group", headerText: "g1", lines: ["l2", "l3", "l4"] },
+        { kind: "line", text: "l5" },
+      ] as const,
+    };
+
+    // 1行目(1) + グループ(3) = 4 は上限3を超えるため、グループ手前で止まる。
+    const limited = limitInteractiveDisplay(content, 3);
+
+    assert.deepStrictEqual(limited.items, [content.items[0]]);
+    assert.strictEqual(limited.displayedLineCount, 1);
+  });
+
+  test("truncates a single group's lines when the group alone exceeds the limit", () => {
+    const content = {
+      text: "",
+      items: [{ kind: "group", headerText: "g1", lines: ["l1", "l2", "l3"] }] as const,
+    };
+
+    const limited = limitInteractiveDisplay(content, 2);
+
+    assert.deepStrictEqual(limited.items, [
+      { kind: "group", headerText: "g1", lines: ["l1", "l2"] },
+    ]);
+    assert.strictEqual(limited.displayedLineCount, 2);
+  });
+
+  test("truncates text and items together so both display paths respect the limit", () => {
+    const content = {
+      text: ["l1", "l2", "l3"].join("\n"),
+      items: [
+        { kind: "line", text: "l1" },
+        { kind: "line", text: "l2" },
+        { kind: "line", text: "l3" },
+      ] as const,
+    };
+
+    const limited = limitInteractiveDisplay(content, 2);
+
+    assert.strictEqual(limited.text, ["l1", "l2"].join("\n"));
+    assert.deepStrictEqual(limited.items, [content.items[0], content.items[1]]);
+    assert.strictEqual(limited.displayedLineCount, 2);
   });
 });

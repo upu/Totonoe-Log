@@ -69,7 +69,7 @@ Logs from servers in different timezones, or from a host whose clock is off, can
 
 ## Interactive View (Alpha)
 
-`Totonoe Log: Show Interactive View (Alpha)` opens the normalized log in a Webview panel where you can toggle severity, date-range, and ignore-pattern filters live, without round-tripping through Quick Pick dialogs. A "+ Add Files..." button lets you load more log files into the same panel; once two or more files are loaded, the view switches to a merged, filename/kind-columned display. This is an experimental first step toward a Webview-based interactive view (tracked in issue #165/#166/#168); its behavior may change, and the read-only virtual-document views above remain the primary, stable way to work with logs.
+`Totonoe Log: Show Interactive View (Alpha)` opens the normalized log in a Webview panel where you can toggle severity, date-range, and ignore-pattern filters live, without round-tripping through Quick Pick dialogs. A "+ Add Files..." button lets you load more log files into the same panel; once two or more files are loaded, the view switches to a merged, filename/kind-columned display. Very large results are rendered only up to `totonoeLog.interactiveView.maxDisplayLines` lines, with a notice pointing at narrowing the filters or opening the whole thing with the panel's "Export as Virtual Document" button. This is an experimental first step toward a Webview-based interactive view (tracked in issue #165/#166/#168); its behavior may change, and the read-only virtual-document views above remain the primary, stable way to work with logs.
 
 ## Compare two logs
 
@@ -178,6 +178,7 @@ All settings live under the `totonoeLog` namespace.
 | --- | --- | --- | --- |
 | `totonoeLog.gap.thresholdSeconds` | number | `30` | Insert a "XX seconds of silence" separator line in `Show Normalized View` and the merged view (`Merge Selected Files` and their filtered variants) when the timestamp gap between consecutive entries is at least this many seconds. `0` disables it. |
 | `totonoeLog.collapse.threshold` | number | `3` | How many consecutive repeats it takes before `Show Collapsed View` folds them into one line. |
+| `totonoeLog.interactiveView.maxDisplayLines` | number | `20000` | Maximum number of lines `Show Interactive View (Alpha)` renders at once. Beyond this, only the leading lines are rendered and a notice suggests narrowing the filters or opening the whole log with "Export as Virtual Document". `0` disables the cap. |
 | `totonoeLog.copyMasked.maskTimestamp` | boolean | `true` | Mask timestamps when running `Copy Masked Text`. |
 | `totonoeLog.copyMasked.maskHost` | boolean | `true` | Mask IPv4/IPv6 addresses — and the hostname token of lines recognized as syslog format (not arbitrary hostnames in general) — when running `Copy Masked Text`. |
 | `totonoeLog.timezone.sourceOffset` | string | `"UTC"` | UTC offset (e.g. `+09:00`) to assume for timestamps without explicit timezone information. Does not affect timestamps with an explicit offset or `Z`, or epoch formats. See [Timezone normalization](#timezone-normalization). |

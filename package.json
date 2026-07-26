@@ -136,6 +136,12 @@
           "minimum": 0,
           "description": "Totonoe Log: Show Normalized View とその絞り込み系コマンドで、連続するエントリのタイムスタンプ差がこの秒数以上のときに「XX秒の空白」の区切り行を挿入する。0 を指定すると無効化する。"
         },
+        "totonoeLog.interactiveView.maxDisplayLines": {
+          "type": "number",
+          "default": 20000,
+          "minimum": 0,
+          "description": "Totonoe Log: Show Interactive View (Alpha) が一度に描画する行数の上限。超えた場合は先頭のみを表示し、警告と全体を開く手段（Export as Virtual Document）を案内する。0 を指定すると無効化する。"
+        },
         "totonoeLog.timezone.display": {
           "type": "string",
           "default": "UTC",

@@ -29,6 +29,7 @@ const ignorePatternInput = document.getElementById("ignore-pattern") as HTMLInpu
 const collapseToggle = document.getElementById("collapse-toggle") as HTMLInputElement;
 const statusElement = document.getElementById("status") as HTMLDivElement;
 const warningElement = document.getElementById("warning") as HTMLDivElement;
+const displayLimitElement = document.getElementById("display-limit") as HTMLDivElement;
 const logOutputElement = document.getElementById("log-output") as HTMLPreElement;
 
 function debounce<Args extends unknown[]>(
@@ -191,6 +192,21 @@ function renderItems(items: readonly DisplayItem[]): void {
   }
 }
 
+/**
+ * 表示行数の上限で切り詰めた旨の案内（issue #178）。エラーではなく縮退した
+ * だけなので、`#warning`（無視パターンの失敗など）とは別の行に出す。全体を
+ * 見る手段として、既にUIにある「Export as Virtual Document」へ誘導する。
+ */
+function renderDisplayLimit(displayLimit: ExtensionToWebviewMessage["displayLimit"]): void {
+  if (!displayLimit) {
+    displayLimitElement.textContent = "";
+    return;
+  }
+  displayLimitElement.textContent =
+    `表示上限の ${displayLimit.maxDisplayLines} 行を超えたため、先頭 ${displayLimit.displayedLineCount} 行のみ表示しています。` +
+    "絞り込むと全体を表示できます。全体をそのまま扱うには「Export as Virtual Document」で開いてください。";
+}
+
 function renderState(state: ExtensionToWebviewMessage): void {
   renderLoadedFiles(state.loadedFileNames);
   renderSeverities(state.distinctSeverities, state.criteria.severities);
@@ -202,6 +218,7 @@ function renderState(state: ExtensionToWebviewMessage): void {
 
   statusElement.textContent = `${state.visibleLineCount} / ${state.totalLineCount} 行を表示`;
   warningElement.textContent = state.warning ?? "";
+  renderDisplayLimit(state.displayLimit);
   if (state.items) {
     renderItems(state.items);
   } else {

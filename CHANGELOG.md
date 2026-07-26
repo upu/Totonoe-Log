@@ -33,6 +33,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   regular read-only virtual document, reusing the existing normalized/merged
   view infrastructure (search, copy, `Go to Source Line`, and `Compare Logs`
   all work on it as-is; issue #175, the next alpha step in #165).
+- `Totonoe Log: Show Interactive View (Alpha)` now caps how many lines it
+  renders at once (`totonoeLog.interactiveView.maxDisplayLines`, default
+  `20000`, `0` disables the cap). Beyond the cap it renders only the leading
+  lines and shows a notice pointing at narrowing the filters or opening the
+  whole thing with "Export as Virtual Document", instead of bogging the panel
+  down with a huge DOM (issue #178).
 
 ## [0.7.0] - 2026-07-23
 
