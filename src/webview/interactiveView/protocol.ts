@@ -63,7 +63,13 @@ export type WebviewToExtensionMessage =
   | { readonly type: "addFiles" }
   | { readonly type: "exportVirtualDocument" }
   /** 行のダブルクリックで、対応する元ログファイルの行を開く要求（issue #179、#191）。 */
-  | { readonly type: "revealSourceLine"; readonly lineSource: LineSource };
+  | { readonly type: "revealSourceLine"; readonly lineSource: LineSource }
+  /**
+   * マスクしてクリップボードへコピーする要求（issue #180）。マスク処理は
+   * `node:net` を使うため、Webview側では実行できず本文をそのまま送る。
+   * `text` は選択範囲、または選択が無ければ画面に見えている本文全体。
+   */
+  | { readonly type: "copyMasked"; readonly text: string };
 
 /**
  * 拡張機能本体 → Webview のメッセージ。`criteria` は絞り込み条件の解析結果
