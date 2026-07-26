@@ -121,7 +121,7 @@
         },
         {
           "command": "totonoeLog.showInteractiveViewAlpha",
-          "when": "listMultiSelection",
+          "when": "!explorerResourceIsFolder",
           "group": "totonoeLog@3"
         }
       ],
