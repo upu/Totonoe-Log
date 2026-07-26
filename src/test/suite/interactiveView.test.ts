@@ -27,6 +27,7 @@ function serializedCriteria(
     dateRangeStart: "",
     dateRangeEnd: "",
     ignorePattern: "",
+    matchPattern: "",
     collapseEnabled: false,
     mask: { enabled: false, maskTimestamp: true, maskHost: true },
     visibleFiles: [],
@@ -83,6 +84,30 @@ suite("interactiveViewCriteria / toFilterCriteria (#166)", () => {
     assert.strictEqual(criteria.ignorePattern, undefined);
     assert.strictEqual(errors.length, 1);
     assert.match(errors[0], /正規表現として解釈できませんでした/);
+  });
+
+  test("omits matchPattern when the input is blank (#182)", () => {
+    const { criteria, errors } = toFilterCriteria(serializedCriteria({ matchPattern: "  " }), 0);
+
+    assert.strictEqual(criteria.matchPattern, undefined);
+    assert.deepStrictEqual(errors, []);
+  });
+
+  test("compiles a valid match pattern case-insensitively (#182)", () => {
+    const { criteria, errors } = toFilterCriteria(serializedCriteria({ matchPattern: "timeout" }), 0);
+
+    assert.ok(criteria.matchPattern instanceof RegExp);
+    assert.strictEqual(criteria.matchPattern!.test("TIMEOUT"), true);
+    assert.deepStrictEqual(errors, []);
+  });
+
+  test("drops an invalid match pattern and reports an error naming the field (#182)", () => {
+    const { criteria, errors } = toFilterCriteria(serializedCriteria({ matchPattern: "(unterminated" }), 0);
+
+    assert.strictEqual(criteria.matchPattern, undefined);
+    assert.strictEqual(errors.length, 1);
+    // 入力欄が2つになるため、どちらの欄が不正なのかがメッセージから分かること。
+    assert.match(errors[0], /一致パターン/);
   });
 });
 

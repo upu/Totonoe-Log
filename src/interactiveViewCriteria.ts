@@ -77,9 +77,10 @@ export function toFilterCriteria(
   const severities = new Set(serialized.severities);
 
   const dateRange = parseDateRange(serialized, displayTimezone, errors);
-  const ignorePattern = compileIgnorePattern(serialized.ignorePattern, errors);
+  const matchPattern = compilePattern(serialized.matchPattern, "一致パターン", errors);
+  const ignorePattern = compilePattern(serialized.ignorePattern, "無視パターン", errors);
 
-  return { criteria: { severities, dateRange, ignorePattern }, errors };
+  return { criteria: { severities, dateRange, matchPattern, ignorePattern }, errors };
 }
 
 function parseDateRange(
@@ -112,7 +113,16 @@ function parseDateRange(
   return { startMs, endMs };
 }
 
-function compileIgnorePattern(input: string, errors: string[]): RegExp | undefined {
+/**
+ * パターン入力欄1つ分を `RegExp` にコンパイルする。一致パターンと無視パターンの
+ * 2欄で解釈の規則を揃えるため（issue #182）、フラグも含めて共通の実装にする。
+ * `"i"` で大文字小文字を無視し、`"m"` で `^` / `$` が複数行エントリの各行に
+ * 当たるようにする。
+ *
+ * `label` はエラー文言に埋め込む欄の名前。入力欄が2つあるため、どちらの欄が
+ * 不正なのかがユーザーに分かるようにする。
+ */
+function compilePattern(input: string, label: string, errors: string[]): RegExp | undefined {
   const trimmedInput = input.trim();
   if (trimmedInput === "") {
     return undefined;
@@ -122,7 +132,7 @@ function compileIgnorePattern(input: string, errors: string[]): RegExp | undefin
     return new RegExp(trimmedInput, "im");
   } catch (error) {
     const reason = error instanceof Error ? error.message : String(error);
-    errors.push(`正規表現として解釈できませんでした: "${trimmedInput}"（${reason}）`);
+    errors.push(`${label}を正規表現として解釈できませんでした: "${trimmedInput}"（${reason}）`);
     return undefined;
   }
 }

@@ -16,6 +16,7 @@ import {
   parseDateBoundary,
   filterEntriesByDateRange,
   filterEntriesByIgnorePattern,
+  filterEntriesByMatchPattern,
   filterEntriesByCriteria,
   filterMergedEntriesByCriteria,
   filterMergedEntriesByFileIndex,
@@ -980,6 +981,132 @@ suite("normalize / filterEntriesByIgnorePattern", () => {
   });
 });
 
+suite("normalize / filterEntriesByMatchPattern (#182)", () => {
+  /** テストの意図（マッチ結果の検証）を明確にするための、成功時のみ通すヘルパー。 */
+  async function filterOk(
+    entries: Parameters<typeof filterEntriesByMatchPattern>[0],
+    pattern: RegExp
+  ) {
+    const result = await filterEntriesByMatchPattern(entries, pattern);
+    assert.strictEqual(result.ok, true);
+    if (!result.ok) {
+      throw new Error("unreachable");
+    }
+    return result.entries;
+  }
+
+  test("keeps only entries whose message matches a metacharacter-free pattern (substring match)", async () => {
+    const text = [
+      "2024-01-02T03:04:05Z INFO heartbeat ok",
+      "2024-01-02T03:04:06Z ERROR boom",
+    ].join("\n");
+    const entries = parseLog(text);
+
+    const filtered = await filterOk(entries, /heartbeat/i);
+
+    assert.strictEqual(filtered.length, 1);
+    assert.strictEqual(filtered[0].message, "heartbeat ok");
+  });
+
+  test("keeps only entries matching a regular expression pattern", async () => {
+    const text = [
+      "2024-01-02T03:04:05Z ERROR connection refused",
+      "2024-01-02T03:04:06Z ERROR boom",
+    ].join("\n");
+    const entries = parseLog(text);
+
+    const filtered = await filterOk(entries, /^connection\b/im);
+
+    assert.strictEqual(filtered.length, 1);
+    assert.strictEqual(filtered[0].message, "connection refused");
+  });
+
+  test("keeps a multi-line entry (e.g. stack trace) if any of its continuation lines match", async () => {
+    const text = [
+      "2024-01-02T03:04:05Z ERROR boom",
+      "    at com.example.Foo.bar(Foo.java:42)",
+      "2024-01-02T03:04:06Z INFO unrelated",
+    ].join("\n");
+    const entries = parseLog(text);
+
+    const filtered = await filterOk(entries, /com\.example/);
+
+    assert.strictEqual(filtered.length, 1);
+    assert.strictEqual(filtered[0].message.startsWith("boom"), true);
+  });
+
+  test("matches the message only, not the timestamp or severity (#182 の設計判断)", async () => {
+    // 一致パターンは無視パターン（entry.raw が対象）とあえて非対称にしている。
+    // タイムスタンプ・セベリティは日付範囲欄とセベリティのチェックボックスで
+    // 既に絞れるため、ここで当たるとノイズになる。
+    const text = [
+      "2024-01-02T03:04:05Z ERROR boom",
+      "2024-01-02T03:04:06Z INFO ERROR-free startup",
+    ].join("\n");
+    const entries = parseLog(text);
+
+    const bySeverityWord = await filterOk(entries, /ERROR/i);
+
+    assert.strictEqual(bySeverityWord.length, 1);
+    assert.strictEqual(bySeverityWord[0].message, "ERROR-free startup");
+
+    const byTimestamp = await filterOk(entries, /2024-01-02/);
+
+    assert.strictEqual(byTimestamp.length, 0);
+  });
+
+  test("drops every entry when nothing matches", async () => {
+    const text = "2024-01-02T03:04:05Z INFO hello";
+    const entries = parseLog(text);
+
+    const filtered = await filterOk(entries, /nope/);
+
+    assert.strictEqual(filtered.length, 0);
+  });
+
+  test("keeps every entry independently even when the pattern has a global flag", async () => {
+    // g フラグ付きの RegExp#test は呼び出しのたびに lastIndex を進めるため、
+    // リセットしないと1件目のマッチが2件目以降の判定を狂わせてしまう。
+    const text = [
+      "2024-01-02T03:04:05Z INFO heartbeat one",
+      "2024-01-02T03:04:06Z ERROR boom",
+      "2024-01-02T03:04:07Z INFO heartbeat two",
+    ].join("\n");
+    const entries = parseLog(text);
+
+    const filtered = await filterOk(entries, /heartbeat/g);
+
+    assert.strictEqual(filtered.length, 2);
+    assert.deepStrictEqual(
+      filtered.map((entry) => entry.message),
+      ["heartbeat one", "heartbeat two"]
+    );
+  });
+
+  test("returns an empty result without spawning a worker when there are no entries", async () => {
+    const filtered = await filterOk([], /anything/);
+
+    assert.deepStrictEqual(filtered, []);
+  });
+
+  test("terminates and reports a timeout instead of hanging forever when matching doesn't finish in time", async function () {
+    this.timeout(5000);
+
+    // 無視パターン側と同じ理由で、破局的バックトラッキングを起こす正規表現は
+    // literal で置かず、安全なパターンに極端に短い timeoutMs を与えることで
+    // 打ち切りのコードパスを決定的に検証する（filterByIgnorePattern の同名
+    // テストのコメント参照）。
+    const entries = parseLog("2024-01-02T03:04:05Z INFO hello");
+
+    const result = await filterEntriesByMatchPattern(entries, /hello/, { timeoutMs: 1 });
+
+    assert.strictEqual(result.ok, false);
+    if (!result.ok) {
+      assert.strictEqual(result.reason, "timeout");
+    }
+  });
+});
+
 suite("normalize / filterEntriesByCriteria", () => {
   /** テストの意図（絞り込み結果の検証）を明確にするための、成功時のみ通すヘルパー。 */
   async function filterOk(
@@ -1064,6 +1191,47 @@ suite("normalize / filterEntriesByCriteria", () => {
       entries,
       { ignorePattern: /hello/ },
       { ignorePatternTimeoutMs: 1 }
+    );
+
+    assert.strictEqual(result.ok, false);
+    if (!result.ok) {
+      assert.strictEqual(result.reason, "timeout");
+    }
+  });
+
+  test("applies only the match pattern filter when only a match pattern is specified (#182)", async () => {
+    const entries = parseLog(sampleText);
+
+    const filtered = await filterOk(entries, { matchPattern: /in range/ });
+
+    assert.deepStrictEqual(
+      filtered.map((entry) => entry.message),
+      ["in range but wrong severity", "in range and matching"]
+    );
+  });
+
+  test("combines the match pattern with the other criteria using AND semantics (#182)", async () => {
+    const entries = parseLog(sampleText);
+
+    const filtered = await filterOk(entries, {
+      severities: new Set(["ERROR"]),
+      matchPattern: /range|heartbeat/,
+      ignorePattern: /heartbeat/,
+    });
+
+    assert.deepStrictEqual(
+      filtered.map((entry) => entry.message),
+      ["before range", "in range and matching", "after range"]
+    );
+  });
+
+  test("propagates a timeout failure from the match pattern stage (#182)", async () => {
+    const entries = parseLog("2024-01-02T03:04:05Z INFO hello");
+
+    const result = await filterEntriesByCriteria(
+      entries,
+      { matchPattern: /hello/ },
+      { matchPatternTimeoutMs: 1 }
     );
 
     assert.strictEqual(result.ok, false);

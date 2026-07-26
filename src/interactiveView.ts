@@ -81,6 +81,7 @@ function createDefaultSerializedCriteria(
     severities: [...distinctSeverities],
     dateRangeStart: "",
     dateRangeEnd: "",
+    matchPattern: "",
     ignorePattern: "",
     collapseEnabled: true,
     mask: {
@@ -459,13 +460,20 @@ export class InteractiveViewPanelController implements vscode.Disposable {
       return;
     }
 
-    const fallbackCriteria: FilterCriteria = { ...criteria, ignorePattern: undefined };
+    // 失敗した結果はどちらのパターン段で起きたかを区別しないため、
+    // フォールバックでは両方を落とす（issue #182）。片方だけ残して再実行すると、
+    // 原因がそちらだった場合に同じ失敗を繰り返すだけになる。
+    const fallbackCriteria: FilterCriteria = {
+      ...criteria,
+      matchPattern: undefined,
+      ignorePattern: undefined,
+    };
     const fallbackPayload = await this.computePayload(fallbackCriteria, formatOptions);
     if (fallbackPayload.ok) {
       const reason =
         payload.reason === "timeout"
-          ? "入力されたパターンの処理に時間がかかりすぎたため、無視パターンを適用せずに表示しています。より単純なパターンをお試しください。"
-          : "無視パターンの評価中にエラーが発生したため、無視パターンを適用せずに表示しています。";
+          ? "入力されたパターンの処理に時間がかかりすぎたため、一致パターンと無視パターンを適用せずに表示しています。より単純なパターンをお試しください。"
+          : "パターンの評価中にエラーが発生したため、一致パターンと無視パターンを適用せずに表示しています。";
       await this.sendState(fallbackPayload, [...errors, reason], collapsibleSupported);
     }
   }
@@ -583,22 +591,27 @@ export class InteractiveViewPanelController implements vscode.Disposable {
       return result.formatted;
     }
 
-    const fallbackCriteria: FilterCriteria = { ...criteria, ignorePattern: undefined };
+    // 表示側（`refresh`）と同じ理由で、フォールバックでは両方のパターンを落とす。
+    const fallbackCriteria: FilterCriteria = {
+      ...criteria,
+      matchPattern: undefined,
+      ignorePattern: undefined,
+    };
     const fallbackResult =
       this.isSingleFile()
         ? await buildInteractiveExportText(this.singleEntries, fallbackCriteria, options)
         : await buildInteractiveMergedExportText(this.mergedEntries, fallbackCriteria, options);
     if (!fallbackResult.ok) {
       vscode.window.showWarningMessage(
-        "Totonoe Log: 書き出しに失敗しました。無視パターンを見直してから再度お試しください。"
+        "Totonoe Log: 書き出しに失敗しました。一致パターン・無視パターンを見直してから再度お試しください。"
       );
       return undefined;
     }
 
     const reason =
       result.reason === "timeout"
-        ? "入力されたパターンの処理に時間がかかりすぎたため、無視パターンを適用せずに書き出しました。"
-        : "無視パターンの評価中にエラーが発生したため、無視パターンを適用せずに書き出しました。";
+        ? "入力されたパターンの処理に時間がかかりすぎたため、一致パターンと無視パターンを適用せずに書き出しました。"
+        : "パターンの評価中にエラーが発生したため、一致パターンと無視パターンを適用せずに書き出しました。";
     vscode.window.showWarningMessage(`Totonoe Log: ${reason}`);
     return fallbackResult.formatted;
   }
@@ -801,6 +814,7 @@ export class InteractiveViewPanelController implements vscode.Disposable {
     <div id="severities"></div>
     <label>開始日時 <input type="text" id="date-start" placeholder="YYYY-MM-DD"></label>
     <label>終了日時 <input type="text" id="date-end" placeholder="YYYY-MM-DD"></label>
+    <label>一致パターン <input type="text" id="match-pattern" placeholder="正規表現"></label>
     <label>無視パターン <input type="text" id="ignore-pattern" placeholder="正規表現"></label>
     <label><input type="checkbox" id="collapse-toggle" checked>繰り返しを折りたたむ</label>
   </div>

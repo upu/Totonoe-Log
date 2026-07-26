@@ -64,6 +64,13 @@ export interface SerializedFilterCriteria {
   readonly dateRangeStart: string;
   /** 日付範囲の終了境界の入力文字列。空文字列は「上限なし」。 */
   readonly dateRangeEnd: string;
+  /**
+   * 一致パターンの入力文字列（正規表現）。空文字列は「パターンなし」。
+   * 指定するとマッチしたエントリ**だけ**が残る、無視パターンの逆の絞り込み
+   * （issue #182）。Webview では Ctrl+F が使えないため、ハイライト型の検索では
+   * なく「一致行のみ表示する」フィルタとして提供する。
+   */
+  readonly matchPattern: string;
   /** 無視パターンの入力文字列（正規表現）。空文字列は「パターンなし」。 */
   readonly ignorePattern: string;
   /**

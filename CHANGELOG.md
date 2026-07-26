@@ -81,6 +81,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   remaining file cannot be removed (with none loaded, "+ Add Files..." would
   have nothing to add to) — uncheck it instead to hide it temporarily. The
   panel's tab title now also follows along as files are added or removed.
+- `Totonoe Log: Show Interactive View (Alpha)` now has a "match pattern"
+  input next to the existing "ignore pattern" one: entries whose message
+  matches are the only ones kept, which is exactly the inverse of the
+  ignore pattern (issue #182, the next alpha step in #165). Since a Webview
+  cannot use VS Code's Ctrl+F, this is offered as a filter that shows only
+  matching lines rather than as a highlight-and-jump search. Both inputs are
+  case-insensitive regular expressions, and the match pattern is tested
+  against the entry's message only — timestamps and severities are already
+  covered by the date-range and severity filters — so a multi-line entry
+  such as a stack trace is kept whole when any of its lines match.
 
 ## [0.7.0] - 2026-07-23
 
