@@ -6,6 +6,7 @@ import {
   buildInteractiveExportText,
   buildInteractiveMergedExportText,
   getDistinctSeverities,
+  limitInteractiveDisplay,
   mergeLogFiles,
   DEFAULT_COLLAPSE_THRESHOLD,
   type BuildInteractivePayloadOptions,
@@ -26,6 +27,7 @@ import { readLogFiles, filterOutFolders } from "./logFileReading";
 import { selectNewFileUris } from "./interactiveViewFiles";
 import { readDisplayTimezone } from "./timezoneSettings";
 import { readGapThresholdMs } from "./gapThresholdSetting";
+import { readMaxDisplayLines } from "./interactiveViewSettings";
 import { readConfiguredTimestampFormats } from "./timestampFormatSettings";
 import { toFilterCriteria } from "./interactiveViewCriteria";
 import { NormalizedViewContentProvider, openVirtualNormalizedDocument } from "./normalizedView";
@@ -323,17 +325,29 @@ export class InteractiveViewPanelController implements vscode.Disposable {
       return;
     }
 
+    // 描画は上限行数までに縮退させる（issue #178）。Webviewは1メッセージで
+    // 全文を受け取って一括描画するため、切り詰めはここ（送る直前）で行う。
+    const maxDisplayLines = readMaxDisplayLines();
+    const limited = limitInteractiveDisplay(
+      { text: payload.text, items: payload.items },
+      maxDisplayLines
+    );
+
     const message: ExtensionToWebviewMessage = {
       type: "state",
       criteria: this.criteria,
       distinctSeverities: payload.distinctSeverities,
-      text: payload.text,
+      text: limited.text,
       totalLineCount: payload.totalLineCount,
       visibleLineCount: payload.visibleLineCount,
       loadedFileNames: this.loadedFileNames(),
       warning: errors.length > 0 ? errors.join(" / ") : undefined,
       collapsibleSupported,
-      items: payload.items,
+      items: limited.items,
+      displayLimit:
+        limited.displayedLineCount !== undefined
+          ? { maxDisplayLines, displayedLineCount: limited.displayedLineCount }
+          : undefined,
     };
     await this.panel.webview.postMessage(message);
   }
@@ -495,6 +509,10 @@ export class InteractiveViewPanelController implements vscode.Disposable {
     color: var(--vscode-errorForeground);
     margin-bottom: 4px;
   }
+  #display-limit {
+    color: var(--vscode-editorWarning-foreground, var(--vscode-errorForeground));
+    margin-bottom: 4px;
+  }
   #log-output {
     font-family: var(--vscode-editor-font-family, monospace);
     white-space: pre;
@@ -523,6 +541,7 @@ export class InteractiveViewPanelController implements vscode.Disposable {
   </div>
   <div id="status"></div>
   <div id="warning"></div>
+  <div id="display-limit"></div>
   <pre id="log-output"></pre>
   <script nonce="${nonce}" src="${scriptUri.toString()}"></script>
 </body>

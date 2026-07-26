@@ -69,7 +69,7 @@ Totonoe Log はログ調査のための VS Code 拡張機能です。実際の�
 
 ## インタラクティブビュー（アルファ版）
 
-`Totonoe Log: Show Interactive View (Alpha)` は、正規化したログをWebviewパネルで開き、セベリティ・日付範囲・無視パターンの絞り込みをQuickPickダイアログの往復なしにその場でトグルできます。パネル内の「+ Add Files...」ボタンから、同じパネルに別のログファイルを追加読み込みでき、2ファイル以上になった時点でファイル名/種別列付きのマージ表示に切り替わります。Webviewベースのインタラクティブビューを試す実験的な最初の一歩です（issue #165/#166/#168）。挙動は今後変わる可能性があり、上記の読み取り専用の仮想ドキュメントビュー群が引き続き主な・安定した利用手段です。
+`Totonoe Log: Show Interactive View (Alpha)` は、正規化したログをWebviewパネルで開き、セベリティ・日付範囲・無視パターンの絞り込みをQuickPickダイアログの往復なしにその場でトグルできます。パネル内の「+ Add Files...」ボタンから、同じパネルに別のログファイルを追加読み込みでき、2ファイル以上になった時点でファイル名/種別列付きのマージ表示に切り替わります。結果が大きい場合は `totonoeLog.interactiveView.maxDisplayLines` 行までしか描画せず、絞り込むか、パネルの「Export as Virtual Document」ボタンで全体を開くよう案内します。Webviewベースのインタラクティブビューを試す実験的な最初の一歩です（issue #165/#166/#168）。挙動は今後変わる可能性があり、上記の読み取り専用の仮想ドキュメントビュー群が引き続き主な・安定した利用手段です。
 
 ## 2つのログを比較する
 
@@ -176,6 +176,7 @@ code --install-extension totonoe-log.vsix
 | --- | --- | --- | --- |
 | `totonoeLog.gap.thresholdSeconds` | number | `30` | `Show Normalized View` とマージビュー（`Merge Selected Files` とそれぞれの絞り込み系コマンド）で、連続するエントリのタイムスタンプ差がこの秒数以上のときに「XX秒の空白」の区切り行を挿入する。`0` で無効化。 |
 | `totonoeLog.collapse.threshold` | number | `3` | `Show Collapsed View` で、何回以上連続で繰り返されたら1行に折りたたむかのしきい値。 |
+| `totonoeLog.interactiveView.maxDisplayLines` | number | `20000` | `Show Interactive View (Alpha)` が一度に描画する行数の上限。超えた場合は先頭のみを描画し、絞り込むか「Export as Virtual Document」で全体を開くよう案内する。`0` で無効化。 |
 | `totonoeLog.copyMasked.maskTimestamp` | boolean | `true` | `Copy Masked Text` 実行時にタイムスタンプをマスクする。 |
 | `totonoeLog.copyMasked.maskHost` | boolean | `true` | `Copy Masked Text` 実行時に IPv4/IPv6 アドレスと、syslog 形式として認識できた行のホスト名トークンをマスクする（任意の形式のホスト名全般ではない）。 |
 | `totonoeLog.timezone.sourceOffset` | string | `"UTC"` | タイムゾーン表記を持たないタイムスタンプに仮定する UTC オフセット（例: `+09:00`）。オフセットや `Z` が明示されたタイムスタンプ、エポック形式には影響しない。[タイムゾーンの正規化](#タイムゾーンの正規化) を参照。 |

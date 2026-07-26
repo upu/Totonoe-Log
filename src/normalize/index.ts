@@ -85,3 +85,11 @@ export {
   buildInteractiveExportText,
   buildInteractiveMergedExportText,
 } from "./buildInteractiveExportText";
+export type {
+  InteractiveDisplayContent,
+  LimitedInteractiveDisplay,
+} from "./limitInteractiveDisplay";
+export {
+  DEFAULT_MAX_DISPLAY_LINES,
+  limitInteractiveDisplay,
+} from "./limitInteractiveDisplay";

@@ -75,4 +75,15 @@ export interface ExtensionToWebviewMessage {
    * そのまま描画する。
    */
   readonly items?: readonly InteractiveDisplayItem[];
+  /**
+   * 表示行数の上限（issue #178）を超えたため `text` / `items` を先頭だけに
+   * 切り詰めた場合の情報。上限内なら undefined。Webview側はこれがあるときに
+   * 「全体は Export as Virtual Document で開ける」旨の案内を出す。
+   */
+  readonly displayLimit?: {
+    /** 適用した上限（`totonoeLog.interactiveView.maxDisplayLines`）。 */
+    readonly maxDisplayLines: number;
+    /** 切り詰めた結果、実際に描画する行数。 */
+    readonly displayedLineCount: number;
+  };
 }
