@@ -33,6 +33,7 @@ const loadedFilesElement = document.getElementById("loaded-files") as HTMLDivEle
 const severitiesContainer = document.getElementById("severities") as HTMLDivElement;
 const dateStartInput = document.getElementById("date-start") as HTMLInputElement;
 const dateEndInput = document.getElementById("date-end") as HTMLInputElement;
+const matchPatternInput = document.getElementById("match-pattern") as HTMLInputElement;
 const ignorePatternInput = document.getElementById("ignore-pattern") as HTMLInputElement;
 const collapseToggle = document.getElementById("collapse-toggle") as HTMLInputElement;
 const statusElement = document.getElementById("status") as HTMLDivElement;
@@ -61,6 +62,7 @@ function collectCriteria(): SerializedFilterCriteria {
     severities: Array.from(checkedBoxes, (checkbox) => checkbox.value),
     dateRangeStart: dateStartInput.value,
     dateRangeEnd: dateEndInput.value,
+    matchPattern: matchPatternInput.value,
     ignorePattern: ignorePatternInput.value,
     collapseEnabled: collapseToggle.checked,
     mask: {
@@ -89,6 +91,7 @@ severitiesContainer.addEventListener("change", postFilterChanged);
 loadedFilesElement.addEventListener("change", postFilterChanged);
 dateStartInput.addEventListener("input", postFilterChangedDebounced);
 dateEndInput.addEventListener("input", postFilterChangedDebounced);
+matchPatternInput.addEventListener("input", postFilterChangedDebounced);
 ignorePatternInput.addEventListener("input", postFilterChangedDebounced);
 collapseToggle.addEventListener("change", postFilterChanged);
 
@@ -405,6 +408,7 @@ function renderState(state: ExtensionToWebviewMessage): void {
   renderSeverities(state.distinctSeverities, state.criteria.severities);
   syncTextInputIfNotFocused(dateStartInput, state.criteria.dateRangeStart);
   syncTextInputIfNotFocused(dateEndInput, state.criteria.dateRangeEnd);
+  syncTextInputIfNotFocused(matchPatternInput, state.criteria.matchPattern);
   syncTextInputIfNotFocused(ignorePatternInput, state.criteria.ignorePattern);
   collapseToggle.checked = state.criteria.collapseEnabled;
   collapseToggle.disabled = !state.collapsibleSupported;

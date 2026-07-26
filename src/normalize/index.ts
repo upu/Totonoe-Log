@@ -38,6 +38,7 @@ export { UNRECOGNIZED_SEVERITY_KEY, getDistinctSeverities, filterEntriesBySeveri
 export type { DateBoundaryKind, DateRange } from "./filterByDateRange";
 export { parseDateBoundary, filterEntriesByDateRange } from "./filterByDateRange";
 export { filterEntriesByIgnorePattern } from "./filterByIgnorePattern";
+export { filterEntriesByMatchPattern } from "./filterByMatchPattern";
 export type {
   FilterCriteria,
   FilterEntriesResult,
