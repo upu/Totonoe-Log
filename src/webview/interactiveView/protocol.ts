@@ -12,6 +12,17 @@
  */
 
 /**
+ * 表示行1行分の元ログ上の位置（`normalize` の `LineSource` と同じ形）。
+ * {@link InteractiveDisplayItem} と同じ理由で再定義する。
+ */
+export interface LineSource {
+  /** {@link ExtensionToWebviewMessage.sourceFilePaths} と同じ並びの、元ファイルのインデックス。 */
+  readonly fileIndex: number;
+  /** 元ファイルの物理行番号（1始まり）。 */
+  readonly line: number;
+}
+
+/**
  * 折りたたみ表示1件分（`normalize` の `InteractiveDisplayItem` と同じ形）。
  * `normalize/buildInteractiveCollapsedLines.ts` からは `import type` でも
  * 型解決される（`collapseRepeatedEntries` → `maskForCompare` → `node:net` と
@@ -19,8 +30,13 @@
  * が壊れるため、あえて再定義してこのファイルのNode非依存を保つ。
  */
 export type InteractiveDisplayItem =
-  | { readonly kind: "line"; readonly text: string }
-  | { readonly kind: "group"; readonly headerText: string; readonly lines: readonly string[] };
+  | { readonly kind: "line"; readonly text: string; readonly lineSource?: LineSource }
+  | {
+      readonly kind: "group";
+      readonly headerText: string;
+      readonly lines: readonly string[];
+      readonly lineSources?: readonly LineSource[];
+    };
 
 /** Webview側フォームの状態をJSON化した表現。 */
 export interface SerializedFilterCriteria {
@@ -45,7 +61,9 @@ export type WebviewToExtensionMessage =
   | { readonly type: "ready" }
   | { readonly type: "filterChanged"; readonly criteria: SerializedFilterCriteria }
   | { readonly type: "addFiles" }
-  | { readonly type: "exportVirtualDocument" };
+  | { readonly type: "exportVirtualDocument" }
+  /** 行クリックで、対応する元ログファイルの行を開く要求（issue #179）。 */
+  | { readonly type: "revealSourceLine"; readonly lineSource: LineSource };
 
 /**
  * 拡張機能本体 → Webview のメッセージ。`criteria` は絞り込み条件の解析結果
@@ -61,6 +79,18 @@ export interface ExtensionToWebviewMessage {
   readonly visibleLineCount: number;
   /** 現在読み込み済みのファイル名一覧（issue #168）。1件なら単一ファイル表示中。 */
   readonly loadedFileNames: readonly string[];
+  /**
+   * `LineSource.fileIndex` の並びに対応する、元ログファイルのフルパス
+   * （issue #179）。Webview側は行のホバー表示（`title` 属性）にだけ使い、
+   * ジャンプ先の解決は `fileIndex` を送り返して拡張機能本体側に任せる。
+   */
+  readonly sourceFilePaths: readonly string[];
+  /**
+   * `text` の各行（0始まり）に対応する元ログ上の位置（issue #179）。
+   * ギャップマーカー等の生成行は `undefined`（クリック不可・ホバーなし）。
+   * `items` を描画する場合は各 `InteractiveDisplayItem` 側が持つ。
+   */
+  readonly lineSources?: readonly (LineSource | undefined)[];
   /** 無視パターンのタイムアウト・構文エラー等、絞り込み条件の一部を無視した場合の警告文。 */
   readonly warning?: string;
   /**

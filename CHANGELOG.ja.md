@@ -31,6 +31,12 @@
   正規化/マージビューと同じ仕組みの読み取り専用仮想ドキュメントとして開ける
   ようにした。書き出した後は検索・コピー・`Go to Source Line`・
   `Compare Logs` がそのまま使える（issue #175、#165 の次のアルファ版フェーズ）。
+- `Totonoe Log: Show Interactive View (Alpha)` で、行をクリックすると元ファイルの
+  該当行へジャンプできるようにした。行にホバーすると元ファイルのフルパスと行番号を
+  表示する（issue #179、#165 の次のアルファ版フェーズ）。ジャンプの挙動は
+  `Go to Source Line` と共通。ギャップマーカー等の生成行は対応する元行が無いため
+  クリック不可のままで、折りたたみグループの見出し行は従来どおりクリックで
+  展開/復元する。
 - `Totonoe Log: Show Interactive View (Alpha)` に一度に描画する行数の上限を
   設けた（`totonoeLog.interactiveView.maxDisplayLines`、既定値 `20000`、`0` で
   無効化）。上限を超えた場合はDOMを肥大させずに先頭のみを表示し、絞り込むか

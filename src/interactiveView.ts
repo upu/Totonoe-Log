@@ -14,6 +14,7 @@ import {
   type FilterCriteria,
   type FormattedLogWithLineSources,
   type InteractivePayloadResult,
+  type LineSource,
   type LogEntry,
   type LogFileInput,
   type MergedEntry,
@@ -30,6 +31,7 @@ import { readGapThresholdMs } from "./gapThresholdSetting";
 import { readMaxDisplayLines } from "./interactiveViewSettings";
 import { readConfiguredTimestampFormats } from "./timestampFormatSettings";
 import { toFilterCriteria } from "./interactiveViewCriteria";
+import { revealSourceLine } from "./revealSourceLine";
 import { NormalizedViewContentProvider, openVirtualNormalizedDocument } from "./normalizedView";
 import { MergedViewContentProvider } from "./mergedView";
 import type {
@@ -174,8 +176,30 @@ export class InteractiveViewPanelController implements vscode.Disposable {
       await this.exportVirtualDocument();
       return;
     }
+    if (message.type === "revealSourceLine") {
+      await this.revealClickedSourceLine(message.lineSource);
+      return;
+    }
     this.criteria = message.criteria;
     await this.postState();
+  }
+
+  /**
+   * Webviewでクリックされた行から、対応する元ログファイルの行へジャンプする
+   * （issue #179）。`fileIndex` は `loadedUris`（読み込み順）の位置なので、
+   * ここでURIに解決してから `Go to Source Line` と共通のジャンプ処理へ渡す。
+   */
+  private async revealClickedSourceLine(lineSource: LineSource): Promise<void> {
+    const sourceUri = this.loadedUris[lineSource.fileIndex];
+    if (!sourceUri) {
+      // 送信後にファイル集合が変わった場合など、`fileIndex` が現在の読み込み
+      // 済みファイルに対応しないとき（`Go to Source Line` と同じ案内にする）。
+      vscode.window.showWarningMessage(
+        "Totonoe Log: 元ログファイルの情報を解決できませんでした。"
+      );
+      return;
+    }
+    await revealSourceLine(sourceUri, lineSource.line);
   }
 
   /**
@@ -329,7 +353,7 @@ export class InteractiveViewPanelController implements vscode.Disposable {
     // 全文を受け取って一括描画するため、切り詰めはここ（送る直前）で行う。
     const maxDisplayLines = readMaxDisplayLines();
     const limited = limitInteractiveDisplay(
-      { text: payload.text, items: payload.items },
+      { text: payload.text, lineSources: payload.lineSources, items: payload.items },
       maxDisplayLines
     );
 
@@ -341,6 +365,9 @@ export class InteractiveViewPanelController implements vscode.Disposable {
       totalLineCount: payload.totalLineCount,
       visibleLineCount: payload.visibleLineCount,
       loadedFileNames: this.loadedFileNames(),
+      // ホバー表示用のフルパス（issue #179）。`fileIndex` はこの並びを指す。
+      sourceFilePaths: this.loadedUris.map((uri) => uri.fsPath),
+      lineSources: limited.lineSources,
       warning: errors.length > 0 ? errors.join(" / ") : undefined,
       collapsibleSupported,
       items: limited.items,
@@ -522,6 +549,12 @@ export class InteractiveViewPanelController implements vscode.Disposable {
     cursor: pointer;
   }
   .collapse-group-header:hover {
+    background-color: var(--vscode-list-hoverBackground);
+  }
+  .source-line {
+    cursor: pointer;
+  }
+  .source-line:hover {
     background-color: var(--vscode-list-hoverBackground);
   }
 </style>

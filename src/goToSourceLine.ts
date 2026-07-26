@@ -4,6 +4,7 @@ import {
   type SourceLineMap,
   type VirtualDocumentContentProvider,
 } from "./virtualDocumentContentProvider";
+import { revealSourceLine } from "./revealSourceLine";
 
 /**
  * Totonoe Log の仮想ドキュメント上のカーソル行から、対応する元ログファイルの
@@ -61,21 +62,6 @@ export function createGoToSourceLineCommand(
       return;
     }
 
-    let sourceDocument: vscode.TextDocument;
-    try {
-      sourceDocument = await vscode.workspace.openTextDocument(sourceUri);
-    } catch {
-      // 削除・移動・リネームや権限エラーなど、原因を問わず開けなかった場合。
-      vscode.window.showWarningMessage(
-        "Totonoe Log: 元ログファイルを開けませんでした。ファイルが削除・移動されていないか確認してください。"
-      );
-      return;
-    }
-    // ビューを開いた後に元ファイルが短くなった場合に備え、末尾行へ丸める。
-    const targetLine = Math.min(lineSource.line - 1, sourceDocument.lineCount - 1);
-    await vscode.window.showTextDocument(sourceDocument, {
-      preview: false,
-      selection: sourceDocument.lineAt(targetLine).range,
-    });
+    await revealSourceLine(sourceUri, lineSource.line);
   };
 }

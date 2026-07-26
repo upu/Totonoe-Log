@@ -1,4 +1,5 @@
 import type { InteractiveDisplayItem } from "./buildInteractiveCollapsedLines";
+import type { LineSource } from "./lineSources";
 
 /**
  * Interactive View が一度に描画する行数の既定の上限（issue #178）。
@@ -11,6 +12,11 @@ export const DEFAULT_MAX_DISPLAY_LINES = 20000;
 /** {@link limitInteractiveDisplay} が切り詰める対象（`buildInteractivePayload` の結果のうち描画に使う部分）。 */
 export interface InteractiveDisplayContent {
   readonly text: string;
+  /**
+   * `text` の各行（0始まり）に対応する元ログ上の位置（issue #179）。行クリック
+   * でのジャンプに使うため、`text` を切り詰めたら必ず同じ位置で切り詰める。
+   */
+  readonly lineSources?: readonly (LineSource | undefined)[];
   readonly items?: readonly InteractiveDisplayItem[];
 }
 
@@ -53,7 +59,12 @@ function limitItems(
       continue;
     }
     if (limited.length === 0 && item.kind === "group") {
-      limited.push({ ...item, lines: item.lines.slice(0, remaining) });
+      const lines = item.lines.slice(0, remaining);
+      limited.push(
+        item.lineSources
+          ? { ...item, lines, lineSources: item.lineSources.slice(0, remaining) }
+          : { ...item, lines }
+      );
       lineCount += remaining;
     }
     break;
@@ -100,6 +111,9 @@ export function limitInteractiveDisplay(
 
   return {
     text: textTruncated ? textLines.slice(0, maxDisplayLines).join("\n") : content.text,
+    lineSources: textTruncated
+      ? content.lineSources?.slice(0, maxDisplayLines)
+      : content.lineSources,
     items: limitedItems?.items,
     // 表示中の行数は、実際に描画される方（`items` があればそちら）で数える。
     displayedLineCount: limitedItems
