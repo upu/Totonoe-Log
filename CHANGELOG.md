@@ -91,6 +91,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   against the entry's message only — timestamps and severities are already
   covered by the date-range and severity filters — so a multi-line entry
   such as a stack trace is kept whole when any of its lines match.
+- `Totonoe Log: Show Interactive View (Alpha)` now redraws itself as soon as a
+  relevant `totonoeLog.*` setting changes, instead of waiting until a filter is
+  next touched (issue #183, the next alpha step in #165). Settings that only
+  affect formatting (`timezone.display`, `gap.thresholdSeconds`,
+  `collapse.threshold`, `interactiveView.maxDisplayLines`) redraw the current
+  entries, while settings that change how the log is parsed
+  (`timestampFormats`, `timezone.sourceOffset`, `timezone.fileOffsets`,
+  `clockSkew.fileOffsets`) re-parse the loaded files first. Because a
+  re-parse can surface severities that were not present before, those are
+  checked automatically so their lines are not silently hidden.
 
 ## [0.7.0] - 2026-07-23
 
