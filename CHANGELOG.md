@@ -48,10 +48,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   whole thing with "Export as Virtual Document", instead of bogging the panel
   down with a huge DOM (issue #178).
 - `Totonoe Log: Show Interactive View (Alpha)` can now mask the log it displays,
-  ready to paste into an issue or chat: the mask button ("🔓 マスク: OFF" /
-  "🔒 マスク: ON") replaces timestamps and host names / IP addresses with
-  placeholders in place, and the
-  "▾" beside it opens a panel for picking which of the two to hide (issues #180
+  ready to paste into an issue or chat: the mask button ("🔓 Mask" / "🔒 Mask")
+  replaces timestamps and host names / IP addresses with placeholders in place,
+  and the
+  "▾" beside it opens a panel for picking which of them to hide (issues #180
   and #194, the next alpha step in #165). Masking is a display state rather than
   a one-shot copy action, so the panel's normal copy (Ctrl+C), search, and
   "Export as Virtual Document" all operate on the masked text, while filters,
@@ -61,6 +61,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `totonoeLog.copyMasked.maskTimestamp` / `totonoeLog.copyMasked.maskHost`
   settings shared with `Totonoe Log: Copy Masked Text`; no new settings were
   added.
+
+- The mask panel of `Totonoe Log: Show Interactive View (Alpha)` gained two more
+  targets: process IDs and anything matching a pattern you type (issue #195, the
+  next alpha step in #165). "プロセスID" replaces syslog-style `sshd[1234]:` tags
+  and `pid=1234` / `pid: 1234` / `[pid 1234]` notations with `<PID>`, while
+  leaving log4j thread names (`[main]`) and array indices (`retries[3]`) alone.
+  "任意パターン" takes a regular expression and replaces every match with
+  `<MASKED>`, for the in-house identifiers — user names, host naming
+  conventions, tokens, contract IDs — that no general rule can recognize. An
+  invalid or too-slow pattern disables only that one mask: a warning appears and
+  every other mask keeps working, the same way the ignore pattern degrades. The
+  pattern lives in the panel and is never written to settings. Process-ID
+  masking is available to `Totonoe Log: Copy Masked Text` as well, via the new
+  `totonoeLog.copyMasked.maskProcessId` setting (default `false`, so existing
+  output is unchanged), which also seeds the panel's initial selection.
 
 - `Totonoe Log: Show Interactive View (Alpha)` can now be opened straight from
   the Explorer: right-click a log file — or a selection of several — and pick it

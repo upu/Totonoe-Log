@@ -44,8 +44,10 @@ import { readConfiguredTimestampFormats } from "./timestampFormatSettings";
 import { readMaskOptions } from "./copyMasked";
 import {
   addNewlyAppearedSeverities,
+  compileMaskPattern,
   getLoadedDistinctSeverities,
   toFilterCriteria,
+  type CompileMaskPatternResult,
 } from "./interactiveViewCriteria";
 import { revealSourceLine } from "./revealSourceLine";
 import { parseWebviewLineSource } from "./interactiveViewContext";
@@ -90,6 +92,9 @@ function createDefaultSerializedCriteria(
       enabled: false,
       maskTimestamp: configured.maskTimestamp ?? true,
       maskHost: configured.maskHost ?? true,
+      maskProcessId: configured.maskProcessId ?? false,
+      // 任意パターン（issue #195）だけは設定から読まない（`SerializedMaskCriteria` 参照）。
+      pattern: "",
     },
     // 読み込んだファイルは全て表示から始める（issue #170）。
     visibleFiles: normalizeFileVisibility([], fileCount),
@@ -102,11 +107,31 @@ function createDefaultSerializedCriteria(
  * 通さない整形（既存コマンドと同じ経路）にする。
  */
 function toDisplayMaskOptions(criteria: SerializedFilterCriteria): DisplayMaskOptions | undefined {
-  const { enabled, maskTimestamp, maskHost } = criteria.mask;
-  if (!enabled || (!maskTimestamp && !maskHost)) {
+  const { enabled, maskTimestamp, maskHost, maskProcessId } = criteria.mask;
+  if (!enabled || (!maskTimestamp && !maskHost && !maskProcessId)) {
     return undefined;
   }
-  return { maskTimestamp, maskHost };
+  return { maskTimestamp, maskHost, maskProcessId };
+}
+
+/**
+ * 任意パターンのマスク（issue #195）が効かなかったことをユーザーに伝える文。
+ * 他のマスク・絞り込みはそのまま効いているため、効かなかったのがどれなのかを
+ * 明示する（無視パターンの警告が「一致パターンと無視パターンを適用せずに」と
+ * 対象を名指しするのと同じ扱い）。
+ */
+function maskPatternFailureWarnings(
+  failure: "timeout" | "error" | undefined,
+  outcome: string
+): string[] {
+  if (!failure) {
+    return [];
+  }
+  const reason =
+    failure === "timeout"
+      ? "マスクパターンの処理に時間がかかりすぎたため"
+      : "マスクパターンの評価中にエラーが発生したため";
+  return [`${reason}、そのマスクだけを適用せずに${outcome}。`];
 }
 
 /** `totonoeLog.collapse.threshold` 設定を読む（`normalizedView.ts` の `Show Collapsed View` と同じ読み取り方）。 */
@@ -498,6 +523,8 @@ export class InteractiveViewPanelController implements vscode.Disposable {
 
     const displayTimezone = readDisplayTimezone();
     const { criteria, errors } = toFilterCriteria(this.criteria, displayTimezone);
+    const maskPattern = this.compileEnabledMaskPattern();
+    const warnings = [...errors, ...maskPattern.errors];
     // マージ表示（2ファイル以上）は折りたたみ非対応（issue #172、#158の未解決課題を踏まえた判断）。
     const collapsibleSupported = this.isSingleFile();
     const formatOptions: BuildInteractivePayloadOptions = {
@@ -506,13 +533,18 @@ export class InteractiveViewPanelController implements vscode.Disposable {
       collapseThreshold:
         collapsibleSupported && this.criteria.collapseEnabled ? readCollapseThreshold() : undefined,
       mask: toDisplayMaskOptions(this.criteria),
+      maskPattern: maskPattern.pattern,
       visibleFileIndices: toVisibleFileIndices(this.criteria.visibleFiles),
     };
 
     const payload = await this.computePayload(criteria, formatOptions);
 
     if (payload.ok) {
-      await this.sendState(payload, errors, collapsibleSupported);
+      await this.sendState(
+        payload,
+        [...warnings, ...maskPatternFailureWarnings(payload.maskPatternFailure, "表示しています")],
+        collapsibleSupported
+      );
       return;
     }
 
@@ -530,8 +562,28 @@ export class InteractiveViewPanelController implements vscode.Disposable {
         payload.reason === "timeout"
           ? "入力されたパターンの処理に時間がかかりすぎたため、一致パターンと無視パターンを適用せずに表示しています。より単純なパターンをお試しください。"
           : "パターンの評価中にエラーが発生したため、一致パターンと無視パターンを適用せずに表示しています。";
-      await this.sendState(fallbackPayload, [...errors, reason], collapsibleSupported);
+      await this.sendState(
+        fallbackPayload,
+        [
+          ...warnings,
+          reason,
+          ...maskPatternFailureWarnings(fallbackPayload.maskPatternFailure, "表示しています"),
+        ],
+        collapsibleSupported
+      );
     }
+  }
+
+  /**
+   * マスクパネルの任意パターン（issue #195）をコンパイルする。マスクOFFの間は
+   * コンパイルもしない——効いていない欄の入力ミスで警告を出しても、ユーザーは
+   * 何を直せばよいのか分からないため。
+   */
+  private compileEnabledMaskPattern(): CompileMaskPatternResult {
+    if (!this.criteria.mask.enabled) {
+      return { errors: [] };
+    }
+    return compileMaskPattern(this.criteria.mask.pattern);
   }
 
   /**
@@ -603,6 +655,7 @@ export class InteractiveViewPanelController implements vscode.Disposable {
         collapsibleSupported && this.criteria.collapseEnabled ? readCollapseThreshold() : undefined,
       // 書き出しは表示の状態を引き継ぐ（issue #194、絞り込み・折りたたみと同じ扱い）。
       mask: toDisplayMaskOptions(this.criteria),
+      maskPattern: this.compileEnabledMaskPattern().pattern,
       visibleFileIndices: toVisibleFileIndices(this.criteria.visibleFiles),
     };
 
@@ -644,6 +697,7 @@ export class InteractiveViewPanelController implements vscode.Disposable {
         ? await buildInteractiveExportText(this.singleEntries, criteria, options)
         : await buildInteractiveMergedExportText(this.mergedEntries, criteria, options);
     if (result.ok) {
+      this.warnAboutMaskPatternFailure(result.maskPatternFailure);
       return result.formatted;
     }
 
@@ -669,7 +723,19 @@ export class InteractiveViewPanelController implements vscode.Disposable {
         ? "入力されたパターンの処理に時間がかかりすぎたため、一致パターンと無視パターンを適用せずに書き出しました。"
         : "パターンの評価中にエラーが発生したため、一致パターンと無視パターンを適用せずに書き出しました。";
     vscode.window.showWarningMessage(`Totonoe Log: ${reason}`);
+    this.warnAboutMaskPatternFailure(fallbackResult.maskPatternFailure);
     return fallbackResult.formatted;
+  }
+
+  /**
+   * 書き出しでも、表示側（{@link postState}）と同じ理由で任意パターンのマスクの
+   * 失敗を伝える。書き出したテキストにマスクが掛かっていないことに気づかず
+   * そのまま共有してしまわないようにするため。
+   */
+  private warnAboutMaskPatternFailure(failure: "timeout" | "error" | undefined): void {
+    for (const message of maskPatternFailureWarnings(failure, "書き出しました")) {
+      vscode.window.showWarningMessage(`Totonoe Log: ${message}`);
+    }
   }
 
   private renderHtml(webview: vscode.Webview, nonce: string): string {
@@ -759,8 +825,9 @@ export class InteractiveViewPanelController implements vscode.Disposable {
     gap: 1px;
   }
   /* マスクONの間の見た目は、VSCodeが検索ボックスのオプション（正規表現・
-     大文字小文字）のトグルに使っている色に合わせる（issue #197）。ボタンの
-     ラベル自体もON/OFFを文字で示すので、色だけに頼らない。 */
+     大文字小文字）のトグルに使っている色に合わせる（issue #197）。ラベルに
+     「: ON」「: OFF」と状態を書き込むのはVSCodeの作法から外れているため、
+     状態は配色と施錠アイコン（🔓/🔒）の2つで示す（issue #195）。 */
   #mask-button.toggled-on {
     background-color: var(--vscode-inputOption-activeBackground, var(--vscode-button-hoverBackground));
     color: var(--vscode-inputOption-activeForeground, var(--vscode-button-foreground));
@@ -793,6 +860,11 @@ export class InteractiveViewPanelController implements vscode.Disposable {
     display: inline-flex;
     align-items: center;
     gap: 4px;
+  }
+  /* 任意パターンの入力欄（issue #195）。パネルの他の行はチェックボックスだけで
+     短いため、幅を決めておかないとパネルが入力欄の既定幅まで広がってしまう。 */
+  #mask-pattern {
+    width: 12em;
   }
   #filter-panel {
     display: flex;
@@ -856,11 +928,15 @@ export class InteractiveViewPanelController implements vscode.Disposable {
     <button id="add-files-button" type="button">+ Add Files...</button>
     <button id="export-button" type="button">Export as Virtual Document</button>
     <div id="mask-container">
-      <button id="mask-button" type="button" aria-pressed="false" title="タイムスタンプ・ホスト名/IPアドレスを伏せて表示します（そのままコピーできます）">🔓 マスク: OFF</button>
+      <button id="mask-button" type="button" aria-pressed="false" title="選んだ対象を伏せて表示します（そのままコピーできます）">🔓 Mask</button>
       <button id="mask-options-button" type="button" aria-expanded="false" aria-controls="mask-panel" title="マスクする対象を選ぶ">▾</button>
       <div id="mask-panel" hidden>
         <label><input type="checkbox" id="mask-timestamp">タイムスタンプ</label>
         <label><input type="checkbox" id="mask-host">ホスト名 / IPアドレス</label>
+        <label><input type="checkbox" id="mask-process-id">プロセスID</label>
+        <!-- 任意パターンにチェックボックスを添えないのは、入力欄が空かどうかが
+             そのままON/OFFになるため（絞り込みのパターン欄と同じ扱い）。 -->
+        <label>任意パターン <input type="text" id="mask-pattern" placeholder="正規表現"></label>
       </div>
     </div>
     <span id="loaded-files-label">読み込み済み:</span>

@@ -83,6 +83,26 @@ export function toFilterCriteria(
   return { criteria: { severities, dateRange, matchPattern, ignorePattern }, errors };
 }
 
+/** {@link compileMaskPattern} の結果。 */
+export interface CompileMaskPatternResult {
+  /** コンパイルできた正規表現。入力が空、または不正なら `undefined`。 */
+  readonly pattern?: RegExp;
+  /** 解釈できなかった場合の説明（日本語）。 */
+  readonly errors: readonly string[];
+}
+
+/**
+ * マスクパネルの任意パターン入力（issue #195）を `RegExp` にコンパイルする。
+ * 絞り込みの2欄と同じ規則（`i` で大文字小文字を無視、`m` で複数行エントリの
+ * 各行に `^` / `$` が当たる）に加えて `g` を足す——絞り込みは「一致したか」だけ
+ * 見ればよいのに対し、マスクは一致箇所を**全て**置き換える必要があるため。
+ */
+export function compileMaskPattern(input: string): CompileMaskPatternResult {
+  const errors: string[] = [];
+  const pattern = compilePattern(input, "マスクパターン", errors, "gim");
+  return { pattern, errors };
+}
+
 function parseDateRange(
   serialized: SerializedFilterCriteria,
   displayTimezone: DisplayTimezone,
@@ -114,22 +134,27 @@ function parseDateRange(
 }
 
 /**
- * パターン入力欄1つ分を `RegExp` にコンパイルする。一致パターンと無視パターンの
- * 2欄で解釈の規則を揃えるため（issue #182）、フラグも含めて共通の実装にする。
- * `"i"` で大文字小文字を無視し、`"m"` で `^` / `$` が複数行エントリの各行に
- * 当たるようにする。
+ * パターン入力欄1つ分を `RegExp` にコンパイルする。一致パターン・無視パターン・
+ * マスクパターンの各欄で解釈の規則を揃えるため（issue #182、#195）、共通の
+ * 実装にする。`"i"` で大文字小文字を無視し、`"m"` で `^` / `$` が複数行
+ * エントリの各行に当たるようにする。
  *
- * `label` はエラー文言に埋め込む欄の名前。入力欄が2つあるため、どちらの欄が
+ * `label` はエラー文言に埋め込む欄の名前。入力欄が複数あるため、どの欄が
  * 不正なのかがユーザーに分かるようにする。
  */
-function compilePattern(input: string, label: string, errors: string[]): RegExp | undefined {
+function compilePattern(
+  input: string,
+  label: string,
+  errors: string[],
+  flags = "im"
+): RegExp | undefined {
   const trimmedInput = input.trim();
   if (trimmedInput === "") {
     return undefined;
   }
 
   try {
-    return new RegExp(trimmedInput, "im");
+    return new RegExp(trimmedInput, flags);
   } catch (error) {
     const reason = error instanceof Error ? error.message : String(error);
     errors.push(`${label}を正規表現として解釈できませんでした: "${trimmedInput}"（${reason}）`);

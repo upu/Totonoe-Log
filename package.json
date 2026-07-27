@@ -146,6 +146,11 @@
           "default": true,
           "description": "Totonoe Log: Copy Masked Text 実行時にIPv4/IPv6アドレスと、syslog形式として認識できた行のホスト名トークンをマスクする（任意の形式のホスト名全般ではない）。"
         },
+        "totonoeLog.copyMasked.maskProcessId": {
+          "type": "boolean",
+          "default": false,
+          "description": "Totonoe Log: Copy Masked Text 実行時にプロセスIDをマスクする（syslog形式の sshd[1234]: と、pid=1234 のようにpidと明記された表記）。Interactive View のマスクパネルの初期値にもなる。"
+        },
         "totonoeLog.collapse.threshold": {
           "type": "number",
           "default": 3,

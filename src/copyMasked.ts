@@ -15,6 +15,9 @@ export function readMaskOptions(): MaskForCopyOptions {
   return {
     maskTimestamp: config.get<boolean>("maskTimestamp", true),
     maskHost: config.get<boolean>("maskHost", true),
+    // 後から足した対象なので既定はOFF（issue #195）。既定でONにすると、
+    // 設定を触っていないユーザーのコピー結果が黙って変わってしまう。
+    maskProcessId: config.get<boolean>("maskProcessId", false),
   };
 }
 

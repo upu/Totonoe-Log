@@ -5,6 +5,7 @@ import { getDistinctSeverities } from "./filterBySeverity";
 import { filterMergedEntriesByCriteria } from "./filterMergedEntries";
 import { filterMergedEntriesByFileIndex } from "./filterByFile";
 import type { FilterCriteria } from "./filterEntries";
+import { applyMaskPatternToMergedEntries } from "./maskByPattern";
 import { formatMergedLogWithLineSources } from "./formatMergedLog";
 
 /** entries の物理行数（メッセージの継続行込み）を数える。 */
@@ -41,7 +42,11 @@ export async function buildInteractiveMergedPayload(
     return filterResult;
   }
 
-  const formatted = formatMergedLogWithLineSources(filterResult.entries, {
+  const masked = await applyMaskPatternToMergedEntries(filterResult.entries, options.maskPattern, {
+    timeoutMs: options.maskPatternTimeoutMs,
+  });
+
+  const formatted = formatMergedLogWithLineSources(masked.entries, {
     gapThresholdMs: options.gapThresholdMs,
     displayTimezone: options.displayTimezone,
     mask: options.mask,
@@ -54,5 +59,6 @@ export async function buildInteractiveMergedPayload(
     distinctSeverities,
     totalLineCount: countPhysicalLines(mergedEntries.map((merged) => merged.entry)),
     visibleLineCount: countPhysicalLines(filterResult.entries.map((merged) => merged.entry)),
+    maskPatternFailure: masked.failure,
   };
 }

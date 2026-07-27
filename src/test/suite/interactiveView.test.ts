@@ -2,6 +2,7 @@ import * as assert from "node:assert";
 import * as vscode from "vscode";
 import {
   addNewlyAppearedSeverities,
+  compileMaskPattern,
   getLoadedDistinctSeverities,
   toFilterCriteria,
 } from "../../interactiveViewCriteria";
@@ -31,7 +32,13 @@ function serializedCriteria(
     ignorePattern: "",
     matchPattern: "",
     collapseEnabled: false,
-    mask: { enabled: false, maskTimestamp: true, maskHost: true },
+    mask: {
+      enabled: false,
+      maskTimestamp: true,
+      maskHost: true,
+      maskProcessId: false,
+      pattern: "",
+    },
     visibleFiles: [],
     ...overrides,
   };
@@ -110,6 +117,37 @@ suite("interactiveViewCriteria / toFilterCriteria (#166)", () => {
     assert.strictEqual(errors.length, 1);
     // 入力欄が2つになるため、どちらの欄が不正なのかがメッセージから分かること。
     assert.match(errors[0], /一致パターン/);
+  });
+});
+
+suite("interactiveViewCriteria / compileMaskPattern (#195)", () => {
+  test("returns no pattern for a blank input", () => {
+    const { pattern, errors } = compileMaskPattern("  ");
+
+    assert.strictEqual(pattern, undefined);
+    assert.deepStrictEqual(errors, []);
+  });
+
+  test("compiles a pattern that replaces every occurrence, case-insensitively", () => {
+    // マスクは絞り込みと違い「一致したか」ではなく「全ての一致箇所を置換する」
+    // ため、g フラグ込みでコンパイルされていることを挙動で固定する。
+    const { pattern, errors } = compileMaskPattern("user=\\w+");
+
+    assert.ok(pattern instanceof RegExp);
+    assert.strictEqual(
+      "USER=alice and user=bob".replace(pattern!, "<MASKED>"),
+      "<MASKED> and <MASKED>"
+    );
+    assert.deepStrictEqual(errors, []);
+  });
+
+  test("drops an invalid pattern and reports an error naming the field", () => {
+    const { pattern, errors } = compileMaskPattern("(unterminated");
+
+    assert.strictEqual(pattern, undefined);
+    assert.strictEqual(errors.length, 1);
+    // 入力欄が3つ（一致・無視・マスク）になるため、どの欄が不正なのかが分かること。
+    assert.match(errors[0], /マスクパターン/);
   });
 });
 

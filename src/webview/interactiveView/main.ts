@@ -29,6 +29,8 @@ const maskOptionsButton = document.getElementById("mask-options-button") as HTML
 const maskPanel = document.getElementById("mask-panel") as HTMLDivElement;
 const maskTimestampToggle = document.getElementById("mask-timestamp") as HTMLInputElement;
 const maskHostToggle = document.getElementById("mask-host") as HTMLInputElement;
+const maskProcessIdToggle = document.getElementById("mask-process-id") as HTMLInputElement;
+const maskPatternInput = document.getElementById("mask-pattern") as HTMLInputElement;
 const loadedFilesElement = document.getElementById("loaded-files") as HTMLDivElement;
 const severitiesContainer = document.getElementById("severities") as HTMLDivElement;
 const dateStartInput = document.getElementById("date-start") as HTMLInputElement;
@@ -69,6 +71,8 @@ function collectCriteria(): SerializedFilterCriteria {
       enabled: maskButton.getAttribute("aria-pressed") === "true",
       maskTimestamp: maskTimestampToggle.checked,
       maskHost: maskHostToggle.checked,
+      maskProcessId: maskProcessIdToggle.checked,
+      pattern: maskPatternInput.value,
     },
     // チェック済みだけを集めるセベリティと違い、ファイルは読み込み順の並びを
     // そのまま拡張機能側の一覧に対応させるため、全件の真偽値として送る。
@@ -116,9 +120,11 @@ exportButton.addEventListener("click", () => {
 function setMaskEnabled(enabled: boolean): void {
   maskButton.setAttribute("aria-pressed", String(enabled));
   maskButton.classList.toggle("toggled-on", enabled);
-  // 状態は色だけでなくラベルにも出す（issue #197、色の違いだけでは
-  // ON/OFF が判別しづらかった）。
-  maskButton.textContent = enabled ? "🔒 マスク: ON" : "🔓 マスク: OFF";
+  // 状態は色だけに頼らず施錠アイコンでも示す（issue #197、色の違いだけでは
+  // ON/OFF が判別しづらかった）。ラベルに「: ON」「: OFF」と書き込んでいたのを
+  // アイコンに寄せたのは、押下状態を文字で説明するのがVSCodeの作法から
+  // 外れているため（issue #195）。
+  maskButton.textContent = enabled ? "🔒 Mask" : "🔓 Mask";
 }
 
 /** マスク対象の選択パネルの開閉。閉じても選択内容とマスクのON/OFFは保たれる。 */
@@ -144,6 +150,10 @@ maskOptionsButton.addEventListener("click", () => {
 
 maskTimestampToggle.addEventListener("change", postFilterChanged);
 maskHostToggle.addEventListener("change", postFilterChanged);
+maskProcessIdToggle.addEventListener("change", postFilterChanged);
+// 任意パターン（issue #195）だけはテキスト入力なので、絞り込みのパターン欄と
+// 同じくデバウンスする。
+maskPatternInput.addEventListener("input", postFilterChangedDebounced);
 
 function renderSeverities(distinctSeverities: readonly string[], checked: readonly string[]): void {
   const checkedSet = new Set(checked);
@@ -415,6 +425,8 @@ function renderState(state: ExtensionToWebviewMessage): void {
   setMaskEnabled(state.criteria.mask.enabled);
   maskTimestampToggle.checked = state.criteria.mask.maskTimestamp;
   maskHostToggle.checked = state.criteria.mask.maskHost;
+  maskProcessIdToggle.checked = state.criteria.mask.maskProcessId;
+  syncTextInputIfNotFocused(maskPatternInput, state.criteria.mask.pattern);
 
   statusElement.textContent = `${state.visibleLineCount} / ${state.totalLineCount} 行を表示`;
   warningElement.textContent = state.warning ?? "";

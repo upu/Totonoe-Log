@@ -24,8 +24,14 @@ export type {
 } from "./clockSkew";
 export { compileClockSkewRules, resolveClockSkewMs, applyClockSkew } from "./clockSkew";
 export type { MaskForCopyOptions } from "./maskForCompare";
-export { formatMaskedLogForCompare, maskLogTextForCopy } from "./maskForCompare";
+export { formatMaskedLogForCompare, maskLogTextForCopy, maskProcessIds } from "./maskForCompare";
 export type { DisplayMaskOptions } from "./displayMask";
+export type { MaskByPatternOptions, MaskByPatternResult } from "./maskByPattern";
+export {
+  CUSTOM_MASK_PLACEHOLDER,
+  maskEntriesByPattern,
+  maskMergedEntriesByPattern,
+} from "./maskByPattern";
 export type { CollapseOptions, CollapsedItem } from "./collapseRepeatedEntries";
 export { DEFAULT_COLLAPSE_THRESHOLD, collapseRepeatedEntries } from "./collapseRepeatedEntries";
 export type { FormatCollapsedLogOptions } from "./formatCollapsedLog";

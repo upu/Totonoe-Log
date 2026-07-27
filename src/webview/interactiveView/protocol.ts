@@ -54,6 +54,17 @@ export interface SerializedMaskCriteria {
   readonly enabled: boolean;
   readonly maskTimestamp: boolean;
   readonly maskHost: boolean;
+  readonly maskProcessId: boolean;
+  /**
+   * 任意パターンの入力文字列（正規表現、issue #195）。空文字列は「パターン
+   * なし」。社内固有の識別子など汎用ルールで拾えないものを伏せるための欄で、
+   * 一致箇所は `<MASKED>` に置き換わる。
+   *
+   * 一致パターン・無視パターンと違い、この欄は設定に保存しない——伏せたい
+   * 文字列はログやその時の共有相手によって変わるうえ、設定ファイルに残ると
+   * それ自体が「隠したかった語」の記録になってしまうため。
+   */
+  readonly pattern: string;
 }
 
 /** Webview側フォームの状態をJSON化した表現。 */
