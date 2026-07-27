@@ -31,9 +31,12 @@
 2024-03-01T09:12:01.780Z INFO heartbeat ok
 2024-03-01T09:12:02.980Z INFO GET /api/v1/orders 200 in 42ms
 2024-03-01T09:12:03.780Z DEBUG cache hit for key orders:list:page=1
+2024-03-01T09:12:04.180Z INFO Authenticated request user=hoge tenant=acme role=admin
 2024-03-01T09:12:05.280Z INFO POST /api/v1/orders 201 in 118ms
+2024-03-01T09:12:06.280Z INFO Authenticated request user=fuga tenant=acme role=viewer
 2024-03-01T09:12:07.280Z WARNING Slow query detected: SELECT * FROM orders (1.8s)
 2024-03-01T09:12:08.180Z INFO GET /api/v1/orders/42 200 in 37ms
+2024-03-01T09:12:08.680Z WARNING Permission denied for user=fuga on /api/v1/orders/42
 2024-03-01T09:12:09.280Z ERROR Payment gateway returned 502 for order 42
 2024-03-01T09:12:09.580Z ERROR Unhandled exception while processing request
 java.lang.NullPointerException: Cannot invoke "Order.getTotal()" because "order" is null
@@ -86,6 +89,8 @@ Mar  1 16:20:05 app-01 cron[2510]: (root) CMD (/usr/local/bin/rotate-logs)
 Mar  1 16:20:09 app-01 myapp[1204]: worker 3 reloaded configuration
 Mar  1 16:21:00 app-01 kernel: [12345.678901] TCP: request_sock_TCP: Possible SYN flooding on port 8080
 Mar  1 16:21:30 app-01 myapp[1204]: heartbeat ok
+2024-03-01T16:22:10.000Z WARNING Worker unresponsive, restarting pid=1204
+2024-03-01T16:22:12.400Z INFO Worker restarted pid=4821 for user=hoge session
 ---- begin nightly batch report ----
 processed: 1,284 orders
 failed:    3 orders

@@ -7,9 +7,10 @@ java.lang.NullPointerException
     at com.example.Foo.bar(Foo.java:42)
     at com.example.Foo.main(Foo.java:10)
 ==== retry banner ====
-2024-01-02T03:04:10Z INFO Retrying request
+2024-01-02T03:04:10Z INFO Retrying request user=hoge
 2024-01-02T03:04:11+09:00 INFO Request completed in 250ms
-Jan  2 03:04:12 host myapp: heartbeat ok
+Jan  2 03:04:12 host myapp[1204]: heartbeat ok
+2024-01-02T03:04:20Z WARNING Session expired for user=fuga, worker pid=1204 restarting
 2024-01-03T00:15:00.000Z ERROR Connection to db.internal:5432 timed out
 2024-01-03T00:15:30.000Z INFO Reconnected to database
 2024-01-03T12:00:00.000Z WARNING Memory usage at 90%
