@@ -5,6 +5,7 @@ import {
   buildInteractiveMergedPayload,
   buildInteractiveExportText,
   buildInteractiveMergedExportText,
+  buildKeyMaskPattern,
   limitInteractiveDisplay,
   mergeLogFiles,
   DEFAULT_COLLAPSE_THRESHOLD,
@@ -93,7 +94,9 @@ function createDefaultSerializedCriteria(
       maskTimestamp: configured.maskTimestamp ?? true,
       maskHost: configured.maskHost ?? true,
       maskProcessId: configured.maskProcessId ?? false,
-      // 任意パターン（issue #195）だけは設定から読まない（`SerializedMaskCriteria` 参照）。
+      // キー指定（issue #212）と任意パターン（issue #195）は設定から読まない
+      // （`SerializedMaskCriteria` 参照）。
+      keys: "",
       pattern: "",
     },
     // 読み込んだファイルは全て表示から始める（issue #170）。
@@ -523,8 +526,8 @@ export class InteractiveViewPanelController implements vscode.Disposable {
 
     const displayTimezone = readDisplayTimezone();
     const { criteria, errors } = toFilterCriteria(this.criteria, displayTimezone);
-    const maskPattern = this.compileEnabledMaskPattern();
-    const warnings = [...errors, ...maskPattern.errors];
+    const maskPatterns = this.compileEnabledMaskPatterns();
+    const warnings = [...errors, ...maskPatterns.errors];
     // マージ表示（2ファイル以上）は折りたたみ非対応（issue #172、#158の未解決課題を踏まえた判断）。
     const collapsibleSupported = this.isSingleFile();
     const formatOptions: BuildInteractivePayloadOptions = {
@@ -533,7 +536,7 @@ export class InteractiveViewPanelController implements vscode.Disposable {
       collapseThreshold:
         collapsibleSupported && this.criteria.collapseEnabled ? readCollapseThreshold() : undefined,
       mask: toDisplayMaskOptions(this.criteria),
-      maskPattern: maskPattern.pattern,
+      maskPatterns: maskPatterns.patterns,
       visibleFileIndices: toVisibleFileIndices(this.criteria.visibleFiles),
     };
 
@@ -575,15 +578,29 @@ export class InteractiveViewPanelController implements vscode.Disposable {
   }
 
   /**
-   * マスクパネルの任意パターン（issue #195）をコンパイルする。マスクOFFの間は
-   * コンパイルもしない——効いていない欄の入力ミスで警告を出しても、ユーザーは
-   * 何を直せばよいのか分からないため。
+   * マスクパネルのキー指定欄（issue #212）と任意パターン欄（issue #195）を
+   * 正規表現に直す。マスクOFFの間はコンパイルもしない——効いていない欄の
+   * 入力ミスで警告を出しても、ユーザーは何を直せばよいのか分からないため。
+   *
+   * キー指定を先に並べるのは、`user=(\w+)` のような任意パターンを併用した
+   * ときに、キー指定の結果（`user=<MASKED>`）が先に確定するようにするため。
    */
-  private compileEnabledMaskPattern(): CompileMaskPatternResult {
+  private compileEnabledMaskPatterns(): {
+    readonly patterns: readonly RegExp[];
+    readonly errors: readonly string[];
+  } {
     if (!this.criteria.mask.enabled) {
-      return { errors: [] };
+      return { patterns: [], errors: [] };
     }
-    return compileMaskPattern(this.criteria.mask.pattern);
+
+    const keyPattern = buildKeyMaskPattern(this.criteria.mask.keys);
+    const custom: CompileMaskPatternResult = compileMaskPattern(this.criteria.mask.pattern);
+    return {
+      patterns: [keyPattern, custom.pattern].filter(
+        (pattern): pattern is RegExp => pattern !== undefined
+      ),
+      errors: custom.errors,
+    };
   }
 
   /**
@@ -655,7 +672,7 @@ export class InteractiveViewPanelController implements vscode.Disposable {
         collapsibleSupported && this.criteria.collapseEnabled ? readCollapseThreshold() : undefined,
       // 書き出しは表示の状態を引き継ぐ（issue #194、絞り込み・折りたたみと同じ扱い）。
       mask: toDisplayMaskOptions(this.criteria),
-      maskPattern: this.compileEnabledMaskPattern().pattern,
+      maskPatterns: this.compileEnabledMaskPatterns().patterns,
       visibleFileIndices: toVisibleFileIndices(this.criteria.visibleFiles),
     };
 
@@ -861,10 +878,16 @@ export class InteractiveViewPanelController implements vscode.Disposable {
     align-items: center;
     gap: 4px;
   }
-  /* 任意パターンの入力欄（issue #195）。パネルの他の行はチェックボックスだけで
-     短いため、幅を決めておかないとパネルが入力欄の既定幅まで広がってしまう。 */
+  /* キー指定・任意パターンの入力欄（issue #195、#212）。パネルの他の行は
+     チェックボックスだけで短いため、幅を決めておかないとパネルが入力欄の
+     既定幅まで広がってしまう。2欄の左端を揃えるため、ラベルの幅も固定する。 */
+  #mask-keys,
   #mask-pattern {
     width: 12em;
+  }
+  .mask-field-label {
+    display: inline-block;
+    min-width: 6em;
   }
   #filter-panel {
     display: flex;
@@ -934,9 +957,12 @@ export class InteractiveViewPanelController implements vscode.Disposable {
         <label><input type="checkbox" id="mask-timestamp">タイムスタンプ</label>
         <label><input type="checkbox" id="mask-host">ホスト名 / IPアドレス</label>
         <label><input type="checkbox" id="mask-process-id">プロセスID</label>
-        <!-- 任意パターンにチェックボックスを添えないのは、入力欄が空かどうかが
-             そのままON/OFFになるため（絞り込みのパターン欄と同じ扱い）。 -->
-        <label>任意パターン <input type="text" id="mask-pattern" placeholder="正規表現"></label>
+        <!-- キー指定・任意パターンにチェックボックスを添えないのは、入力欄が
+             空かどうかがそのままON/OFFになるため（絞り込みのパターン欄と同じ
+             扱い）。キー指定を上に置くのは、正規表現を書かずに済むこちらを
+             先に目に入れてほしいため（issue #212）。 -->
+        <label><span class="mask-field-label">キー</span><input type="text" id="mask-keys" placeholder="user, token" title="ここに挙げたキーの値だけを伏せます（user=hoge → user=&lt;MASKED&gt;）。カンマまたは空白区切り。= と : の両方、クォート付きの値にも対応します"></label>
+        <label><span class="mask-field-label">任意パターン</span><input type="text" id="mask-pattern" placeholder="正規表現" title="一致した箇所を &lt;MASKED&gt; に置き換えます。キー名を残したいだけなら上の「キー」欄の方が簡単です"></label>
       </div>
     </div>
     <span id="loaded-files-label">読み込み済み:</span>

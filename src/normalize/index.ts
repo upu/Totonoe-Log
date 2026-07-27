@@ -29,9 +29,10 @@ export type { DisplayMaskOptions } from "./displayMask";
 export type { MaskByPatternOptions, MaskByPatternResult } from "./maskByPattern";
 export {
   CUSTOM_MASK_PLACEHOLDER,
-  maskEntriesByPattern,
-  maskMergedEntriesByPattern,
+  maskEntriesByPatterns,
+  maskMergedEntriesByPatterns,
 } from "./maskByPattern";
+export { buildKeyMaskPattern } from "./maskByKey";
 export type { CollapseOptions, CollapsedItem } from "./collapseRepeatedEntries";
 export { DEFAULT_COLLAPSE_THRESHOLD, collapseRepeatedEntries } from "./collapseRepeatedEntries";
 export type { FormatCollapsedLogOptions } from "./formatCollapsedLog";

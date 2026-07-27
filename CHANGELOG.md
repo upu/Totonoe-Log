@@ -77,6 +77,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `totonoeLog.copyMasked.maskProcessId` setting (default `false`, so existing
   output is unchanged), which also seeds the panel's initial selection.
 
+- The mask panel of `Totonoe Log: Show Interactive View (Alpha)` gained a "キー"
+  field that hides values without writing a regular expression (issue #212).
+  List the key names you want gone — `user, token` (commas or spaces) — and only
+  their values are replaced: `user=hoge` becomes `user=<MASKED>`, keeping the key
+  itself so the line stays readable. It handles `key=value`, `key: value`, and
+  quoted values (`token="abc"` → `token="<MASKED>"`), matches keys
+  case-insensitively, and treats them as literal text, so regex metacharacters
+  and non-ASCII names (`契約ID`) work as typed. A key that merely appears inside
+  a longer one is left alone (`superuser=x` is untouched when masking `user`), as
+  is a spaced-out `user = hoge` — masking the word after an empty `key=` would be
+  worse than missing it. The key field and the free-form pattern field combine,
+  and the field is panel state that is never written to settings.
+
 - `Totonoe Log: Show Interactive View (Alpha)` can now be opened straight from
   the Explorer: right-click a log file — or a selection of several — and pick it
   to open them in a single panel, merged when there are two or more (issues #181
