@@ -1,0 +1,205 @@
+import { Worker } from "node:worker_threads";
+import type { LogEntry } from "./types";
+import type { MergedEntry } from "./mergeLogFiles";
+
+/** 任意パターンで伏せた箇所の表示に使うプレースホルダー（issue #195）。 */
+export const CUSTOM_MASK_PLACEHOLDER = "<MASKED>";
+
+/**
+ * 置換処理を打ち切るまでの既定タイムアウト（ミリ秒）。
+ * `filterByIgnorePattern` / `filterByMatchPattern` と同じ値にして、
+ * ユーザーが入力する3つのパターン欄で待たされる時間の上限を揃える。
+ */
+const DEFAULT_TIMEOUT_MS = 2000;
+
+/**
+ * {@link maskEntriesByPattern} の結果。失敗時に「マスクせず全文を出す」
+ * フォールバックをここでしないのは絞り込みと同じ理由だが、**呼び出し側の
+ * 扱いは逆**——絞り込みの失敗は表示件数が変わるので警告して条件を落とすのに
+ * 対し、マスクの失敗はそのマスクだけを諦めれば他のマスク・絞り込みはそのまま
+ * 成立するため、呼び出し側は結果を捨てずに続行する（issue #195 の受け入れ基準）。
+ */
+export type MaskByPatternResult<TEntry> =
+  | { readonly ok: true; readonly entries: TEntry[] }
+  | { readonly ok: false; readonly reason: "timeout" | "error" };
+
+export interface MaskByPatternOptions {
+  /** 既定のタイムアウトを上書きしたい場合に指定する（主にテスト用）。 */
+  readonly timeoutMs?: number;
+}
+
+/**
+ * ワーカースレッド側で実行する置換処理本体。`filterByIgnorePattern` と同じ理由で
+ * 素の JS の文字列として複製している（ワーカーが呼び出し元のモジュールを
+ * `require` できないため）。
+ *
+ * 行単位で置換するのは、`[\s\S]+` のような改行をまたぐパターンでも行数を
+ * 変えないため——行数が変わると行ジャンプ（issue #179）と表示上限
+ * （issue #178）が前提にしている「マスクしても行構成は変わらない」が崩れる。
+ */
+const WORKER_SOURCE = `
+const { parentPort, workerData } = require("node:worker_threads");
+const { source, flags, placeholder, texts } = workerData;
+const masker = new RegExp(source, flags);
+const masked = texts.map((text) =>
+  text.split("\\n").map((line) => line.replace(masker, placeholder)).join("\\n")
+);
+parentPort.postMessage(masked);
+`;
+
+/**
+ * ユーザーが入力した任意の正規表現に一致した箇所を、プレースホルダーへ
+ * 置き換える（issue #195）。社内固有の識別子（ユーザー名・命名規則を含む
+ * ホスト名・トークン・契約IDなど）は汎用ルールで拾えないため、対象を
+ * ユーザー自身に指定してもらうための機能。
+ *
+ * 置換の対象は `entry.message`（タイムスタンプ・セベリティを除いた本文）だけ
+ * に絞る。タイムスタンプ列やセベリティ列まで巻き込むと、時系列を追うという
+ * Interactive View の役目そのものが壊れてしまうため（一致パターンが
+ * `message` を対象にしているのと同じ判断、issue #182）。`entry.lines` は
+ * 行数の計算にしか使われないのでそのまま残す。
+ *
+ * 整形層（{@link maskDisplayMessageLines}）ではなく整形の手前で処理するのは、
+ * 破局的バックトラッキングを起こすパターンから拡張ホストを守るため——別
+ * スレッドに逃がしてタイムアウトで強制終了できる形は、この位置でしか取れない。
+ */
+export function maskEntriesByPattern(
+  entries: readonly LogEntry[],
+  pattern: RegExp,
+  options: MaskByPatternOptions = {}
+): Promise<MaskByPatternResult<LogEntry>> {
+  return maskMessages(
+    entries,
+    (entry) => entry.message,
+    (entry, message) => ({ ...entry, message }),
+    pattern,
+    options
+  );
+}
+
+/**
+ * {@link maskEntriesByPattern} のマージ版。マージ表示（2ファイル以上）でも
+ * 同じマスクが効くようにするためのもので、置換するのは `MergedEntry.entry` の
+ * メッセージだけ——ファイル名・種別・`fileIndex` は行の出どころを示す情報なので
+ * マスクの対象にしない。
+ */
+export function maskMergedEntriesByPattern(
+  mergedEntries: readonly MergedEntry[],
+  pattern: RegExp,
+  options: MaskByPatternOptions = {}
+): Promise<MaskByPatternResult<MergedEntry>> {
+  return maskMessages(
+    mergedEntries,
+    (merged) => merged.entry.message,
+    (merged, message) => ({ ...merged, entry: { ...merged.entry, message } }),
+    pattern,
+    options
+  );
+}
+
+/**
+ * 任意パターンのマスクを「効かなくても表示は続ける」形で適用した結果
+ * （issue #195）。`failure` が付いていても `entries` は必ず使える
+ * （失敗時はマスク前のエントリがそのまま入る）。
+ */
+export interface AppliedMaskPattern<TEntry> {
+  readonly entries: readonly TEntry[];
+  readonly failure?: "timeout" | "error";
+}
+
+/**
+ * パターン未指定なら何もせず、指定されていれば適用し、失敗したらマスク前の
+ * エントリと失敗理由を返す。Interactive View の4つの合成処理（表示/書き出し ×
+ * 単一/マージ）が同じ縮退の仕方をするよう、この判断をここに1本化する。
+ */
+export async function applyMaskPatternToEntries(
+  entries: readonly LogEntry[],
+  pattern: RegExp | undefined,
+  options: MaskByPatternOptions = {}
+): Promise<AppliedMaskPattern<LogEntry>> {
+  if (!pattern) {
+    return { entries };
+  }
+  const result = await maskEntriesByPattern(entries, pattern, options);
+  return result.ok ? { entries: result.entries } : { entries, failure: result.reason };
+}
+
+/** {@link applyMaskPatternToEntries} のマージ版。 */
+export async function applyMaskPatternToMergedEntries(
+  mergedEntries: readonly MergedEntry[],
+  pattern: RegExp | undefined,
+  options: MaskByPatternOptions = {}
+): Promise<AppliedMaskPattern<MergedEntry>> {
+  if (!pattern) {
+    return { entries: mergedEntries };
+  }
+  const result = await maskMergedEntriesByPattern(mergedEntries, pattern, options);
+  return result.ok
+    ? { entries: result.entries }
+    : { entries: mergedEntries, failure: result.reason };
+}
+
+/**
+ * 単一ファイル用とマージ用で共通の置換処理。エントリからメッセージを取り出す
+ * 関数と、置換後のメッセージでエントリを作り直す関数を受け取ることで、
+ * ワーカーの起動とタイムアウト管理を1か所に閉じ込める。
+ */
+function maskMessages<TEntry>(
+  entries: readonly TEntry[],
+  getMessage: (entry: TEntry) => string,
+  withMessage: (entry: TEntry, message: string) => TEntry,
+  pattern: RegExp,
+  options: MaskByPatternOptions
+): Promise<MaskByPatternResult<TEntry>> {
+  if (entries.length === 0) {
+    return Promise.resolve({ ok: true, entries: [] });
+  }
+
+  const timeoutMs = options.timeoutMs ?? DEFAULT_TIMEOUT_MS;
+  const texts = entries.map(getMessage);
+  // 一致箇所を「全て」置き換えるため、呼び出し側のフラグに関わらず `g` を足す
+  // （`RegExp#replace` は `g` が無いと最初の1件しか置換しない）。
+  const flags = pattern.flags.includes("g") ? pattern.flags : `${pattern.flags}g`;
+
+  return new Promise((resolve) => {
+    const worker = new Worker(WORKER_SOURCE, {
+      eval: true,
+      workerData: {
+        source: pattern.source,
+        flags,
+        placeholder: CUSTOM_MASK_PLACEHOLDER,
+        texts,
+      },
+    });
+
+    let settled = false;
+    const finish = (result: MaskByPatternResult<TEntry>): void => {
+      if (settled) {
+        return;
+      }
+      settled = true;
+      clearTimeout(timer);
+      void worker.terminate();
+      resolve(result);
+    };
+
+    const timer = setTimeout(() => {
+      finish({ ok: false, reason: "timeout" });
+    }, timeoutMs);
+
+    worker.once("message", (masked: string[]) => {
+      finish({
+        ok: true,
+        entries: entries.map((entry, index) =>
+          masked[index] === texts[index] ? entry : withMessage(entry, masked[index])
+        ),
+      });
+    });
+
+    // パターンは呼び出し側で `new RegExp` によりコンパイル済みのため通常は
+    // 到達しないが、ワーカー内での予期しない例外に備えたフェイルセーフ。
+    worker.once("error", () => {
+      finish({ ok: false, reason: "error" });
+    });
+  });
+}

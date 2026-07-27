@@ -6,6 +6,9 @@ import {
   formatNormalizedLog,
   formatMaskedLogForCompare,
   maskLogTextForCopy,
+  maskProcessIds,
+  maskEntriesByPattern,
+  maskMergedEntriesByPattern,
   collapseRepeatedEntries,
   formatCollapsedLog,
   deriveLogKind,
@@ -1971,6 +1974,315 @@ suite("normalize / display mask (#194)", () => {
       result.ok ? result.formatted.text : "",
       "app.log | app | 1 | <TIMESTAMP> INFO from <HOST>"
     );
+  });
+});
+
+suite("normalize / maskProcessIds (#195)", () => {
+  test("masks the pid in a syslog-style tag, keeping the process name and brackets", () => {
+    assert.strictEqual(
+      maskProcessIds("sshd[1234]: Accepted publickey for root"),
+      "sshd[<PID>]: Accepted publickey for root"
+    );
+  });
+
+  test("masks the pid= / pid: / [pid N] keyword forms regardless of case", () => {
+    assert.strictEqual(
+      maskProcessIds("worker exited pid=1234 code=0"),
+      "worker exited pid=<PID> code=0"
+    );
+    assert.strictEqual(maskProcessIds("worker exited PID: 1234"), "worker exited PID: <PID>");
+    assert.strictEqual(maskProcessIds("[pid 1234] request finished"), "[pid <PID>] request finished");
+  });
+
+  test("does not mask thread names or array indices in brackets", () => {
+    // log4j のスレッド名列・配列の添字を巻き込まないことを固定する（#195 の受け入れ基準）。
+    // `items[0]:` はコロンが続くが1桁なので拾わず、`retries[3] =` はコロンが無いので拾わない。
+    const text = "INFO [main] items[0]: ready, retries[3] = 0, [pool-1-thread-3] done";
+
+    assert.strictEqual(maskProcessIds(text), text);
+  });
+
+  test("does not mask a bracketed number without a trailing colon", () => {
+    // syslog のタグは `name[pid]:` の形に決まっているため、コロンを手がかりに
+    // する。コロンが無い `buffer[4096]` のような表記は、PIDらしく見えても
+    // 誤マスクを避けて残す（取りこぼしより誤マスクの方が読み手を混乱させるため）。
+    const text = "allocated buffer[4096] bytes";
+
+    assert.strictEqual(maskProcessIds(text), text);
+  });
+
+  test("does not mask a bracketed number with a leading zero", () => {
+    const text = "chunk[007]: written";
+
+    assert.strictEqual(maskProcessIds(text), text);
+  });
+
+  test("does not mask timestamps or IP addresses", () => {
+    const text = "2024-01-02T03:04:05Z connect to 10.0.0.1 failed";
+
+    assert.strictEqual(maskProcessIds(text), text);
+  });
+
+  test("formatNormalizedLog masks the pid only when maskProcessId is enabled", () => {
+    const entries = parseLog("2024-01-02T03:04:05Z INFO worker pid=1234 started");
+
+    assert.strictEqual(
+      formatNormalizedLog(entries),
+      "1 | 2024-01-02T03:04:05.000Z INFO worker pid=1234 started"
+    );
+    assert.strictEqual(
+      formatNormalizedLog(entries, { mask: { maskProcessId: true } }),
+      "1 | 2024-01-02T03:04:05.000Z INFO worker pid=<PID> started"
+    );
+  });
+
+  test("formatNormalizedLog masks a single-digit pid in the syslog tag position", () => {
+    // syslog（RFC3164）はタグの位置が確定しているため、汎用ルールでは
+    // 誤マスクを避けて外している1桁のPID（`systemd[1]:`）もここでは拾える。
+    const entries = parseLog("Jan  2 03:04:05 web01 systemd[1]: Started daemon", {
+      timestampFormats: [createSyslogFormat({ assumedYear: 2024 })],
+    });
+
+    assert.strictEqual(
+      formatNormalizedLog(entries, { mask: { maskProcessId: true } }),
+      "1 | 2024-01-02T03:04:05.000Z - web01 systemd[<PID>]: Started daemon"
+    );
+    assert.strictEqual(
+      formatNormalizedLog(entries, { mask: { maskHost: true, maskProcessId: true } }),
+      "1 | 2024-01-02T03:04:05.000Z - <HOST> systemd[<PID>]: Started daemon"
+    );
+  });
+
+  test("maskLogTextForCopy masks process ids only when the option is enabled", () => {
+    // 既定を false にしているのは、既存の `Copy Masked Text` の出力を
+    // 変えないため（他の2対象は既定 true）。
+    const entries = parseLog("2024-01-02T03:04:05Z INFO worker pid=1234 started");
+
+    assert.strictEqual(maskLogTextForCopy(entries), "<TIMESTAMP> INFO worker pid=1234 started");
+    assert.strictEqual(
+      maskLogTextForCopy(entries, { maskProcessId: true }),
+      "<TIMESTAMP> INFO worker pid=<PID> started"
+    );
+  });
+
+  test("maskLogTextForCopy masks the syslog tag pid in place, keeping the raw formatting", () => {
+    const entries = parseLog("Jan  2 03:04:05 web01 systemd[1]: Started daemon", {
+      timestampFormats: [createSyslogFormat({ assumedYear: 2024 })],
+    });
+
+    assert.strictEqual(
+      maskLogTextForCopy(entries, {
+        maskTimestamp: false,
+        maskHost: false,
+        maskProcessId: true,
+      }),
+      "Jan  2 03:04:05 web01 systemd[<PID>]: Started daemon"
+    );
+  });
+});
+
+suite("normalize / maskEntriesByPattern (#195)", () => {
+  /** テストの意図（置換結果の検証）を明確にするための、成功時のみ通すヘルパー。 */
+  async function maskOk(entries: Parameters<typeof maskEntriesByPattern>[0], pattern: RegExp) {
+    const result = await maskEntriesByPattern(entries, pattern);
+    assert.strictEqual(result.ok, true);
+    if (!result.ok) {
+      throw new Error("unreachable");
+    }
+    return result.entries;
+  }
+
+  test("replaces every match in the message with the placeholder", async () => {
+    const entries = parseLog("2024-01-02T03:04:05Z INFO user=alice retried for user=alice");
+
+    const masked = await maskOk(entries, /user=\w+/i);
+
+    assert.strictEqual(masked[0].message, "<MASKED> retried for <MASKED>");
+  });
+
+  test("leaves the timestamp and severity untouched", async () => {
+    // 置換の対象はメッセージ本文だけ。タイムスタンプ列・セベリティ列まで
+    // 消えると時系列を追うビューとして用を成さなくなるため。
+    const entries = parseLog("2024-01-02T03:04:05Z ERROR boom");
+
+    const masked = await maskOk(entries, /\d+/);
+
+    assert.strictEqual(masked[0].timestampMs, entries[0].timestampMs);
+    assert.strictEqual(masked[0].severity, "ERROR");
+    assert.strictEqual(masked[0].message, "boom");
+  });
+
+  test("masks each line of a multi-line message without changing the line count", async () => {
+    const entries = parseLog(
+      [
+        "2024-01-02T03:04:05Z ERROR boom token=abc",
+        "    at com.example.Foo.bar(token=def)",
+      ].join("\n")
+    );
+
+    const masked = await maskOk(entries, /token=\w+/);
+
+    assert.deepStrictEqual(masked[0].message.split("\n"), [
+      "boom <MASKED>",
+      "    at com.example.Foo.bar(<MASKED>)",
+    ]);
+    assert.strictEqual(masked[0].lines.length, entries[0].lines.length);
+  });
+
+  test("cannot swallow line breaks even with a pattern that would span lines", async () => {
+    // 行単位で置換するため、`[\s\S]+` のようなパターンでも行数は変わらない。
+    // 行数が変わると行ジャンプ（#179）と表示上限（#178）の前提が壊れる。
+    const entries = parseLog(
+      ["2024-01-02T03:04:05Z ERROR boom", "    at com.example.Foo.bar"].join("\n")
+    );
+
+    const masked = await maskOk(entries, /[\s\S]+/);
+
+    assert.strictEqual(masked[0].message, "<MASKED>\n<MASKED>");
+  });
+
+  test("returns the entries unchanged when nothing matches", async () => {
+    const entries = parseLog("2024-01-02T03:04:05Z INFO hello");
+
+    const masked = await maskOk(entries, /nope/);
+
+    assert.strictEqual(masked[0].message, "hello");
+  });
+
+  test("returns an empty result without spawning a worker when there are no entries", async () => {
+    const masked = await maskOk([], /anything/);
+
+    assert.deepStrictEqual(masked, []);
+  });
+
+  test("terminates and reports a timeout instead of hanging forever", async function () {
+    this.timeout(5000);
+
+    // 絞り込みのパターン評価（#182）と同じ理由で、破局的バックトラッキングを
+    // 起こす正規表現は literal で置かず、安全なパターンに極端に短い timeoutMs を
+    // 与えて打ち切りのコードパスを決定的に検証する。
+    const entries = parseLog("2024-01-02T03:04:05Z INFO hello");
+
+    const result = await maskEntriesByPattern(entries, /hello/, { timeoutMs: 1 });
+
+    assert.strictEqual(result.ok, false);
+    if (!result.ok) {
+      assert.strictEqual(result.reason, "timeout");
+    }
+  });
+
+  test("masks merged entries while keeping their file index", async () => {
+    const merged = mergeLogFiles([
+      { fileName: "app.log", text: "2024-01-02T03:04:05Z INFO user=alice ok" },
+    ]);
+
+    const result = await maskMergedEntriesByPattern(merged, /user=\w+/);
+
+    assert.strictEqual(result.ok, true);
+    if (!result.ok) {
+      return;
+    }
+    assert.strictEqual(result.entries[0].entry.message, "<MASKED> ok");
+    assert.strictEqual(result.entries[0].fileIndex, merged[0].fileIndex);
+  });
+});
+
+suite("normalize / custom mask pattern in the interactive builders (#195)", () => {
+  const ENTRY_TEXT = "2024-01-02T03:04:05Z INFO user=alice from 10.0.0.1";
+
+  test("buildInteractivePayload applies the pattern before formatting, alongside the other masks", async () => {
+    const result = await buildInteractivePayload(parseLog(ENTRY_TEXT), {}, {
+      mask: { maskHost: true },
+      maskPattern: /user=\w+/,
+    });
+
+    assert.ok(result.ok);
+    if (!result.ok) {
+      return;
+    }
+    assert.strictEqual(result.text, "1 | 2024-01-02T03:04:05.000Z INFO <MASKED> from <HOST>");
+    assert.strictEqual(result.maskPatternFailure, undefined);
+  });
+
+  test("buildInteractivePayload keeps the other masks and reports the failure when the pattern times out", async function () {
+    this.timeout(5000);
+
+    // 縮退の仕方は無視パターン（#182）と揃える——効かないのは失敗した
+    // マスクだけで、パネルは壊れず他のマスクは効き続ける。
+    const result = await buildInteractivePayload(parseLog(ENTRY_TEXT), {}, {
+      mask: { maskHost: true },
+      maskPattern: /user=\w+/,
+      maskPatternTimeoutMs: 1,
+    });
+
+    assert.ok(result.ok);
+    if (!result.ok) {
+      return;
+    }
+    assert.strictEqual(result.maskPatternFailure, "timeout");
+    assert.strictEqual(result.text, "1 | 2024-01-02T03:04:05.000Z INFO user=alice from <HOST>");
+  });
+
+  test("buildInteractivePayload applies the pattern to the collapsed items as well", async () => {
+    const text = [
+      "2024-01-02T03:04:05Z INFO user=alice ok",
+      "2024-01-02T03:04:06Z INFO user=alice ok",
+      "2024-01-02T03:04:07Z INFO user=alice ok",
+    ].join("\n");
+
+    const result = await buildInteractivePayload(parseLog(text), {}, {
+      collapseThreshold: 3,
+      maskPattern: /user=\w+/,
+    });
+
+    assert.ok(result.ok);
+    if (!result.ok) {
+      return;
+    }
+    assert.strictEqual(result.items?.length, 1);
+    assert.match(result.items?.[0].kind === "group" ? result.items[0].headerText : "", /<MASKED> ok/);
+  });
+
+  test("buildInteractiveMergedPayload applies the pattern", async () => {
+    const merged = mergeLogFiles([{ fileName: "app.log", text: ENTRY_TEXT }]);
+
+    const result = await buildInteractiveMergedPayload(merged, {}, { maskPattern: /user=\w+/ });
+
+    assert.ok(result.ok);
+    assert.strictEqual(
+      result.ok ? result.text : "",
+      "app.log | app | 1 | 2024-01-02T03:04:05.000Z INFO <MASKED> from 10.0.0.1"
+    );
+  });
+
+  test("buildInteractiveExportText applies the pattern and reports a failure without dropping the export", async function () {
+    this.timeout(5000);
+
+    const entries = parseLog(ENTRY_TEXT);
+
+    const applied = await buildInteractiveExportText(entries, {}, { maskPattern: /user=\w+/ });
+    assert.ok(applied.ok);
+    assert.match(applied.ok ? applied.formatted.text : "", /<MASKED> from 10\.0\.0\.1/);
+
+    const failed = await buildInteractiveExportText(entries, {}, {
+      maskPattern: /user=\w+/,
+      maskPatternTimeoutMs: 1,
+    });
+    assert.ok(failed.ok);
+    if (!failed.ok) {
+      return;
+    }
+    assert.strictEqual(failed.maskPatternFailure, "timeout");
+    assert.match(failed.formatted.text, /user=alice/);
+  });
+
+  test("buildInteractiveMergedExportText applies the pattern", async () => {
+    const merged = mergeLogFiles([{ fileName: "app.log", text: ENTRY_TEXT }]);
+
+    const result = await buildInteractiveMergedExportText(merged, {}, { maskPattern: /user=\w+/ });
+
+    assert.ok(result.ok);
+    assert.match(result.ok ? result.formatted.text : "", /INFO <MASKED> from/);
   });
 });
 

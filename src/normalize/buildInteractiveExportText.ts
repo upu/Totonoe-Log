@@ -6,6 +6,10 @@ import type { DisplayMaskOptions } from "./displayMask";
 import { filterEntriesByCriteria, type FilterCriteria } from "./filterEntries";
 import { filterMergedEntriesByCriteria } from "./filterMergedEntries";
 import { filterMergedEntriesByFileIndex, isFileIndexVisible, SINGLE_FILE_INDEX } from "./filterByFile";
+import {
+  applyMaskPatternToEntries,
+  applyMaskPatternToMergedEntries,
+} from "./maskByPattern";
 import { formatNormalizedLogWithLineSources } from "./formatNormalizedLog";
 import { formatMergedLogWithLineSources } from "./formatMergedLog";
 import { formatCollapsedLogWithLineSources } from "./formatCollapsedLog";
@@ -34,6 +38,14 @@ export interface BuildInteractiveExportTextOptions {
   readonly mask?: DisplayMaskOptions;
 
   /**
+   * 指定すると、一致箇所を `<MASKED>` に置き換える（issue #195）。表示側と
+   * 同じく、書き出しもマスクパネルの状態をそのまま引き継ぐ。
+   */
+  readonly maskPattern?: RegExp;
+  /** 任意パターンのマスクに使うタイムアウト（ミリ秒）を上書きしたい場合に指定する（主にテスト用）。 */
+  readonly maskPatternTimeoutMs?: number;
+
+  /**
    * 表示ONにしている読み込み済みファイルのインデックス集合（issue #170）。
    * 未指定なら全ファイルを書き出す。表示中の状態をそのまま書き出すため、
    * 絞り込み・折りたたみ・マスクと同じく画面のファイル選択にも従う。
@@ -42,7 +54,12 @@ export interface BuildInteractiveExportTextOptions {
 }
 
 export type InteractiveExportTextResult =
-  | { readonly ok: true; readonly formatted: FormattedLogWithLineSources }
+  | {
+      readonly ok: true;
+      readonly formatted: FormattedLogWithLineSources;
+      /** 任意パターンのマスク（issue #195）を適用できなかった場合の理由（表示側と同じ扱い）。 */
+      readonly maskPatternFailure?: "timeout" | "error";
+    }
   | { readonly ok: false; readonly reason: "timeout" | "error" };
 
 /**
@@ -66,26 +83,32 @@ export async function buildInteractiveExportText(
     return filterResult;
   }
 
+  const masked = await applyMaskPatternToEntries(filterResult.entries, options.maskPattern, {
+    timeoutMs: options.maskPatternTimeoutMs,
+  });
+
   if (options.collapseThreshold !== undefined) {
-    const items = collapseRepeatedEntries(filterResult.entries, {
+    const items = collapseRepeatedEntries(masked.entries, {
       threshold: options.collapseThreshold,
     });
     return {
       ok: true,
-      formatted: formatCollapsedLogWithLineSources(filterResult.entries, items, {
+      formatted: formatCollapsedLogWithLineSources(masked.entries, items, {
         displayTimezone: options.displayTimezone,
         mask: options.mask,
       }),
+      maskPatternFailure: masked.failure,
     };
   }
 
   return {
     ok: true,
-    formatted: formatNormalizedLogWithLineSources(filterResult.entries, {
+    formatted: formatNormalizedLogWithLineSources(masked.entries, {
       gapThresholdMs: options.gapThresholdMs,
       displayTimezone: options.displayTimezone,
       mask: options.mask,
     }),
+    maskPatternFailure: masked.failure,
   };
 }
 
@@ -108,12 +131,17 @@ export async function buildInteractiveMergedExportText(
     return filterResult;
   }
 
+  const masked = await applyMaskPatternToMergedEntries(filterResult.entries, options.maskPattern, {
+    timeoutMs: options.maskPatternTimeoutMs,
+  });
+
   return {
     ok: true,
-    formatted: formatMergedLogWithLineSources(filterResult.entries, {
+    formatted: formatMergedLogWithLineSources(masked.entries, {
       gapThresholdMs: options.gapThresholdMs,
       displayTimezone: options.displayTimezone,
       mask: options.mask,
     }),
+    maskPatternFailure: masked.failure,
   };
 }
