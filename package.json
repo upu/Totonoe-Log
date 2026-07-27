@@ -50,22 +50,6 @@
         "title": "Totonoe Log: Show Normalized View"
       },
       {
-        "command": "totonoeLog.showNormalizedViewFilteredBySeverity",
-        "title": "Totonoe Log: Show Normalized View Filtered by Severity"
-      },
-      {
-        "command": "totonoeLog.showNormalizedViewFilteredByDateRange",
-        "title": "Totonoe Log: Show Normalized View Filtered by Date Range"
-      },
-      {
-        "command": "totonoeLog.showNormalizedViewFilteredByDateRangeAndSeverity",
-        "title": "Totonoe Log: Show Normalized View Filtered by Date Range and Severity"
-      },
-      {
-        "command": "totonoeLog.showNormalizedViewFilteredByIgnorePattern",
-        "title": "Totonoe Log: Show Normalized View Filtered by Ignore Pattern"
-      },
-      {
         "command": "totonoeLog.showNormalizedViewFiltered",
         "title": "Totonoe Log: Show Normalized View Filtered"
       },
@@ -86,8 +70,8 @@
         "title": "Totonoe Log: Go to Source Line"
       },
       {
-        "command": "totonoeLog.showInteractiveViewAlpha",
-        "title": "Totonoe Log: Show Interactive View (Alpha)"
+        "command": "totonoeLog.showInteractiveView",
+        "title": "Totonoe Log: Show Interactive View"
       },
       {
         "command": "totonoeLog.goToSourceLineFromInteractiveView",
@@ -120,7 +104,7 @@
           "group": "totonoeLog@2"
         },
         {
-          "command": "totonoeLog.showInteractiveViewAlpha",
+          "command": "totonoeLog.showInteractiveView",
           "when": "!explorerResourceIsFolder",
           "group": "totonoeLog@3"
         }
@@ -167,7 +151,7 @@
           "type": "number",
           "default": 20000,
           "minimum": 0,
-          "description": "Totonoe Log: Show Interactive View (Alpha) が一度に描画する行数の上限。超えた場合は先頭のみを表示し、警告と全体を開く手段（Export as Virtual Document）を案内する。0 を指定すると無効化する。"
+          "description": "Totonoe Log: Show Interactive View が一度に描画する行数の上限。超えた場合は先頭のみを表示し、警告と全体を開く手段（Export as Virtual Document）を案内する。0 を指定すると無効化する。"
         },
         "totonoeLog.timezone.display": {
           "type": "string",

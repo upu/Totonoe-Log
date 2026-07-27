@@ -10,49 +10,47 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
-- New experimental `Totonoe Log: Show Interactive View (Alpha)` command:
+- New `Totonoe Log: Show Interactive View` command:
   opens the normalized log in a Webview panel where severity, date-range,
   and ignore-pattern filters can be toggled live, without round-tripping
-  through Quick Pick dialogs. This is the first step of an alpha
-  exploration (issue #166) into a Webview-based interactive view; existing
-  read-only virtual-document views are unaffected and remain the primary
-  way to work with logs. Expect this command's behavior to change.
-- `Totonoe Log: Show Interactive View (Alpha)` can now load additional log
+  through Quick Pick dialogs (issue #166). The existing read-only
+  virtual-document views are unaffected and remain available.
+- `Totonoe Log: Show Interactive View` can now load additional log
   files via a "+ Add Files..." button in the panel. Once two or more files
   are loaded, the view switches to a merged, filename/kind-columned display
-  (issue #168, the next alpha step in #165), while a single loaded file
+  (issue #168, the next step in #165), while a single loaded file
   keeps the original normalized display.
-- `Totonoe Log: Show Interactive View (Alpha)` now collapses repeated
+- `Totonoe Log: Show Interactive View` now collapses repeated
   entries by default while a single file is loaded, with a checkbox to
   turn collapsing off. Clicking a collapsed group's header expands or
   restores it entirely inside the Webview, with no extension round-trip
-  (issue #172, the next alpha step in #165). Collapsing is not yet
+  (issue #172, the next step in #165). Collapsing is not yet
   available once two or more files are merged.
-- `Totonoe Log: Show Interactive View (Alpha)` now has an "Export as Virtual
+- `Totonoe Log: Show Interactive View` now has an "Export as Virtual
   Document" button that opens the current filter/merge/collapse state as a
   regular read-only virtual document, reusing the existing normalized/merged
   view infrastructure (search, copy, `Go to Source Line`, and `Compare Logs`
-  all work on it as-is; issue #175, the next alpha step in #165).
-- `Totonoe Log: Show Interactive View (Alpha)` can now jump from a log line to
+  all work on it as-is; issue #175, the next step in #165).
+- `Totonoe Log: Show Interactive View` can now jump from a log line to
   that line in the original file: double-click the line, or right-click it and
   pick "Totonoe Log: Go to Source Line". Hovering a line shows the source
-  file's full path and line number (issues #179 and #191, the next alpha step
+  file's full path and line number (issues #179 and #191, the next step
   in #165). This reuses the same jump behavior as `Go to Source Line`. A single
   click never jumps, so selecting text stays safe. Generated lines such as gap
   markers have no original line and are not jump targets, and a collapsed
   group's header line keeps its expand/restore click.
-- `Totonoe Log: Show Interactive View (Alpha)` now caps how many lines it
+- `Totonoe Log: Show Interactive View` now caps how many lines it
   renders at once (`totonoeLog.interactiveView.maxDisplayLines`, default
   `20000`, `0` disables the cap). Beyond the cap it renders only the leading
   lines and shows a notice pointing at narrowing the filters or opening the
   whole thing with "Export as Virtual Document", instead of bogging the panel
   down with a huge DOM (issue #178).
-- `Totonoe Log: Show Interactive View (Alpha)` can now mask the log it displays,
+- `Totonoe Log: Show Interactive View` can now mask the log it displays,
   ready to paste into an issue or chat: the mask button ("🔓 Mask" / "🔒 Mask")
   replaces timestamps and host names / IP addresses with placeholders in place,
   and the
   "▾" beside it opens a panel for picking which of them to hide (issues #180
-  and #194, the next alpha step in #165). Masking is a display state rather than
+  and #194, the next step in #165). Masking is a display state rather than
   a one-shot copy action, so the panel's normal copy (Ctrl+C), search, and
   "Export as Virtual Document" all operate on the masked text, while filters,
   collapsed groups, and line numbers stay exactly as shown. It is off by
@@ -62,9 +60,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   settings shared with `Totonoe Log: Copy Masked Text`; no new settings were
   added.
 
-- The mask panel of `Totonoe Log: Show Interactive View (Alpha)` gained two more
+- The mask panel of `Totonoe Log: Show Interactive View` gained two more
   targets: process IDs and anything matching a pattern you type (issue #195, the
-  next alpha step in #165). "プロセスID" replaces syslog-style `sshd[1234]:` tags
+  next step in #165). "プロセスID" replaces syslog-style `sshd[1234]:` tags
   and `pid=1234` / `pid: 1234` / `[pid 1234]` notations with `<PID>`, while
   leaving log4j thread names (`[main]`) and array indices (`retries[3]`) alone.
   "任意パターン" takes a regular expression and replaces every match with
@@ -77,7 +75,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `totonoeLog.copyMasked.maskProcessId` setting (default `false`, so existing
   output is unchanged), which also seeds the panel's initial selection.
 
-- The mask panel of `Totonoe Log: Show Interactive View (Alpha)` gained a "キー"
+- The mask panel of `Totonoe Log: Show Interactive View` gained a "キー"
   field that hides values without writing a regular expression (issue #212).
   List the key names you want gone — `user, token` (commas or spaces) — and only
   their values are replaced: `user=hoge` becomes `user=<MASKED>`, keeping the key
@@ -90,18 +88,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   worse than missing it. The key field and the free-form pattern field combine,
   and the field is panel state that is never written to settings.
 
-- `Totonoe Log: Show Interactive View (Alpha)` can now be opened straight from
+- `Totonoe Log: Show Interactive View` can now be opened straight from
   the Explorer: right-click a log file — or a selection of several — and pick it
   to open them in a single panel, merged when there are two or more (issues #181
-  and #201, the next alpha step in #165).
+  and #201, the next step in #165).
   Unlike the panel's "+ Add Files..." dialog, an Explorer selection can span
   folders (the same reasoning as issue #151). Running it from the command
   palette still targets the active editor's log, including unsaved changes.
 
-- The loaded-file list in `Totonoe Log: Show Interactive View (Alpha)` is now
+- The loaded-file list in `Totonoe Log: Show Interactive View` is now
   interactive: each file has a checkbox that hides or shows just that file's
   lines, and a "✕" button that undoes loading it altogether (issue #170, the
-  next alpha step in #165). The per-file checkbox is a filter axis of its own,
+  next step in #165). The per-file checkbox is a filter axis of its own,
   so it combines with the severity / date-range / ignore-pattern filters, and
   "Export as Virtual Document" writes out only the files that are shown.
   Hiding a file keeps its severities in the filter panel and keeps the "N / M
@@ -109,19 +107,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   remaining file cannot be removed (with none loaded, "+ Add Files..." would
   have nothing to add to) — uncheck it instead to hide it temporarily. The
   panel's tab title now also follows along as files are added or removed.
-- `Totonoe Log: Show Interactive View (Alpha)` now has a "match pattern"
+- `Totonoe Log: Show Interactive View` now has a "match pattern"
   input next to the existing "ignore pattern" one: entries whose message
   matches are the only ones kept, which is exactly the inverse of the
-  ignore pattern (issue #182, the next alpha step in #165). Since a Webview
+  ignore pattern (issue #182, the next step in #165). Since a Webview
   cannot use VS Code's Ctrl+F, this is offered as a filter that shows only
   matching lines rather than as a highlight-and-jump search. Both inputs are
   case-insensitive regular expressions, and the match pattern is tested
   against the entry's message only — timestamps and severities are already
   covered by the date-range and severity filters — so a multi-line entry
   such as a stack trace is kept whole when any of its lines match.
-- `Totonoe Log: Show Interactive View (Alpha)` now redraws itself as soon as a
+- `Totonoe Log: Show Interactive View` now redraws itself as soon as a
   relevant `totonoeLog.*` setting changes, instead of waiting until a filter is
-  next touched (issue #183, the next alpha step in #165). Settings that only
+  next touched (issue #183, the next step in #165). Settings that only
   affect formatting (`timezone.display`, `gap.thresholdSeconds`,
   `collapse.threshold`, `interactiveView.maxDisplayLines`) redraw the current
   entries, while settings that change how the log is parsed
@@ -129,6 +127,29 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `clockSkew.fileOffsets`) re-parse the loaded files first. Because a
   re-parse can surface severities that were not present before, those are
   checked automatically so their lines are not silently hidden.
+
+### Changed
+
+- **Breaking:** the four per-criterion filter commands were removed, since
+  Interactive View's live toggles (and the combined picker command that stays)
+  now cover them (issue #184). If you had a keybinding on one of these, point it
+  at `totonoeLog.showNormalizedViewFiltered` or
+  `totonoeLog.showInteractiveView` instead:
+  - `totonoeLog.showNormalizedViewFilteredBySeverity`
+  - `totonoeLog.showNormalizedViewFilteredByDateRange`
+  - `totonoeLog.showNormalizedViewFilteredByDateRangeAndSeverity`
+  - `totonoeLog.showNormalizedViewFilteredByIgnorePattern`
+
+  `Totonoe Log: Show Normalized View Filtered`, `Show Normalized View`,
+  `Show Collapsed View`, and both merge commands are unchanged — the command
+  list goes from 13 entries to 9.
+- **Breaking:** Interactive View dropped its `(Alpha)` marker along with the
+  alpha-era command id (issue #184). The command is now
+  `totonoeLog.showInteractiveView` (was `totonoeLog.showInteractiveViewAlpha`)
+  and is titled `Totonoe Log: Show Interactive View`; its panel title is
+  `Totonoe Log: <file name>` (was `Totonoe Log (Alpha): <file name>`). Only
+  keybindings on the old id are affected, and only for users who ran a
+  pre-release build — the alpha id was never part of a published release.
 
 ## [0.7.0] - 2026-07-23
 

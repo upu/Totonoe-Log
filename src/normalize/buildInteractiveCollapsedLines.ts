@@ -16,7 +16,7 @@ const SEVERITY_PLACEHOLDER = "-";
 const TIMESTAMP_SPAN_SEPARATOR = " 〜 ";
 
 /**
- * Interactive View (Alpha) の折りたたみ表示（issue #172）が1件分として扱う
+ * Interactive View の折りたたみ表示（issue #172）が1件分として扱う
  * 表示単位。`line` は折りたたまれなかった1物理行、`group` はクリックで
  * 展開/復元できる折りたたみグループを表す。`group.lines` には、グループ内の
  * 各エントリを {@link formatNormalizedLog} と同じ見た目で個別整形した行を
@@ -156,8 +156,8 @@ function formatGroupHeaderText(
 }
 
 /**
- * {@link parseLog} が返す {@link LogEntry} の配列から、Interactive View
- * (Alpha) の折りたたみ表示（issue #172）用の表示単位を組み立てる。
+ * {@link parseLog} が返す {@link LogEntry} の配列から、Interactive View の
+ * 折りたたみ表示（issue #172）用の表示単位を組み立てる。
  * `collapseRepeatedEntries` によるグルーピングと、{@link formatNormalizedLog}
  * 相当の整形を1パスで行うことで、単一行・グループ内展開行の間でガター幅を
  * 一貫させる。

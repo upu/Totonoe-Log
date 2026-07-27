@@ -25,6 +25,35 @@ suite("Totonoe Log extension", () => {
       "totonoeLog.showNormalizedView command should be registered"
     );
   });
+
+  test("no longer offers the per-criterion filter commands (#184)", async () => {
+    const extension = vscode.extensions.getExtension("upu.totonoe-log");
+    await extension!.activate();
+
+    // Interactive View のライブトグルで代替できるため廃止した4コマンド。
+    // 複合ピッカー版（showNormalizedViewFiltered）だけを残す。
+    const removedCommands = [
+      "totonoeLog.showNormalizedViewFilteredBySeverity",
+      "totonoeLog.showNormalizedViewFilteredByDateRange",
+      "totonoeLog.showNormalizedViewFilteredByDateRangeAndSeverity",
+      "totonoeLog.showNormalizedViewFilteredByIgnorePattern",
+    ];
+
+    const commands = await vscode.commands.getCommands(true);
+    const contributed = (
+      extension!.packageJSON.contributes.commands as Array<{ command: string }>
+    ).map((item) => item.command);
+
+    for (const removed of removedCommands) {
+      assert.ok(!commands.includes(removed), `${removed} should no longer be registered`);
+      assert.ok(!contributed.includes(removed), `${removed} should no longer be contributed`);
+    }
+
+    assert.ok(
+      contributed.includes("totonoeLog.showNormalizedViewFiltered"),
+      "the combined picker command should remain"
+    );
+  });
 });
 
 suite("Totonoe Log normalized view", () => {
@@ -176,589 +205,6 @@ suite("Totonoe Log normalized view", () => {
     // 表示自体は vscode.window.showWarningMessage をモックしない限り検証できない）。
     await assert.doesNotReject(async () => {
       await vscode.commands.executeCommand("totonoeLog.showNormalizedView");
-    });
-  });
-});
-
-suite("Totonoe Log normalized view filtered by severity", () => {
-  test("registers the showNormalizedViewFilteredBySeverity command", async () => {
-    const extension = vscode.extensions.getExtension("upu.totonoe-log");
-    await extension!.activate();
-
-    const commands = await vscode.commands.getCommands(true);
-    assert.ok(
-      commands.includes("totonoeLog.showNormalizedViewFilteredBySeverity"),
-      "totonoeLog.showNormalizedViewFilteredBySeverity command should be registered"
-    );
-  });
-
-  test("shows only entries matching the severities picked by the user", async function () {
-    // 実物のドキュメントを開く操作を伴うため、CI環境の負荷次第で既定の
-    // 2000msを超えることがある（issue #72）。前例に合わせて個別に緩和する。
-    this.timeout(10000);
-    const extension = vscode.extensions.getExtension("upu.totonoe-log");
-    await extension!.activate();
-
-    const source = await vscode.workspace.openTextDocument({
-      content: [
-        "2024-01-02T03:04:05Z INFO starting",
-        "2024-01-02T03:04:06Z ERROR boom",
-      ].join("\n"),
-      language: "log",
-    });
-    await vscode.window.showTextDocument(source);
-
-    const originalShowQuickPick = vscode.window.showQuickPick;
-    (vscode.window as any).showQuickPick = async (items: vscode.QuickPickItem[]) =>
-      items.filter((item) => item.label === "ERROR");
-
-    try {
-      await vscode.commands.executeCommand("totonoeLog.showNormalizedViewFilteredBySeverity");
-    } finally {
-      (vscode.window as any).showQuickPick = originalShowQuickPick;
-    }
-
-    const activeEditor = vscode.window.activeTextEditor;
-    assert.ok(activeEditor, "a filtered normalized view editor should be shown");
-    assert.strictEqual(activeEditor!.document.uri.scheme, "totonoe-log-normalized");
-    assert.strictEqual(
-      activeEditor!.document.getText(),
-      "2 | 2024-01-02T03:04:06.000Z ERROR boom"
-    );
-  });
-
-  test("does nothing when the severity picker is dismissed", async function () {
-    // 実物のドキュメントを開く操作を伴うため、CI環境の負荷次第で既定の
-    // 2000msを超えることがある（issue #72）。前例に合わせて個別に緩和する。
-    this.timeout(10000);
-    const extension = vscode.extensions.getExtension("upu.totonoe-log");
-    await extension!.activate();
-
-    const source = await vscode.workspace.openTextDocument({
-      content: "2024-01-02T03:04:05Z INFO starting",
-      language: "log",
-    });
-    await vscode.window.showTextDocument(source);
-    await vscode.commands.executeCommand("workbench.action.closeOtherEditors");
-
-    const originalShowQuickPick = vscode.window.showQuickPick;
-    (vscode.window as any).showQuickPick = async () => undefined;
-
-    try {
-      await vscode.commands.executeCommand("totonoeLog.showNormalizedViewFilteredBySeverity");
-    } finally {
-      (vscode.window as any).showQuickPick = originalShowQuickPick;
-    }
-
-    const activeEditor = vscode.window.activeTextEditor;
-    assert.ok(activeEditor, "the original editor should remain active");
-    assert.notStrictEqual(activeEditor!.document.uri.scheme, "totonoe-log-normalized");
-  });
-
-  test("shows a warning when there is no active editor to filter", async () => {
-    const extension = vscode.extensions.getExtension("upu.totonoe-log");
-    await extension!.activate();
-
-    await vscode.commands.executeCommand("workbench.action.closeAllEditors");
-
-    await assert.doesNotReject(async () => {
-      await vscode.commands.executeCommand("totonoeLog.showNormalizedViewFilteredBySeverity");
-    });
-  });
-});
-
-suite("Totonoe Log normalized view filtered by date range", () => {
-  test("registers the showNormalizedViewFilteredByDateRange command", async () => {
-    const extension = vscode.extensions.getExtension("upu.totonoe-log");
-    await extension!.activate();
-
-    const commands = await vscode.commands.getCommands(true);
-    assert.ok(
-      commands.includes("totonoeLog.showNormalizedViewFilteredByDateRange"),
-      "totonoeLog.showNormalizedViewFilteredByDateRange command should be registered"
-    );
-  });
-
-  test("shows only entries within the date range entered by the user", async () => {
-    const extension = vscode.extensions.getExtension("upu.totonoe-log");
-    await extension!.activate();
-
-    const source = await vscode.workspace.openTextDocument({
-      content: [
-        "2024-01-01T00:00:00Z INFO before range",
-        "2024-01-02T03:04:05Z INFO in range",
-        "2024-01-03T00:00:00Z INFO after range",
-      ].join("\n"),
-      language: "log",
-    });
-    await vscode.window.showTextDocument(source);
-
-    const originalShowInputBox = vscode.window.showInputBox;
-    let callCount = 0;
-    (vscode.window as any).showInputBox = async () => {
-      callCount += 1;
-      return callCount === 1 ? "2024-01-02" : "2024-01-02T23:59:59";
-    };
-
-    const originalShowInformationMessage = vscode.window.showInformationMessage;
-    let infoMessage: string | undefined;
-    (vscode.window as any).showInformationMessage = async (message: string) => {
-      infoMessage = message;
-      return undefined;
-    };
-
-    try {
-      await vscode.commands.executeCommand("totonoeLog.showNormalizedViewFilteredByDateRange");
-    } finally {
-      (vscode.window as any).showInputBox = originalShowInputBox;
-      (vscode.window as any).showInformationMessage = originalShowInformationMessage;
-    }
-
-    const activeEditor = vscode.window.activeTextEditor;
-    assert.ok(activeEditor, "a filtered normalized view editor should be shown");
-    assert.strictEqual(activeEditor!.document.uri.scheme, "totonoe-log-normalized");
-    assert.strictEqual(
-      activeEditor!.document.getText(),
-      "2 | 2024-01-02T03:04:05.000Z INFO in range"
-    );
-    assert.ok(infoMessage?.includes("2"), "the hidden line count should be reported");
-  });
-
-  test("does nothing when the start date prompt is dismissed", async () => {
-    const extension = vscode.extensions.getExtension("upu.totonoe-log");
-    await extension!.activate();
-
-    const source = await vscode.workspace.openTextDocument({
-      content: "2024-01-02T03:04:05Z INFO starting",
-      language: "log",
-    });
-    await vscode.window.showTextDocument(source);
-    await vscode.commands.executeCommand("workbench.action.closeOtherEditors");
-
-    const originalShowInputBox = vscode.window.showInputBox;
-    (vscode.window as any).showInputBox = async () => undefined;
-
-    try {
-      await vscode.commands.executeCommand("totonoeLog.showNormalizedViewFilteredByDateRange");
-    } finally {
-      (vscode.window as any).showInputBox = originalShowInputBox;
-    }
-
-    const activeEditor = vscode.window.activeTextEditor;
-    assert.ok(activeEditor, "the original editor should remain active");
-    assert.notStrictEqual(activeEditor!.document.uri.scheme, "totonoe-log-normalized");
-  });
-
-  test("shows a warning and does nothing when an entered date cannot be parsed", async () => {
-    const extension = vscode.extensions.getExtension("upu.totonoe-log");
-    await extension!.activate();
-
-    const source = await vscode.workspace.openTextDocument({
-      content: "2024-01-02T03:04:05Z INFO starting",
-      language: "log",
-    });
-    await vscode.window.showTextDocument(source);
-    await vscode.commands.executeCommand("workbench.action.closeOtherEditors");
-
-    const originalShowInputBox = vscode.window.showInputBox;
-    (vscode.window as any).showInputBox = async () => "not a date";
-
-    try {
-      await assert.doesNotReject(async () => {
-        await vscode.commands.executeCommand("totonoeLog.showNormalizedViewFilteredByDateRange");
-      });
-    } finally {
-      (vscode.window as any).showInputBox = originalShowInputBox;
-    }
-
-    const activeEditor = vscode.window.activeTextEditor;
-    assert.ok(activeEditor, "the original editor should remain active");
-    assert.notStrictEqual(activeEditor!.document.uri.scheme, "totonoe-log-normalized");
-  });
-
-  test("shows a warning when there is no active editor to filter", async () => {
-    const extension = vscode.extensions.getExtension("upu.totonoe-log");
-    await extension!.activate();
-
-    await vscode.commands.executeCommand("workbench.action.closeAllEditors");
-
-    await assert.doesNotReject(async () => {
-      await vscode.commands.executeCommand("totonoeLog.showNormalizedViewFilteredByDateRange");
-    });
-  });
-});
-
-suite("Totonoe Log normalized view filtered by date range and severity", () => {
-  test("registers the showNormalizedViewFilteredByDateRangeAndSeverity command", async () => {
-    const extension = vscode.extensions.getExtension("upu.totonoe-log");
-    await extension!.activate();
-
-    const commands = await vscode.commands.getCommands(true);
-    assert.ok(
-      commands.includes("totonoeLog.showNormalizedViewFilteredByDateRangeAndSeverity"),
-      "totonoeLog.showNormalizedViewFilteredByDateRangeAndSeverity command should be registered"
-    );
-  });
-
-  test("shows only entries matching both the picked severities and the date range", async () => {
-    const extension = vscode.extensions.getExtension("upu.totonoe-log");
-    await extension!.activate();
-
-    const source = await vscode.workspace.openTextDocument({
-      content: [
-        "2024-01-01T00:00:00Z ERROR before range",
-        "2024-01-02T03:04:05Z INFO in range but wrong severity",
-        "2024-01-02T03:04:06Z ERROR in range and matching",
-        "2024-01-03T00:00:00Z ERROR after range",
-      ].join("\n"),
-      language: "log",
-    });
-    await vscode.window.showTextDocument(source);
-
-    const originalShowQuickPick = vscode.window.showQuickPick;
-    (vscode.window as any).showQuickPick = async (items: vscode.QuickPickItem[]) =>
-      items.filter((item) => item.label === "ERROR");
-
-    const originalShowInputBox = vscode.window.showInputBox;
-    let callCount = 0;
-    (vscode.window as any).showInputBox = async () => {
-      callCount += 1;
-      return callCount === 1 ? "2024-01-02" : "2024-01-02T23:59:59";
-    };
-
-    const originalShowInformationMessage = vscode.window.showInformationMessage;
-    let infoMessage: string | undefined;
-    (vscode.window as any).showInformationMessage = async (message: string) => {
-      infoMessage = message;
-      return undefined;
-    };
-
-    try {
-      await vscode.commands.executeCommand(
-        "totonoeLog.showNormalizedViewFilteredByDateRangeAndSeverity"
-      );
-    } finally {
-      (vscode.window as any).showQuickPick = originalShowQuickPick;
-      (vscode.window as any).showInputBox = originalShowInputBox;
-      (vscode.window as any).showInformationMessage = originalShowInformationMessage;
-    }
-
-    const activeEditor = vscode.window.activeTextEditor;
-    assert.ok(activeEditor, "a filtered normalized view editor should be shown");
-    assert.strictEqual(activeEditor!.document.uri.scheme, "totonoe-log-normalized");
-    assert.strictEqual(
-      activeEditor!.document.getText(),
-      "3 | 2024-01-02T03:04:06.000Z ERROR in range and matching"
-    );
-    assert.ok(
-      infoMessage?.includes("条件に合わない 3 行"),
-      "the hidden line count should be reported"
-    );
-  });
-
-  test("does nothing when the severity picker is dismissed", async () => {
-    const extension = vscode.extensions.getExtension("upu.totonoe-log");
-    await extension!.activate();
-
-    const source = await vscode.workspace.openTextDocument({
-      content: "2024-01-02T03:04:05Z INFO starting",
-      language: "log",
-    });
-    await vscode.window.showTextDocument(source);
-    await vscode.commands.executeCommand("workbench.action.closeOtherEditors");
-
-    const originalShowQuickPick = vscode.window.showQuickPick;
-    (vscode.window as any).showQuickPick = async () => undefined;
-
-    try {
-      await vscode.commands.executeCommand(
-        "totonoeLog.showNormalizedViewFilteredByDateRangeAndSeverity"
-      );
-    } finally {
-      (vscode.window as any).showQuickPick = originalShowQuickPick;
-    }
-
-    const activeEditor = vscode.window.activeTextEditor;
-    assert.ok(activeEditor, "the original editor should remain active");
-    assert.notStrictEqual(activeEditor!.document.uri.scheme, "totonoe-log-normalized");
-  });
-
-  test("does nothing when a date prompt is dismissed after picking severities", async () => {
-    const extension = vscode.extensions.getExtension("upu.totonoe-log");
-    await extension!.activate();
-
-    const source = await vscode.workspace.openTextDocument({
-      content: "2024-01-02T03:04:05Z INFO starting",
-      language: "log",
-    });
-    await vscode.window.showTextDocument(source);
-    await vscode.commands.executeCommand("workbench.action.closeOtherEditors");
-
-    const originalShowQuickPick = vscode.window.showQuickPick;
-    (vscode.window as any).showQuickPick = async (items: vscode.QuickPickItem[]) => items;
-
-    const originalShowInputBox = vscode.window.showInputBox;
-    (vscode.window as any).showInputBox = async () => undefined;
-
-    try {
-      await vscode.commands.executeCommand(
-        "totonoeLog.showNormalizedViewFilteredByDateRangeAndSeverity"
-      );
-    } finally {
-      (vscode.window as any).showQuickPick = originalShowQuickPick;
-      (vscode.window as any).showInputBox = originalShowInputBox;
-    }
-
-    const activeEditor = vscode.window.activeTextEditor;
-    assert.ok(activeEditor, "the original editor should remain active");
-    assert.notStrictEqual(activeEditor!.document.uri.scheme, "totonoe-log-normalized");
-  });
-
-  test("shows a warning when there is no active editor to filter", async () => {
-    const extension = vscode.extensions.getExtension("upu.totonoe-log");
-    await extension!.activate();
-
-    await vscode.commands.executeCommand("workbench.action.closeAllEditors");
-
-    await assert.doesNotReject(async () => {
-      await vscode.commands.executeCommand(
-        "totonoeLog.showNormalizedViewFilteredByDateRangeAndSeverity"
-      );
-    });
-  });
-});
-
-suite("Totonoe Log normalized view filtered by ignore pattern", () => {
-  test("registers the showNormalizedViewFilteredByIgnorePattern command", async () => {
-    const extension = vscode.extensions.getExtension("upu.totonoe-log");
-    await extension!.activate();
-
-    const commands = await vscode.commands.getCommands(true);
-    assert.ok(
-      commands.includes("totonoeLog.showNormalizedViewFilteredByIgnorePattern"),
-      "totonoeLog.showNormalizedViewFilteredByIgnorePattern command should be registered"
-    );
-  });
-
-  test("hides entries whose raw text matches the entered pattern", async () => {
-    const extension = vscode.extensions.getExtension("upu.totonoe-log");
-    await extension!.activate();
-
-    const source = await vscode.workspace.openTextDocument({
-      content: [
-        "2024-01-02T03:04:05Z INFO heartbeat ok",
-        "2024-01-02T03:04:06Z ERROR boom",
-      ].join("\n"),
-      language: "log",
-    });
-    await vscode.window.showTextDocument(source);
-
-    const originalShowInputBox = vscode.window.showInputBox;
-    (vscode.window as any).showInputBox = async () => "heartbeat";
-
-    const originalShowInformationMessage = vscode.window.showInformationMessage;
-    let infoMessage: string | undefined;
-    (vscode.window as any).showInformationMessage = async (message: string) => {
-      infoMessage = message;
-      return undefined;
-    };
-
-    try {
-      await vscode.commands.executeCommand(
-        "totonoeLog.showNormalizedViewFilteredByIgnorePattern"
-      );
-    } finally {
-      (vscode.window as any).showInputBox = originalShowInputBox;
-      (vscode.window as any).showInformationMessage = originalShowInformationMessage;
-    }
-
-    const activeEditor = vscode.window.activeTextEditor;
-    assert.ok(activeEditor, "a filtered normalized view editor should be shown");
-    assert.strictEqual(activeEditor!.document.uri.scheme, "totonoe-log-normalized");
-    assert.strictEqual(
-      activeEditor!.document.getText(),
-      "2 | 2024-01-02T03:04:06.000Z ERROR boom"
-    );
-    assert.ok(infoMessage?.includes("パターンに一致したエントリの 1 行"), "the hidden line count should be reported");
-  });
-
-  test("counts every physical line of a hidden multi-line entry, including non-matching continuation lines", async () => {
-    const extension = vscode.extensions.getExtension("upu.totonoe-log");
-    await extension!.activate();
-
-    const source = await vscode.workspace.openTextDocument({
-      content: [
-        "2024-01-02T03:04:05Z ERROR boom",
-        "    at com.example.Foo.bar(Foo.java:42)",
-        "2024-01-02T03:04:06Z INFO keep",
-      ].join("\n"),
-      language: "log",
-    });
-    await vscode.window.showTextDocument(source);
-
-    const originalShowInputBox = vscode.window.showInputBox;
-    (vscode.window as any).showInputBox = async () => "boom";
-
-    const originalShowInformationMessage = vscode.window.showInformationMessage;
-    let infoMessage: string | undefined;
-    (vscode.window as any).showInformationMessage = async (message: string) => {
-      infoMessage = message;
-      return undefined;
-    };
-
-    try {
-      await vscode.commands.executeCommand(
-        "totonoeLog.showNormalizedViewFilteredByIgnorePattern"
-      );
-    } finally {
-      (vscode.window as any).showInputBox = originalShowInputBox;
-      (vscode.window as any).showInformationMessage = originalShowInformationMessage;
-    }
-
-    const activeEditor = vscode.window.activeTextEditor;
-    assert.ok(activeEditor, "a filtered normalized view editor should be shown");
-    assert.strictEqual(
-      activeEditor!.document.getText(),
-      "3 | 2024-01-02T03:04:06.000Z INFO keep"
-    );
-    // マッチしたエントリは2物理行分（ERROR行＋スタックトレースの継続行）
-    // にまたがっており、"boom" を含むのは先頭行だけである点に注意。
-    assert.ok(
-      infoMessage?.includes("パターンに一致したエントリの 2 行"),
-      "the hidden line count should include the entry's continuation lines"
-    );
-  });
-
-  test("supports a regular expression pattern", async () => {
-    const extension = vscode.extensions.getExtension("upu.totonoe-log");
-    await extension!.activate();
-
-    const source = await vscode.workspace.openTextDocument({
-      content: [
-        "2024-01-02T03:04:05Z DEBUG verbose trace",
-        "2024-01-02T03:04:06Z ERROR boom",
-      ].join("\n"),
-      language: "log",
-    });
-    await vscode.window.showTextDocument(source);
-
-    const originalShowInputBox = vscode.window.showInputBox;
-    (vscode.window as any).showInputBox = async () => "^.*DEBUG.*$";
-
-    try {
-      await vscode.commands.executeCommand(
-        "totonoeLog.showNormalizedViewFilteredByIgnorePattern"
-      );
-    } finally {
-      (vscode.window as any).showInputBox = originalShowInputBox;
-    }
-
-    const activeEditor = vscode.window.activeTextEditor;
-    assert.ok(activeEditor, "a filtered normalized view editor should be shown");
-    assert.strictEqual(
-      activeEditor!.document.getText(),
-      "2 | 2024-01-02T03:04:06.000Z ERROR boom"
-    );
-  });
-
-  test("does nothing when the pattern prompt is dismissed", async () => {
-    const extension = vscode.extensions.getExtension("upu.totonoe-log");
-    await extension!.activate();
-
-    const source = await vscode.workspace.openTextDocument({
-      content: "2024-01-02T03:04:05Z INFO starting",
-      language: "log",
-    });
-    await vscode.window.showTextDocument(source);
-    await vscode.commands.executeCommand("workbench.action.closeOtherEditors");
-
-    const originalShowInputBox = vscode.window.showInputBox;
-    (vscode.window as any).showInputBox = async () => undefined;
-
-    try {
-      await vscode.commands.executeCommand(
-        "totonoeLog.showNormalizedViewFilteredByIgnorePattern"
-      );
-    } finally {
-      (vscode.window as any).showInputBox = originalShowInputBox;
-    }
-
-    const activeEditor = vscode.window.activeTextEditor;
-    assert.ok(activeEditor, "the original editor should remain active");
-    assert.notStrictEqual(activeEditor!.document.uri.scheme, "totonoe-log-normalized");
-  });
-
-  test("trims surrounding whitespace from the entered pattern before matching", async () => {
-    const extension = vscode.extensions.getExtension("upu.totonoe-log");
-    await extension!.activate();
-
-    const source = await vscode.workspace.openTextDocument({
-      content: [
-        "2024-01-02T03:04:05Z INFO heartbeat ok",
-        "2024-01-02T03:04:06Z ERROR boom",
-      ].join("\n"),
-      language: "log",
-    });
-    await vscode.window.showTextDocument(source);
-
-    const originalShowInputBox = vscode.window.showInputBox;
-    (vscode.window as any).showInputBox = async () => "  heartbeat  ";
-
-    try {
-      await vscode.commands.executeCommand(
-        "totonoeLog.showNormalizedViewFilteredByIgnorePattern"
-      );
-    } finally {
-      (vscode.window as any).showInputBox = originalShowInputBox;
-    }
-
-    const activeEditor = vscode.window.activeTextEditor;
-    assert.ok(activeEditor, "a filtered normalized view editor should be shown");
-    assert.strictEqual(
-      activeEditor!.document.getText(),
-      "2 | 2024-01-02T03:04:06.000Z ERROR boom"
-    );
-  });
-
-  test("shows a warning and does nothing when the entered pattern is not a valid regular expression", async () => {
-    const extension = vscode.extensions.getExtension("upu.totonoe-log");
-    await extension!.activate();
-
-    const source = await vscode.workspace.openTextDocument({
-      content: "2024-01-02T03:04:05Z INFO starting",
-      language: "log",
-    });
-    await vscode.window.showTextDocument(source);
-    await vscode.commands.executeCommand("workbench.action.closeOtherEditors");
-
-    const originalShowInputBox = vscode.window.showInputBox;
-    (vscode.window as any).showInputBox = async () => "(unclosed";
-
-    try {
-      await assert.doesNotReject(async () => {
-        await vscode.commands.executeCommand(
-          "totonoeLog.showNormalizedViewFilteredByIgnorePattern"
-        );
-      });
-    } finally {
-      (vscode.window as any).showInputBox = originalShowInputBox;
-    }
-
-    const activeEditor = vscode.window.activeTextEditor;
-    assert.ok(activeEditor, "the original editor should remain active");
-    assert.notStrictEqual(activeEditor!.document.uri.scheme, "totonoe-log-normalized");
-  });
-
-  test("shows a warning when there is no active editor to filter", async () => {
-    const extension = vscode.extensions.getExtension("upu.totonoe-log");
-    await extension!.activate();
-
-    await vscode.commands.executeCommand("workbench.action.closeAllEditors");
-
-    await assert.doesNotReject(async () => {
-      await vscode.commands.executeCommand(
-        "totonoeLog.showNormalizedViewFilteredByIgnorePattern"
-      );
     });
   });
 });
@@ -1035,6 +481,143 @@ suite("Totonoe Log normalized view filtered (combined)", () => {
     await assert.doesNotReject(async () => {
       await vscode.commands.executeCommand("totonoeLog.showNormalizedViewFiltered");
     });
+  });
+
+  test("shows a warning and does nothing when an entered date cannot be parsed", async () => {
+    const extension = vscode.extensions.getExtension("upu.totonoe-log");
+    await extension!.activate();
+
+    const source = await vscode.workspace.openTextDocument({
+      content: "2024-01-02T03:04:05Z INFO starting",
+      language: "log",
+    });
+    await vscode.window.showTextDocument(source);
+    await vscode.commands.executeCommand("workbench.action.closeOtherEditors");
+
+    const restoreQuickPick = installQuickPickMock(["日付範囲"]);
+    const originalShowInputBox = vscode.window.showInputBox;
+    (vscode.window as any).showInputBox = async () => "not a date";
+
+    try {
+      await assert.doesNotReject(async () => {
+        await vscode.commands.executeCommand("totonoeLog.showNormalizedViewFiltered");
+      });
+    } finally {
+      restoreQuickPick();
+      (vscode.window as any).showInputBox = originalShowInputBox;
+    }
+
+    const activeEditor = vscode.window.activeTextEditor;
+    assert.ok(activeEditor, "the original editor should remain active");
+    assert.notStrictEqual(activeEditor!.document.uri.scheme, "totonoe-log-normalized");
+  });
+
+  test("counts every physical line of a hidden multi-line entry, including non-matching continuation lines", async () => {
+    const extension = vscode.extensions.getExtension("upu.totonoe-log");
+    await extension!.activate();
+
+    const source = await vscode.workspace.openTextDocument({
+      content: [
+        "2024-01-02T03:04:05Z ERROR boom",
+        "    at com.example.Foo.bar(Foo.java:42)",
+        "2024-01-02T03:04:06Z INFO keep",
+      ].join("\n"),
+      language: "log",
+    });
+    await vscode.window.showTextDocument(source);
+
+    const restoreQuickPick = installQuickPickMock(["無視パターン"]);
+    const originalShowInputBox = vscode.window.showInputBox;
+    (vscode.window as any).showInputBox = async () => "boom";
+
+    const originalShowInformationMessage = vscode.window.showInformationMessage;
+    let infoMessage: string | undefined;
+    (vscode.window as any).showInformationMessage = async (message: string) => {
+      infoMessage = message;
+      return undefined;
+    };
+
+    try {
+      await vscode.commands.executeCommand("totonoeLog.showNormalizedViewFiltered");
+    } finally {
+      restoreQuickPick();
+      (vscode.window as any).showInputBox = originalShowInputBox;
+      (vscode.window as any).showInformationMessage = originalShowInformationMessage;
+    }
+
+    const activeEditor = vscode.window.activeTextEditor;
+    assert.ok(activeEditor, "a filtered normalized view editor should be shown");
+    assert.strictEqual(
+      activeEditor!.document.getText(),
+      "3 | 2024-01-02T03:04:06.000Z INFO keep"
+    );
+    // マッチしたエントリは2物理行分（ERROR行＋スタックトレースの継続行）
+    // にまたがっており、"boom" を含むのは先頭行だけである点に注意。
+    assert.ok(
+      infoMessage?.includes("条件に合わない 2 行"),
+      "the hidden line count should include the entry's continuation lines"
+    );
+  });
+
+  test("trims surrounding whitespace from the entered pattern before matching", async () => {
+    const extension = vscode.extensions.getExtension("upu.totonoe-log");
+    await extension!.activate();
+
+    const source = await vscode.workspace.openTextDocument({
+      content: [
+        "2024-01-02T03:04:05Z INFO heartbeat ok",
+        "2024-01-02T03:04:06Z ERROR boom",
+      ].join("\n"),
+      language: "log",
+    });
+    await vscode.window.showTextDocument(source);
+
+    const restoreQuickPick = installQuickPickMock(["無視パターン"]);
+    const originalShowInputBox = vscode.window.showInputBox;
+    (vscode.window as any).showInputBox = async () => "  heartbeat  ";
+
+    try {
+      await vscode.commands.executeCommand("totonoeLog.showNormalizedViewFiltered");
+    } finally {
+      restoreQuickPick();
+      (vscode.window as any).showInputBox = originalShowInputBox;
+    }
+
+    const activeEditor = vscode.window.activeTextEditor;
+    assert.ok(activeEditor, "a filtered normalized view editor should be shown");
+    assert.strictEqual(
+      activeEditor!.document.getText(),
+      "2 | 2024-01-02T03:04:06.000Z ERROR boom"
+    );
+  });
+
+  test("shows a warning and does nothing when the entered pattern is not a valid regular expression", async () => {
+    const extension = vscode.extensions.getExtension("upu.totonoe-log");
+    await extension!.activate();
+
+    const source = await vscode.workspace.openTextDocument({
+      content: "2024-01-02T03:04:05Z INFO starting",
+      language: "log",
+    });
+    await vscode.window.showTextDocument(source);
+    await vscode.commands.executeCommand("workbench.action.closeOtherEditors");
+
+    const restoreQuickPick = installQuickPickMock(["無視パターン"]);
+    const originalShowInputBox = vscode.window.showInputBox;
+    (vscode.window as any).showInputBox = async () => "(unclosed";
+
+    try {
+      await assert.doesNotReject(async () => {
+        await vscode.commands.executeCommand("totonoeLog.showNormalizedViewFiltered");
+      });
+    } finally {
+      restoreQuickPick();
+      (vscode.window as any).showInputBox = originalShowInputBox;
+    }
+
+    const activeEditor = vscode.window.activeTextEditor;
+    assert.ok(activeEditor, "the original editor should remain active");
+    assert.notStrictEqual(activeEditor!.document.uri.scheme, "totonoe-log-normalized");
   });
 });
 
@@ -2322,10 +1905,6 @@ suite("Totonoe Log virtual document guard", () => {
     assert.strictEqual(vscode.window.activeTextEditor?.document.uri.scheme, "totonoe-log-normalized");
 
     const guardedCommands = [
-      "totonoeLog.showNormalizedViewFilteredBySeverity",
-      "totonoeLog.showNormalizedViewFilteredByDateRange",
-      "totonoeLog.showNormalizedViewFilteredByDateRangeAndSeverity",
-      "totonoeLog.showNormalizedViewFilteredByIgnorePattern",
       "totonoeLog.showNormalizedViewFiltered",
       "totonoeLog.showCollapsedView",
     ];
@@ -2444,7 +2023,7 @@ suite("Totonoe Log virtual document guard", () => {
       };
 
       try {
-        await vscode.commands.executeCommand("totonoeLog.showNormalizedViewFilteredBySeverity");
+        await vscode.commands.executeCommand("totonoeLog.showNormalizedViewFiltered");
       } finally {
         (vscode.window as any).showWarningMessage = originalShowWarningMessage;
       }
@@ -2503,7 +2082,7 @@ suite("Totonoe Log virtual document guard", () => {
       };
 
       try {
-        await vscode.commands.executeCommand("totonoeLog.showNormalizedViewFilteredByDateRange");
+        await vscode.commands.executeCommand("totonoeLog.showNormalizedViewFiltered");
       } finally {
         (vscode.window as any).showWarningMessage = originalShowWarningMessage;
       }
@@ -2682,6 +2261,10 @@ suite("Totonoe Log timezone settings (#13)", () => {
     });
     await vscode.window.showTextDocument(source);
 
+    const originalShowQuickPick = vscode.window.showQuickPick;
+    (vscode.window as any).showQuickPick = async (items: vscode.QuickPickItem[]) =>
+      items.filter((item) => item.label === "日付範囲");
+
     const originalShowInputBox = vscode.window.showInputBox;
     const prompts: string[] = [];
     (vscode.window as any).showInputBox = async (
@@ -2692,7 +2275,7 @@ suite("Totonoe Log timezone settings (#13)", () => {
     };
 
     try {
-      await vscode.commands.executeCommand("totonoeLog.showNormalizedViewFilteredByDateRange");
+      await vscode.commands.executeCommand("totonoeLog.showNormalizedViewFiltered");
 
       const activeEditor = vscode.window.activeTextEditor;
       assert.ok(activeEditor, "a filtered normalized view editor should be shown");
@@ -2705,6 +2288,7 @@ suite("Totonoe Log timezone settings (#13)", () => {
         "both boundary prompts should explain the display-timezone basis"
       );
     } finally {
+      (vscode.window as any).showQuickPick = originalShowQuickPick;
       (vscode.window as any).showInputBox = originalShowInputBox;
       await config.update("display", undefined, vscode.ConfigurationTarget.Global);
     }
@@ -3220,11 +2804,12 @@ suite("Totonoe Log go to source line (#137)", () => {
     await vscode.window.showTextDocument(source);
 
     const originalShowQuickPick = vscode.window.showQuickPick;
+    // 1回目は条件選択（セベリティのみ）、2回目はセベリティ選択（ERROR のみ）。
     (vscode.window as any).showQuickPick = async (items: vscode.QuickPickItem[]) =>
-      items.filter((item) => item.label === "ERROR");
+      items.filter((item) => item.label === "セベリティ" || item.label === "ERROR");
 
     try {
-      await vscode.commands.executeCommand("totonoeLog.showNormalizedViewFilteredBySeverity");
+      await vscode.commands.executeCommand("totonoeLog.showNormalizedViewFiltered");
     } finally {
       (vscode.window as any).showQuickPick = originalShowQuickPick;
     }

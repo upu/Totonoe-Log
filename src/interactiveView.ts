@@ -61,7 +61,7 @@ import type {
 } from "./webview/interactiveView/protocol";
 
 /** Webviewパネルのビュー種別ID（`createWebviewPanel` 第1引数）。コマンドIDとは別の識別子。 */
-const INTERACTIVE_VIEW_TYPE = "totonoeLog.interactiveViewAlpha";
+const INTERACTIVE_VIEW_TYPE = "totonoeLog.interactiveView";
 
 /** Webview側スクリプトのバンドル出力（`scripts/esbuild.js` の第2エントリ）を探すための相対パス。 */
 const WEBVIEW_SCRIPT_RELATIVE_PATH = ["out", "webview", "interactiveView", "main.js"];
@@ -305,7 +305,7 @@ export class InteractiveViewPanelController implements vscode.Disposable {
   private buildTitle(): string {
     const [first, ...rest] = this.loadedFiles;
     const suffix = rest.length > 0 ? ` +${rest.length}` : "";
-    return `Totonoe Log (Alpha): ${baseName(first.uri)}${suffix}`;
+    return `Totonoe Log: ${baseName(first.uri)}${suffix}`;
   }
 
   private async handleMessage(message: WebviewToExtensionMessage): Promise<void> {
@@ -987,7 +987,7 @@ export class InteractiveViewPanelController implements vscode.Disposable {
 }
 
 /**
- * `Totonoe Log: Show Interactive View (Alpha)` コマンドのハンドラを作る。
+ * `Totonoe Log: Show Interactive View` コマンドのハンドラを作る。
  * エクスプローラのコンテキストメニュー（複数選択、issue #181）とコマンド
  * パレットの両方から呼ばれる1つのコマンドで、引数の有無で入力経路を切り替える:
  *
@@ -1001,10 +1001,10 @@ export class InteractiveViewPanelController implements vscode.Disposable {
  * 用途ごとにコマンドを増やさず1つに寄せているのは、パレットに同じ機能の項目が
  * 並ぶのを避けるため。
  */
-export function createShowInteractiveViewAlphaCommand(
+export function createShowInteractiveViewCommand(
   controller: InteractiveViewPanelController
 ): (clickedUri?: vscode.Uri, selectedUris?: vscode.Uri[]) => Promise<void> {
-  return async function showInteractiveViewAlpha(
+  return async function showInteractiveView(
     clickedUri?: vscode.Uri,
     selectedUris?: vscode.Uri[]
   ): Promise<void> {
