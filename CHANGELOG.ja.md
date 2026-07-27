@@ -84,6 +84,16 @@
   セベリティは日付範囲・セベリティの絞り込みで既に扱えるため）。メッセージは
   継続行を含むので、スタックトレースのような複数行エントリはいずれかの行が
   一致すればエントリごと残る。
+- `Totonoe Log: Show Interactive View (Alpha)` で、関連する `totonoeLog.*` の
+  設定を変更したときに、パネルを開いたまま即座に表示へ反映するようにした
+  （issue #183、#165 の次のアルファ版フェーズ）。これまでは次に絞り込みを
+  操作するまで古い表示のままだった。表示にだけ効く設定
+  （`timezone.display`・`gap.thresholdSeconds`・`collapse.threshold`・
+  `interactiveView.maxDisplayLines`）は現在のエントリを描き直し、パース結果が
+  変わる設定（`timestampFormats`・`timezone.sourceOffset`・
+  `timezone.fileOffsets`・`clockSkew.fileOffsets`）は読み込み済みファイルの
+  再パースまで行う。再パースによって新しいセベリティが現れた場合は、その行が
+  黙って隠れないよう自動でチェック済みにする。
 
 ## [0.7.0] - 2026-07-23
 

@@ -26,9 +26,11 @@ import {
 import {
   filterOutFolders,
   loadLogFiles,
+  reresolveLogFileOffsets,
   resolveExplorerSelectionUris,
   type LoadedLogFile,
 } from "./logFileReading";
+import { classifyInteractiveViewConfigChange } from "./interactiveViewConfigWatch";
 import {
   normalizeFileVisibility,
   removeFileVisibilityAt,
@@ -144,6 +146,8 @@ function baseName(uri: vscode.Uri): string {
  */
 export class InteractiveViewPanelController implements vscode.Disposable {
   private panel: vscode.WebviewPanel | undefined;
+  /** パネルが開いている間だけ張る、設定変更の購読（issue #183）。 */
+  private configWatcher: vscode.Disposable | undefined;
   /**
    * 読み込み済みファイルの一覧（読み込み順）。`LineSource.fileIndex` はこの
    * 配列のインデックスを指す。1ファイル目とそれ以降を別々の状態で持たず1本に
@@ -205,16 +209,68 @@ export class InteractiveViewPanelController implements vscode.Disposable {
     panel.webview.html = this.renderHtml(panel.webview, nonce);
     panel.onDidDispose(() => {
       this.panel = undefined;
+      this.disposeConfigWatcher();
     });
     panel.webview.onDidReceiveMessage((message: WebviewToExtensionMessage) => {
       void this.handleMessage(message);
+    });
+    // 購読はパネルが開いている間だけ持つ（issue #183）。閉じている間の設定変更は
+    // 次に開くときの初期読み込みで拾えるため、購読を残す意味が無い。
+    this.configWatcher = vscode.workspace.onDidChangeConfiguration((event) => {
+      void this.applyConfigurationChange(event);
     });
     this.panel = panel;
   }
 
   dispose(): void {
+    this.disposeConfigWatcher();
     this.panel?.dispose();
     this.panel = undefined;
+  }
+
+  private disposeConfigWatcher(): void {
+    this.configWatcher?.dispose();
+    this.configWatcher = undefined;
+  }
+
+  /**
+   * 開いたままのパネルへ `totonoeLog.*` の設定変更を反映する（issue #183）。
+   * 仮想ドキュメント方式のコマンドは実行のたびに設定を読み直すので問題に
+   * ならないが、開きっぱなしで使う Interactive View では、ユーザーが絞り込みを
+   * 触るまで古い表示のままになってしまう。
+   *
+   * 再パースが必要な場合は、追加読み込み（{@link addFiles}）と同じ理由で
+   * セベリティのチェック状態も追従させる——タイムスタンプ形式が変わると
+   * エントリの区切りも変わり、新しいセベリティが現れうるため。それを
+   * 未チェックのままにすると、行が黙って隠れてしまう（issue #200 と同じ）。
+   */
+  private async applyConfigurationChange(event: vscode.ConfigurationChangeEvent): Promise<void> {
+    if (!this.panel) {
+      return;
+    }
+
+    const effect = classifyInteractiveViewConfigChange((section) =>
+      event.affectsConfiguration(section)
+    );
+    if (effect === "none") {
+      return;
+    }
+
+    if (effect === "reparse") {
+      const previousDistinct = this.distinctSeverities();
+      this.loadedFiles = reresolveLogFileOffsets(this.loadedFiles);
+      this.recomputeEntries();
+      this.criteria = {
+        ...this.criteria,
+        severities: addNewlyAppearedSeverities(
+          this.criteria.severities,
+          previousDistinct,
+          this.distinctSeverities()
+        ),
+      };
+    }
+
+    await this.postState();
   }
 
   /** 2件以上のときは先頭のファイル名に残り件数を添える（タブ幅に全部は収まらないため）。 */

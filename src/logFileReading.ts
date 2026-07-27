@@ -121,6 +121,32 @@ export interface LoadedLogFile {
 }
 
 /**
+ * 読み込み済みファイルのソースオフセット（`totonoeLog.timezone.*`）と
+ * クロックスキュー補正（`totonoeLog.clockSkew.fileOffsets`）を、現在の設定で
+ * 解決し直す（issue #183）。これらは読み込み時に解決した値が
+ * {@link LogFileInput} へ焼き付いているため、開いたままのパネルで再パースする
+ * だけでは設定変更が反映されない。
+ *
+ * ファイル本文は読み直さない——エディタの内容から組み立てた入力（コマンド
+ * パレット経由、{@link buildLogFileInputFromDocument}）はディスク上の内容と
+ * 一致するとは限らず、設定変更をきっかけに未保存の変更が消えてしまうため。
+ */
+export function reresolveLogFileOffsets(
+  files: readonly LoadedLogFile[]
+): LoadedLogFile[] {
+  const resolveSourceOffsetMinutes = createSourceOffsetResolver();
+  const resolveClockSkewMs = createClockSkewResolver();
+  return files.map((file) => ({
+    uri: file.uri,
+    input: {
+      ...file.input,
+      sourceUtcOffsetMinutes: resolveSourceOffsetMinutes(file.input.fileName),
+      clockSkewMs: resolveClockSkewMs(file.input.fileName),
+    },
+  }));
+}
+
+/**
  * {@link readLogFiles} の結果を、読み込み元の URI と対にして返す。URI と入力を
  * 別々の配列で持ち回ると並びがずれたときに気付けないため、対にして扱う
  * （issue #181）。

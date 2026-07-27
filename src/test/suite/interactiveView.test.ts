@@ -13,6 +13,8 @@ import {
   toVisibleFileIndices,
 } from "../../interactiveViewFiles";
 import { parseWebviewLineSource } from "../../interactiveViewContext";
+import { classifyInteractiveViewConfigChange } from "../../interactiveViewConfigWatch";
+import { reresolveLogFileOffsets } from "../../logFileReading";
 import type { SerializedFilterCriteria } from "../../webview/interactiveView/protocol";
 
 /**
@@ -416,5 +418,110 @@ suite("Totonoe Log interactive view (alpha, #166)", () => {
     assert.ok(await waitFor(hasWebviewTab), "a webview tab should be opened");
 
     await vscode.commands.executeCommand("workbench.action.closeAllEditors");
+  });
+});
+
+suite("interactiveViewConfigWatch / classifyInteractiveViewConfigChange (#183)", () => {
+  /** `vscode.ConfigurationChangeEvent#affectsConfiguration` の代わりに使う、指定した設定だけを「変わった」と答える述語。 */
+  function changed(...sections: readonly string[]): (section: string) => boolean {
+    return (section) => sections.includes(section);
+  }
+
+  test("requires a re-parse when a setting that changes the parse result changes", () => {
+    // パース結果に影響する設定（issue #183）。表示だけ作り直しても反映されない。
+    for (const section of [
+      "totonoeLog.timestampFormats",
+      "totonoeLog.timezone.sourceOffset",
+      "totonoeLog.timezone.fileOffsets",
+      "totonoeLog.clockSkew.fileOffsets",
+    ]) {
+      assert.strictEqual(
+        classifyInteractiveViewConfigChange(changed(section)),
+        "reparse",
+        `${section} should require a re-parse`
+      );
+    }
+  });
+
+  test("only needs a redisplay when a setting that affects formatting changes", () => {
+    for (const section of [
+      "totonoeLog.timezone.display",
+      "totonoeLog.gap.thresholdSeconds",
+      "totonoeLog.collapse.threshold",
+      "totonoeLog.interactiveView.maxDisplayLines",
+    ]) {
+      assert.strictEqual(
+        classifyInteractiveViewConfigChange(changed(section)),
+        "redisplay",
+        `${section} should only need a redisplay`
+      );
+    }
+  });
+
+  test("ignores settings the interactive view does not read", () => {
+    assert.strictEqual(classifyInteractiveViewConfigChange(changed("editor.fontSize")), "none");
+    assert.strictEqual(classifyInteractiveViewConfigChange(() => false), "none");
+  });
+
+  test("prefers the re-parse effect when both kinds of setting change at once", () => {
+    assert.strictEqual(
+      classifyInteractiveViewConfigChange(
+        changed("totonoeLog.timezone.display", "totonoeLog.timestampFormats")
+      ),
+      "reparse"
+    );
+  });
+});
+
+suite("logFileReading / reresolveLogFileOffsets (#183)", () => {
+  const loadedFile = {
+    uri: vscode.Uri.file("/logs/app.log"),
+    input: {
+      fileName: "app.log",
+      text: "2024-01-02 03:04:05 INFO hello",
+      sourceUtcOffsetMinutes: 0,
+      clockSkewMs: 0,
+    },
+  };
+
+  test("picks up the offsets configured after the files were loaded", async function () {
+    this.timeout(10000);
+    const timezoneConfig = vscode.workspace.getConfiguration("totonoeLog.timezone");
+    const clockSkewConfig = vscode.workspace.getConfiguration("totonoeLog.clockSkew");
+    await timezoneConfig.update(
+      "fileOffsets",
+      [{ filePattern: "app\\.log", offset: "+09:00" }],
+      vscode.ConfigurationTarget.Global
+    );
+    await clockSkewConfig.update(
+      "fileOffsets",
+      [{ filePattern: "app\\.log", offsetSeconds: 60 }],
+      vscode.ConfigurationTarget.Global
+    );
+
+    try {
+      const [reresolved] = reresolveLogFileOffsets([loadedFile]);
+
+      // 読み込み時に解決した値が入力に焼き付いているため、再パースするだけでは
+      // 設定変更が反映されない（issue #183）。
+      assert.strictEqual(reresolved.input.sourceUtcOffsetMinutes, 540);
+      assert.strictEqual(reresolved.input.clockSkewMs, 60000);
+      // 再読み込みはしないので、本文とURIはそのまま引き継ぐ。
+      assert.strictEqual(reresolved.input.text, loadedFile.input.text);
+      assert.strictEqual(reresolved.input.fileName, "app.log");
+      assert.strictEqual(reresolved.uri.toString(), loadedFile.uri.toString());
+    } finally {
+      await timezoneConfig.update("fileOffsets", undefined, vscode.ConfigurationTarget.Global);
+      await clockSkewConfig.update("fileOffsets", undefined, vscode.ConfigurationTarget.Global);
+    }
+  });
+
+  test("falls back to no correction when no rule matches", () => {
+    const [reresolved] = reresolveLogFileOffsets([
+      { ...loadedFile, input: { ...loadedFile.input, sourceUtcOffsetMinutes: 540, clockSkewMs: 60000 } },
+    ]);
+
+    assert.strictEqual(reresolved.input.sourceUtcOffsetMinutes, 0);
+    assert.strictEqual(reresolved.input.clockSkewMs, 0);
   });
 });
