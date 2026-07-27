@@ -15,7 +15,7 @@ function countPhysicalLines(entries: readonly LogEntry[]): number {
 
 /**
  * {@link buildInteractivePayload} のマージ版（issue #168）。Interactive View
- * (Alpha) が2ファイル以上を読み込んだ状態のときに使う。`LogEntry[]` ではなく
+ * が2ファイル以上を読み込んだ状態のときに使う。`LogEntry[]` ではなく
  * `MergedEntry[]` を受け取り、ファイル名/種別列付きの `formatMergedLog` 系
  * 整形を使う以外は、絞り込み・セベリティ一覧算出・行数カウントの構成は
  * `buildInteractivePayload` と同じ（`filterMergedEntriesByCriteria` /

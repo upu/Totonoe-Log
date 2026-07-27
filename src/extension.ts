@@ -3,10 +3,6 @@ import {
   NORMALIZED_VIEW_SCHEME,
   NormalizedViewContentProvider,
   createShowNormalizedViewCommand,
-  createShowNormalizedViewFilteredBySeverityCommand,
-  createShowNormalizedViewFilteredByDateRangeCommand,
-  createShowNormalizedViewFilteredByDateRangeAndSeverityCommand,
-  createShowNormalizedViewFilteredByIgnorePatternCommand,
   createShowNormalizedViewFilteredCommand,
   createShowCollapsedViewCommand,
 } from "./normalizedView";
@@ -26,7 +22,7 @@ import {
 } from "./mergedView";
 import {
   InteractiveViewPanelController,
-  createShowInteractiveViewAlphaCommand,
+  createShowInteractiveViewCommand,
 } from "./interactiveView";
 
 export function activate(context: vscode.ExtensionContext): void {
@@ -67,22 +63,6 @@ export function activate(context: vscode.ExtensionContext): void {
       createShowNormalizedViewCommand(normalizedViewProvider)
     ),
     vscode.commands.registerCommand(
-      "totonoeLog.showNormalizedViewFilteredBySeverity",
-      createShowNormalizedViewFilteredBySeverityCommand(normalizedViewProvider)
-    ),
-    vscode.commands.registerCommand(
-      "totonoeLog.showNormalizedViewFilteredByDateRange",
-      createShowNormalizedViewFilteredByDateRangeCommand(normalizedViewProvider)
-    ),
-    vscode.commands.registerCommand(
-      "totonoeLog.showNormalizedViewFilteredByDateRangeAndSeverity",
-      createShowNormalizedViewFilteredByDateRangeAndSeverityCommand(normalizedViewProvider)
-    ),
-    vscode.commands.registerCommand(
-      "totonoeLog.showNormalizedViewFilteredByIgnorePattern",
-      createShowNormalizedViewFilteredByIgnorePatternCommand(normalizedViewProvider)
-    ),
-    vscode.commands.registerCommand(
       "totonoeLog.showNormalizedViewFiltered",
       createShowNormalizedViewFilteredCommand(normalizedViewProvider)
     ),
@@ -108,8 +88,8 @@ export function activate(context: vscode.ExtensionContext): void {
     ),
     interactiveViewController,
     vscode.commands.registerCommand(
-      "totonoeLog.showInteractiveViewAlpha",
-      createShowInteractiveViewAlphaCommand(interactiveViewController)
+      "totonoeLog.showInteractiveView",
+      createShowInteractiveViewCommand(interactiveViewController)
     ),
     // Interactive View の行の右クリックメニュー専用（issue #191）。メニューから
     // 渡される `data-vscode-context` の内容を引数に受け取る。

@@ -65,7 +65,7 @@ export function parseLogFileInput(input: LogFileInput, uri: vscode.Uri): LogEntr
  * 入力形式）を組み立てる。`readLogFiles`（`logFileReading.ts`）はディスクから
  * 読み直す前提だが、こちらは既にエディタが内容をデコード済みのドキュメントを
  * 対象にするため `sourceDocument.getText()` をそのまま使い、二重読み込みを
- * 避ける。Interactive View (Alpha, issue #168) が、単一ファイル表示から
+ * 避ける。Interactive View（issue #168）が、単一ファイル表示から
  * 複数ファイルのマージ表示に切り替わる際、最初のファイルを追加ファイルと
  * 同じ形式で `mergeLogFiles` に渡すために使う。
  */

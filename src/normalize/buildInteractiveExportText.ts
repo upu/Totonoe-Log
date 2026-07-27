@@ -63,7 +63,7 @@ export type InteractiveExportTextResult =
   | { readonly ok: false; readonly reason: "timeout" | "error" };
 
 /**
- * Interactive View (Alpha) が単一ファイル表示中に「仮想ドキュメントとして
+ * Interactive View が単一ファイル表示中に「仮想ドキュメントとして
  * 書き出す」操作（issue #175）で呼ぶ、絞り込み＋整形の合成処理。折りたたみが
  * 有効なら `Show Collapsed View` と同じ関数で折りたたみ済みテキストを、
  * 無効なら通常の正規化テキストを組み立てる。

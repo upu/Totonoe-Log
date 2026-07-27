@@ -10,43 +10,42 @@
 
 ### Added
 
-- 実験的な新コマンド `Totonoe Log: Show Interactive View (Alpha)` を追加。
+- 新コマンド `Totonoe Log: Show Interactive View` を追加。
   正規化ログをWebviewパネルで開き、セベリティ・日付範囲・無視パターンの
-  絞り込みをQuickPickダイアログの往復なしにその場でトグルできる。
-  Webviewベースのインタラクティブビューを試すアルファ版（issue #166）の
-  最初のフェーズで、既存の読み取り専用の仮想ドキュメントビュー群には
-  影響しない（引き続き主な利用手段）。挙動は今後変わる可能性がある。
-- `Totonoe Log: Show Interactive View (Alpha)` のパネル内「+ Add Files...」
+  絞り込みをQuickPickダイアログの往復なしにその場でトグルできる
+  （issue #166）。既存の読み取り専用の仮想ドキュメントビュー群には
+  影響せず、引き続き利用できる。
+- `Totonoe Log: Show Interactive View` のパネル内「+ Add Files...」
   ボタンから、ログファイルを追加読み込みできるようにした。2ファイル以上に
   なった時点で、ファイル名/種別列付きのマージ表示に切り替わる（issue #168、
-  #165 の次のアルファ版フェーズ）。1ファイルのみの間は従来の正規化表示のまま。
-- `Totonoe Log: Show Interactive View (Alpha)` で、単一ファイル表示中は
+  #165 の次のフェーズ）。1ファイルのみの間は従来の正規化表示のまま。
+- `Totonoe Log: Show Interactive View` で、単一ファイル表示中は
   デフォルトで繰り返しエントリを折りたたむようにした。チェックボックスで
   折りたたみのON/OFFを切り替えられる。折りたたみグループの見出しをクリック
   すると、拡張機能本体との通信なしにWebview内だけで展開/復元できる
-  （issue #172、#165 の次のアルファ版フェーズ）。2ファイル以上のマージ表示
+  （issue #172、#165 の次のフェーズ）。2ファイル以上のマージ表示
   では折りたたみは未対応。
-- `Totonoe Log: Show Interactive View (Alpha)` に「Export as Virtual
+- `Totonoe Log: Show Interactive View` に「Export as Virtual
   Document」ボタンを追加。現在の絞り込み/マージ/折りたたみ状態を、既存の
   正規化/マージビューと同じ仕組みの読み取り専用仮想ドキュメントとして開ける
   ようにした。書き出した後は検索・コピー・`Go to Source Line`・
-  `Compare Logs` がそのまま使える（issue #175、#165 の次のアルファ版フェーズ）。
-- `Totonoe Log: Show Interactive View (Alpha)` で、行から元ファイルの該当行へ
+  `Compare Logs` がそのまま使える（issue #175、#165 の次のフェーズ）。
+- `Totonoe Log: Show Interactive View` で、行から元ファイルの該当行へ
   ジャンプできるようにした。行をダブルクリックするか、右クリックメニューから
   「Totonoe Log: Go to Source Line」を選ぶ。行にホバーすると元ファイルのフルパスと
-  行番号を表示する（issue #179・#191、#165 の次のアルファ版フェーズ）。ジャンプの
+  行番号を表示する（issue #179・#191、#165 の次のフェーズ）。ジャンプの
   挙動は `Go to Source Line` と共通。シングルクリックではジャンプしないため、
   本文の選択を邪魔しない。ギャップマーカー等の生成行は対応する元行が無いため
   ジャンプ対象外で、折りたたみグループの見出し行は従来どおりクリックで
   展開/復元する。
-- `Totonoe Log: Show Interactive View (Alpha)` に一度に描画する行数の上限を
+- `Totonoe Log: Show Interactive View` に一度に描画する行数の上限を
   設けた（`totonoeLog.interactiveView.maxDisplayLines`、既定値 `20000`、`0` で
   無効化）。上限を超えた場合はDOMを肥大させずに先頭のみを表示し、絞り込むか
   「Export as Virtual Document」で全体を開くよう案内する（issue #178）。
-- `Totonoe Log: Show Interactive View (Alpha)` で、表示中のログをマスクできる
+- `Totonoe Log: Show Interactive View` で、表示中のログをマスクできる
   ようにした。マスクボタン（「🔓 Mask」/「🔒 Mask」）でタイムスタンプ・
   ホスト名/IPアドレスをプレースホルダーに置き換えて表示し、隣の「▾」で
-  どれを伏せるかを選べる（issue #180・#194、#165 の次のアルファ版フェーズ）。ワンショットの
+  どれを伏せるかを選べる（issue #180・#194、#165 の次のフェーズ）。ワンショットの
   コピー操作ではなく表示状態なので、パネル上で通常どおりコピー（Ctrl+C）・
   検索でき、「Export as Virtual Document」もマスク済みで書き出される。
   絞り込み・折りたたみ・行番号は画面で見ていたとおりに残る。既定はOFF——
@@ -55,8 +54,8 @@
   `totonoeLog.copyMasked.maskTimestamp` / `totonoeLog.copyMasked.maskHost`
   設定に従う（新しい設定は追加していない）。
 
-- `Totonoe Log: Show Interactive View (Alpha)` のマスクパネルに、マスクできる
-  対象を2つ追加した（issue #195、#165 の次のアルファ版フェーズ）。
+- `Totonoe Log: Show Interactive View` のマスクパネルに、マスクできる
+  対象を2つ追加した（issue #195、#165 の次のフェーズ）。
   「プロセスID」は、syslog形式の `sshd[1234]:` と `pid=1234` / `pid: 1234` /
   `[pid 1234]` のようにpidと明記された表記を `<PID>` に置き換える。log4jの
   スレッド名（`[main]`）や配列の添字（`retries[3]`）は誤マスクしない。
@@ -70,7 +69,7 @@
   `totonoeLog.copyMasked.maskProcessId`（既定 `false` なので既存の出力は
   変わらない）で切り替えられ、パネルの初期選択もこの設定に従う。
 
-- `Totonoe Log: Show Interactive View (Alpha)` のマスクパネルに「キー」欄を
+- `Totonoe Log: Show Interactive View` のマスクパネルに「キー」欄を
   追加した（issue #212）。正規表現を書かずに値を伏せるための欄で、伏せたい
   キー名をカンマまたは空白区切りで並べる（例: `user, token`）と、その**値だけ**が
   `<MASKED>` に置き換わる——`user=hoge` は `user=<MASKED>` になり、キー名は
@@ -82,18 +81,18 @@
   後ろに空白がある形も拾わない——値が空の `key=` に続く語を巻き込む方が害が
   大きいため。キー欄と任意パターン欄は同時に効き、キー欄も設定には保存しない。
 
-- `Totonoe Log: Show Interactive View (Alpha)` をエクスプローラから直接開ける
+- `Totonoe Log: Show Interactive View` をエクスプローラから直接開ける
   ようにした。ログファイル（複数選択も可）を右クリックしてこのコマンドを選ぶと、
   1パネルで開ける——2つ以上ならマージ表示になる（issue #181・#201、#165 の次の
-  アルファ版フェーズ）。パネル内の「+ Add Files...」のダイアログと違い、エクスプローラの
+  フェーズ）。パネル内の「+ Add Files...」のダイアログと違い、エクスプローラの
   選択は複数フォルダにまたがれる（issue #151 と同じ理由）。コマンドパレットから
   実行した場合は従来どおりアクティブなエディタのログが対象で、未保存の変更も
   反映される。
 
-- `Totonoe Log: Show Interactive View (Alpha)` の読み込み済みファイル一覧を
+- `Totonoe Log: Show Interactive View` の読み込み済みファイル一覧を
   操作できるようにした。各ファイルにチェックボックスを付けて、そのファイルの
   行だけを表示/非表示に切り替えられる。隣の「✕」ボタンでは読み込み自体を
-  取り消せる（issue #170、#165 の次のアルファ版フェーズ）。ファイル単位の
+  取り消せる（issue #170、#165 の次のフェーズ）。ファイル単位の
   チェックは絞り込みの一軸なので、セベリティ・日付範囲・無視パターンと
   組み合わせて効き、「Export as Virtual Document」も表示中のファイルだけを
   書き出す。ファイルを非表示にしても、そのファイルのセベリティは絞り込み
@@ -101,19 +100,19 @@
   外したときと同じ扱い）。最後の1ファイルは取り消せない（読み込みが0件になると
   「+ Add Files...」の追加先も失われるため）——一時的に消したい場合は
   チェックを外す。ファイルの増減にパネルのタブ名も追従するようにした。
-- `Totonoe Log: Show Interactive View (Alpha)` に、既存の「無視パターン」と
+- `Totonoe Log: Show Interactive View` に、既存の「無視パターン」と
   対になる「一致パターン」の入力欄を追加。メッセージがマッチしたエントリ
   **だけ**を残す、無視パターンのちょうど逆の絞り込み（issue #182、#165 の
-  次のアルファ版フェーズ）。WebviewではVSCode標準のCtrl+Fが使えないため、
+  次のフェーズ）。WebviewではVSCode標準のCtrl+Fが使えないため、
   ハイライトして次/前へジャンプする検索ではなく「一致行のみ表示する」
   フィルタとして提供する。どちらの欄も大文字小文字を無視する正規表現で、
   一致パターンの判定対象はエントリのメッセージ部分のみ（タイムスタンプと
   セベリティは日付範囲・セベリティの絞り込みで既に扱えるため）。メッセージは
   継続行を含むので、スタックトレースのような複数行エントリはいずれかの行が
   一致すればエントリごと残る。
-- `Totonoe Log: Show Interactive View (Alpha)` で、関連する `totonoeLog.*` の
+- `Totonoe Log: Show Interactive View` で、関連する `totonoeLog.*` の
   設定を変更したときに、パネルを開いたまま即座に表示へ反映するようにした
-  （issue #183、#165 の次のアルファ版フェーズ）。これまでは次に絞り込みを
+  （issue #183、#165 の次のフェーズ）。これまでは次に絞り込みを
   操作するまで古い表示のままだった。表示にだけ効く設定
   （`timezone.display`・`gap.thresholdSeconds`・`collapse.threshold`・
   `interactiveView.maxDisplayLines`）は現在のエントリを描き直し、パース結果が
@@ -121,6 +120,29 @@
   `timezone.fileOffsets`・`clockSkew.fileOffsets`）は読み込み済みファイルの
   再パースまで行う。再パースによって新しいセベリティが現れた場合は、その行が
   黙って隠れないよう自動でチェック済みにする。
+
+### Changed
+
+- **破壊的変更:** 条件ごとに分かれていた絞り込みコマンド4つを廃止した。
+  Interactive View のライブトグルと、残す複合ピッカー版で代替できるため
+  （issue #184）。キーバインドを設定していた場合は
+  `totonoeLog.showNormalizedViewFiltered` または
+  `totonoeLog.showInteractiveView` に付け替えること:
+  - `totonoeLog.showNormalizedViewFilteredBySeverity`
+  - `totonoeLog.showNormalizedViewFilteredByDateRange`
+  - `totonoeLog.showNormalizedViewFilteredByDateRangeAndSeverity`
+  - `totonoeLog.showNormalizedViewFilteredByIgnorePattern`
+
+  `Totonoe Log: Show Normalized View Filtered`・`Show Normalized View`・
+  `Show Collapsed View`・マージ系2コマンドはそのまま維持する（コマンド一覧は
+  13項目から9項目になる）。
+- **破壊的変更:** Interactive View の `(Alpha)` 表記と、アルファ期のコマンドID
+  を廃止した（issue #184）。コマンドIDは
+  `totonoeLog.showInteractiveView`（旧 `totonoeLog.showInteractiveViewAlpha`）、
+  タイトルは `Totonoe Log: Show Interactive View`、パネルのタブ名は
+  `Totonoe Log: <ファイル名>`（旧 `Totonoe Log (Alpha): <ファイル名>`）になる。
+  影響を受けるのは旧IDにキーバインドを設定していた場合だけで、旧IDは公開
+  リリースには含まれていない。
 
 ## [0.7.0] - 2026-07-23
 

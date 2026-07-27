@@ -2,9 +2,6 @@ import * as vscode from "vscode";
 import {
   formatNormalizedLogWithLineSources,
   formatCollapsedLogWithLineSources,
-  filterEntriesBySeverity,
-  filterEntriesByDateRange,
-  filterEntriesByIgnorePattern,
   filterEntriesByCriteria,
   collapseRepeatedEntries,
   DEFAULT_COLLAPSE_THRESHOLD,
@@ -78,7 +75,7 @@ function formatNormalizedWithGap(
 /**
  * 正規化ビュー系コマンドが共有する、仮想ドキュメントの発行・登録・表示処理。
  * 同じ元ファイルに対して繰り返しコマンドを実行しても、連番付きの新しい URI
- * を発行して既存タブと衝突しないようにする。Interactive View (Alpha) の
+ * を発行して既存タブと衝突しないようにする。Interactive View の
  * 「仮想ドキュメントとして書き出す」操作（issue #175）からも、単一ファイル
  * 表示中の書き出し先として同じ処理を再利用するためexportする。
  */
@@ -149,169 +146,6 @@ export function createShowNormalizedViewCommand(
 }
 
 /**
- * アクティブなエディタの内容を正規化し、ユーザーがチェックボックス的に選択した
- * セベリティのエントリだけを読み取り専用の仮想ドキュメントとして開くコマンド。
- */
-export function createShowNormalizedViewFilteredBySeverityCommand(
-  provider: NormalizedViewContentProvider
-): () => Promise<void> {
-  return async function showNormalizedViewFilteredBySeverity(): Promise<void> {
-    const sourceDocument = getSourceDocumentOrWarn("絞り込む");
-    if (!sourceDocument) {
-      return;
-    }
-
-    const entries = parseSourceLog(sourceDocument);
-
-    const selectedSeverities = await promptSeveritySelection(entries);
-    // ユーザーがピッカーを Esc 等でキャンセルした場合は何もしない。
-    if (selectedSeverities === undefined) {
-      return;
-    }
-
-    const filteredEntries = filterEntriesBySeverity(entries, selectedSeverities);
-    const formatted = formatNormalizedWithGap(filteredEntries);
-
-    await openVirtualNormalizedDocument(provider, sourceDocument.uri, formatted, "severity-filtered");
-  };
-}
-
-/**
- * アクティブなエディタの内容を正規化し、ユーザーが指定した開始・終了日時の
- * 範囲に含まれるエントリだけを読み取り専用の仮想ドキュメントとして開くコマンド。
- * 範囲外として非表示にした行数は、開いた直後に通知として表示する。
- */
-export function createShowNormalizedViewFilteredByDateRangeCommand(
-  provider: NormalizedViewContentProvider
-): () => Promise<void> {
-  return async function showNormalizedViewFilteredByDateRange(): Promise<void> {
-    const sourceDocument = getSourceDocumentOrWarn("絞り込む");
-    if (!sourceDocument) {
-      return;
-    }
-
-    const displayTimezone = readDisplayTimezone();
-    const startMs = await promptDateBoundary("開始日時", "start", displayTimezone);
-    // null はキャンセル、または不正な入力による中断を表す。
-    if (startMs === null) {
-      return;
-    }
-
-    const endMs = await promptDateBoundary("終了日時", "end", displayTimezone);
-    if (endMs === null) {
-      return;
-    }
-
-    const entries = parseSourceLog(sourceDocument);
-    const filteredEntries = filterEntriesByDateRange(entries, { startMs, endMs });
-    const formatted = formatNormalizedWithGap(filteredEntries, displayTimezone);
-
-    await openVirtualNormalizedDocument(provider, sourceDocument.uri, formatted, "date-range-filtered");
-
-    reportHiddenLineCount("指定範囲外の", entries, filteredEntries);
-  };
-}
-
-/**
- * アクティブなエディタの内容を正規化し、ユーザーが選択したセベリティと指定した
- * 日時範囲の両方の条件を満たすエントリだけを読み取り専用の仮想ドキュメントとして
- * 開くコマンド。セベリティ絞り込みと日付範囲絞り込みを個別に持つ既存コマンドを
- * 組み合わせて同時に適用したい場合に使う。範囲外・対象外として非表示にした行数は、
- * 開いた直後に通知として表示する。
- */
-export function createShowNormalizedViewFilteredByDateRangeAndSeverityCommand(
-  provider: NormalizedViewContentProvider
-): () => Promise<void> {
-  return async function showNormalizedViewFilteredByDateRangeAndSeverity(): Promise<void> {
-    const sourceDocument = getSourceDocumentOrWarn("絞り込む");
-    if (!sourceDocument) {
-      return;
-    }
-
-    const entries = parseSourceLog(sourceDocument);
-    const displayTimezone = readDisplayTimezone();
-
-    const selectedSeverities = await promptSeveritySelection(entries);
-    // ユーザーがピッカーを Esc 等でキャンセルした場合は何もしない。
-    if (selectedSeverities === undefined) {
-      return;
-    }
-
-    const startMs = await promptDateBoundary("開始日時", "start", displayTimezone);
-    // null はキャンセル、または不正な入力による中断を表す。
-    if (startMs === null) {
-      return;
-    }
-
-    const endMs = await promptDateBoundary("終了日時", "end", displayTimezone);
-    if (endMs === null) {
-      return;
-    }
-
-    // 独立した2つの絞り込み関数を順に適用するだけで、両条件の積（AND）が得られる。
-    const filteredEntries = filterEntriesByDateRange(
-      filterEntriesBySeverity(entries, selectedSeverities),
-      { startMs, endMs }
-    );
-    const formatted = formatNormalizedWithGap(filteredEntries, displayTimezone);
-
-    await openVirtualNormalizedDocument(
-      provider,
-      sourceDocument.uri,
-      formatted,
-      "date-range-severity-filtered"
-    );
-
-    reportHiddenLineCount("条件に合わない", entries, filteredEntries);
-  };
-}
-
-/**
- * アクティブなエディタの内容を正規化し、ユーザーが入力した正規表現パターンに
- * マッチするエントリを非表示にした読み取り専用の仮想ドキュメントとして開く
- * コマンド。非表示にした行数は、開いた直後に通知として表示する。
- */
-export function createShowNormalizedViewFilteredByIgnorePatternCommand(
-  provider: NormalizedViewContentProvider
-): () => Promise<void> {
-  return async function showNormalizedViewFilteredByIgnorePattern(): Promise<void> {
-    const sourceDocument = getSourceDocumentOrWarn("絞り込む");
-    if (!sourceDocument) {
-      return;
-    }
-
-    const pattern = await promptIgnorePattern();
-    // ユーザーがキャンセルした場合、または不正な入力による中断の場合は何もしない。
-    if (pattern === undefined) {
-      return;
-    }
-
-    const entries = parseSourceLog(sourceDocument);
-    const filterResult = await filterEntriesByIgnorePattern(entries, pattern);
-    if (!filterResult.ok) {
-      // 破局的バックトラッキング等でマッチング処理がタイムアウトした場合。
-      // 「フィルタなしで全件表示」にフォールバックすると、ユーザーが意図
-      // しない大量表示につながりうるため、何もせず警告のみ出す。
-      vscode.window.showWarningMessage(
-        "Totonoe Log: 入力されたパターンの処理に時間がかかりすぎたため中断しました。より単純なパターンをお試しください。"
-      );
-      return;
-    }
-    const filteredEntries = filterResult.entries;
-    const formatted = formatNormalizedWithGap(filteredEntries);
-
-    await openVirtualNormalizedDocument(
-      provider,
-      sourceDocument.uri,
-      formatted,
-      "ignore-pattern-filtered"
-    );
-
-    reportHiddenLineCount("パターンに一致したエントリの", entries, filteredEntries);
-  };
-}
-
-/**
  * アクティブなエディタの内容を正規化し、ユーザーが選んだ条件（セベリティ /
  * 日付範囲 / 無視パターンのうち任意の組み合わせ）だけを順に尋ねて絞り込んだ
  * 読み取り専用の仮想ドキュメントとして開くコマンド。個別の組み合わせごとに
@@ -319,6 +153,9 @@ export function createShowNormalizedViewFilteredByIgnorePatternCommand(
  * 尋ね、選ばれた条件についてだけ既存のプロンプト（{@link promptSeveritySelection}
  * 等）を順に呼ぶ（issue #60 の推奨案1）。非表示にした行数は、開いた直後に
  * 通知として表示する。
+ *
+ * 条件ごとに分かれていた絞り込みコマンドは、Interactive View のライブトグルと
+ * このコマンドで代替できるため廃止した（issue #184）。
  */
 export function createShowNormalizedViewFilteredCommand(
   provider: NormalizedViewContentProvider

@@ -307,16 +307,26 @@ async function waitFor(
   return predicate();
 }
 
-suite("Totonoe Log interactive view (alpha, #166)", () => {
-  test("registers the showInteractiveViewAlpha command", async () => {
+suite("Totonoe Log interactive view (#166)", () => {
+  test("registers the showInteractiveView command under its final id (#184)", async () => {
     const extension = vscode.extensions.getExtension("upu.totonoe-log");
     await extension!.activate();
 
     const commands = await vscode.commands.getCommands(true);
     assert.ok(
-      commands.includes("totonoeLog.showInteractiveViewAlpha"),
-      "totonoeLog.showInteractiveViewAlpha command should be registered"
+      commands.includes("totonoeLog.showInteractiveView"),
+      "totonoeLog.showInteractiveView command should be registered"
     );
+    assert.ok(
+      !commands.includes("totonoeLog.showInteractiveViewAlpha"),
+      "the alpha-era command id should be gone"
+    );
+
+    const command = (
+      extension!.packageJSON.contributes.commands as Array<{ command: string; title: string }>
+    ).find((item) => item.command === "totonoeLog.showInteractiveView");
+    assert.ok(command, "the command should be contributed in package.json");
+    assert.strictEqual(command!.title, "Totonoe Log: Show Interactive View");
   });
 
   test("registers the webview context menu jump command, hidden from the palette (#191)", async () => {
@@ -356,7 +366,7 @@ suite("Totonoe Log interactive view (alpha, #166)", () => {
       Array<{ command: string; when?: string }>
     >;
     const explorerEntry = menus["explorer/context"].find(
-      (item) => item.command === "totonoeLog.showInteractiveViewAlpha"
+      (item) => item.command === "totonoeLog.showInteractiveView"
     );
     assert.ok(explorerEntry, "explorer/context should have an Interactive View entry");
     // マージ系（`listMultiSelection`）と違い1ファイルでも成立するため、
@@ -383,7 +393,7 @@ suite("Totonoe Log interactive view (alpha, #166)", () => {
 
       // 単一クリックでは VSCode が選択配列を渡さないことがあるため、
       // クリックされた項目だけで開けることを確認する。
-      await vscode.commands.executeCommand("totonoeLog.showInteractiveViewAlpha", appLogUri);
+      await vscode.commands.executeCommand("totonoeLog.showInteractiveView", appLogUri);
 
       const hasWebviewTab = (): boolean =>
         vscode.window.tabGroups.all
@@ -420,7 +430,7 @@ suite("Totonoe Log interactive view (alpha, #166)", () => {
       await vscode.commands.executeCommand("workbench.action.closeAllEditors");
 
       await vscode.commands.executeCommand(
-        "totonoeLog.showInteractiveViewAlpha",
+        "totonoeLog.showInteractiveView",
         appLogUri,
         [appLogUri, dbLogUri]
       );
@@ -448,13 +458,26 @@ suite("Totonoe Log interactive view (alpha, #166)", () => {
     });
     await vscode.window.showTextDocument(source);
 
-    await vscode.commands.executeCommand("totonoeLog.showInteractiveViewAlpha");
+    await vscode.commands.executeCommand("totonoeLog.showInteractiveView");
 
-    const hasWebviewTab = (): boolean =>
+    const webviewTab = (): vscode.Tab | undefined =>
       vscode.window.tabGroups.all
         .flatMap((group) => group.tabs)
-        .some((tab) => tab.input instanceof vscode.TabInputWebview);
-    assert.ok(await waitFor(hasWebviewTab), "a webview tab should be opened");
+        .find((tab) => tab.input instanceof vscode.TabInputWebview);
+    assert.ok(await waitFor(() => webviewTab() !== undefined), "a webview tab should be opened");
+
+    const tab = webviewTab()!;
+    assert.ok(
+      tab.label.startsWith("Totonoe Log: "),
+      `the panel title should carry no (Alpha) marker, got "${tab.label}" (#184)`
+    );
+    // VSCode は `createWebviewPanel` の viewType に内部の接頭辞を付けてタブへ
+    // 持たせるため、末尾一致で確認する。
+    const viewType = (tab.input as vscode.TabInputWebview).viewType;
+    assert.ok(
+      viewType.endsWith("totonoeLog.interactiveView"),
+      `the webview view type should have dropped its alpha suffix, got "${viewType}" (#184)`
+    );
 
     await vscode.commands.executeCommand("workbench.action.closeAllEditors");
   });
