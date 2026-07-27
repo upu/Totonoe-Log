@@ -56,6 +56,12 @@ export interface SerializedMaskCriteria {
   readonly maskHost: boolean;
   readonly maskProcessId: boolean;
   /**
+   * 値を伏せたいキー名の入力文字列（カンマまたは空白区切り、issue #212）。
+   * 空文字列は「キー指定なし」。`user=hoge` の `hoge` だけを伏せる用途で、
+   * 正規表現を書かずに済む入口として下の {@link pattern} と併用できる。
+   */
+  readonly keys: string;
+  /**
    * 任意パターンの入力文字列（正規表現、issue #195）。空文字列は「パターン
    * なし」。社内固有の識別子など汎用ルールで拾えないものを伏せるための欄で、
    * 一致箇所は `<MASKED>` に置き換わる。

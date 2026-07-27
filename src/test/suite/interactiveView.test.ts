@@ -37,6 +37,7 @@ function serializedCriteria(
       maskTimestamp: true,
       maskHost: true,
       maskProcessId: false,
+      keys: "",
       pattern: "",
     },
     visibleFiles: [],

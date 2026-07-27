@@ -30,6 +30,7 @@ const maskPanel = document.getElementById("mask-panel") as HTMLDivElement;
 const maskTimestampToggle = document.getElementById("mask-timestamp") as HTMLInputElement;
 const maskHostToggle = document.getElementById("mask-host") as HTMLInputElement;
 const maskProcessIdToggle = document.getElementById("mask-process-id") as HTMLInputElement;
+const maskKeysInput = document.getElementById("mask-keys") as HTMLInputElement;
 const maskPatternInput = document.getElementById("mask-pattern") as HTMLInputElement;
 const loadedFilesElement = document.getElementById("loaded-files") as HTMLDivElement;
 const severitiesContainer = document.getElementById("severities") as HTMLDivElement;
@@ -72,6 +73,7 @@ function collectCriteria(): SerializedFilterCriteria {
       maskTimestamp: maskTimestampToggle.checked,
       maskHost: maskHostToggle.checked,
       maskProcessId: maskProcessIdToggle.checked,
+      keys: maskKeysInput.value,
       pattern: maskPatternInput.value,
     },
     // チェック済みだけを集めるセベリティと違い、ファイルは読み込み順の並びを
@@ -151,8 +153,9 @@ maskOptionsButton.addEventListener("click", () => {
 maskTimestampToggle.addEventListener("change", postFilterChanged);
 maskHostToggle.addEventListener("change", postFilterChanged);
 maskProcessIdToggle.addEventListener("change", postFilterChanged);
-// 任意パターン（issue #195）だけはテキスト入力なので、絞り込みのパターン欄と
-// 同じくデバウンスする。
+// キー指定（issue #212）と任意パターン（issue #195）はテキスト入力なので、
+// 絞り込みのパターン欄と同じくデバウンスする。
+maskKeysInput.addEventListener("input", postFilterChangedDebounced);
 maskPatternInput.addEventListener("input", postFilterChangedDebounced);
 
 function renderSeverities(distinctSeverities: readonly string[], checked: readonly string[]): void {
@@ -426,6 +429,7 @@ function renderState(state: ExtensionToWebviewMessage): void {
   maskTimestampToggle.checked = state.criteria.mask.maskTimestamp;
   maskHostToggle.checked = state.criteria.mask.maskHost;
   maskProcessIdToggle.checked = state.criteria.mask.maskProcessId;
+  syncTextInputIfNotFocused(maskKeysInput, state.criteria.mask.keys);
   syncTextInputIfNotFocused(maskPatternInput, state.criteria.mask.pattern);
 
   statusElement.textContent = `${state.visibleLineCount} / ${state.totalLineCount} 行を表示`;

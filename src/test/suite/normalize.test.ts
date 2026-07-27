@@ -7,8 +7,9 @@ import {
   formatMaskedLogForCompare,
   maskLogTextForCopy,
   maskProcessIds,
-  maskEntriesByPattern,
-  maskMergedEntriesByPattern,
+  maskEntriesByPatterns,
+  maskMergedEntriesByPatterns,
+  buildKeyMaskPattern,
   collapseRepeatedEntries,
   formatCollapsedLog,
   deriveLogKind,
@@ -2081,10 +2082,10 @@ suite("normalize / maskProcessIds (#195)", () => {
   });
 });
 
-suite("normalize / maskEntriesByPattern (#195)", () => {
+suite("normalize / maskEntriesByPatterns (#195)", () => {
   /** テストの意図（置換結果の検証）を明確にするための、成功時のみ通すヘルパー。 */
-  async function maskOk(entries: Parameters<typeof maskEntriesByPattern>[0], pattern: RegExp) {
-    const result = await maskEntriesByPattern(entries, pattern);
+  async function maskOk(entries: Parameters<typeof maskEntriesByPatterns>[0], pattern: RegExp) {
+    const result = await maskEntriesByPatterns(entries, [pattern]);
     assert.strictEqual(result.ok, true);
     if (!result.ok) {
       throw new Error("unreachable");
@@ -2163,7 +2164,7 @@ suite("normalize / maskEntriesByPattern (#195)", () => {
     // 与えて打ち切りのコードパスを決定的に検証する。
     const entries = parseLog("2024-01-02T03:04:05Z INFO hello");
 
-    const result = await maskEntriesByPattern(entries, /hello/, { timeoutMs: 1 });
+    const result = await maskEntriesByPatterns(entries, [/hello/], { timeoutMs: 1 });
 
     assert.strictEqual(result.ok, false);
     if (!result.ok) {
@@ -2176,7 +2177,7 @@ suite("normalize / maskEntriesByPattern (#195)", () => {
       { fileName: "app.log", text: "2024-01-02T03:04:05Z INFO user=alice ok" },
     ]);
 
-    const result = await maskMergedEntriesByPattern(merged, /user=\w+/);
+    const result = await maskMergedEntriesByPatterns(merged, [/user=\w+/]);
 
     assert.strictEqual(result.ok, true);
     if (!result.ok) {
@@ -2184,6 +2185,102 @@ suite("normalize / maskEntriesByPattern (#195)", () => {
     }
     assert.strictEqual(result.entries[0].entry.message, "<MASKED> ok");
     assert.strictEqual(result.entries[0].fileIndex, merged[0].fileIndex);
+  });
+
+  test("applies several patterns in order, so a key pattern and a free-form one both take effect", async () => {
+    // キー指定欄と任意パターン欄を同時に効かせるための配列適用（issue #212）。
+    const entries = parseLog("2024-01-02T03:04:05Z INFO user=alice token=secret");
+
+    const result = await maskEntriesByPatterns(entries, [
+      buildKeyMaskPattern("user")!,
+      /token=\S+/,
+    ]);
+
+    assert.strictEqual(result.ok, true);
+    assert.strictEqual(
+      result.ok ? result.entries[0].message : "",
+      "user=<MASKED> <MASKED>"
+    );
+  });
+});
+
+suite("normalize / buildKeyMaskPattern (#212)", () => {
+  /** キー欄の入力そのものを受け取り、組み立てた正規表現で置換した結果を返す。 */
+  function maskByKeys(keysInput: string, text: string): string {
+    const pattern = buildKeyMaskPattern(keysInput);
+    return pattern ? text.replace(pattern, "<MASKED>") : text;
+  }
+
+  test("masks the value of key=value, keeping the key and the separator", () => {
+    assert.strictEqual(
+      maskByKeys("user", "Authenticated request user=hoge tenant=acme"),
+      "Authenticated request user=<MASKED> tenant=acme"
+    );
+  });
+
+  test("masks the value of key: value with surrounding spaces", () => {
+    assert.strictEqual(
+      maskByKeys("user", "Session expired for user: fuga"),
+      "Session expired for user: <MASKED>"
+    );
+  });
+
+  test("masks inside quotes, keeping the quotes themselves", () => {
+    // クォートを残すのは、値が空になったのか伏せられたのかを読み手が
+    // 見分けられるようにするため。
+    assert.strictEqual(
+      maskByKeys("token", 'auth ok token="abc 123" retry=0'),
+      'auth ok token="<MASKED>" retry=0'
+    );
+    assert.strictEqual(maskByKeys("token", "auth ok token='abc'"), "auth ok token='<MASKED>'");
+  });
+
+  test("accepts several keys separated by commas or spaces", () => {
+    assert.strictEqual(
+      maskByKeys("user, token session", "user=hoge token=abc session=xyz other=keep"),
+      "user=<MASKED> token=<MASKED> session=<MASKED> other=keep"
+    );
+  });
+
+  test("matches the key case-insensitively", () => {
+    assert.strictEqual(maskByKeys("user", "USER=hoge"), "USER=<MASKED>");
+  });
+
+  test("stops the value at a delimiter so the rest of the line survives", () => {
+    assert.strictEqual(
+      maskByKeys("user", "handled (user=hoge, id=3) done"),
+      "handled (user=<MASKED>, id=3) done"
+    );
+  });
+
+  test("does not mask a different key that merely contains the given one", () => {
+    // `\b` ではなく `(?<![\w.-])` で判定している理由（#212）。
+    assert.strictEqual(maskByKeys("user", "superuser=x user=y"), "superuser=x user=<MASKED>");
+    assert.strictEqual(maskByKeys("id", "order.id=42"), "order.id=42");
+  });
+
+  test("works with a non-ASCII key", () => {
+    // `\b` は ASCII 前提なので、日本語のキー名では機能しない。
+    assert.strictEqual(maskByKeys("契約ID", "契約ID=A-1234 を処理"), "契約ID=<MASKED> を処理");
+  });
+
+  test("treats regular-expression metacharacters in a key as literal text", () => {
+    assert.strictEqual(maskByKeys("a.b", "axb=1 a.b=2"), "axb=1 a.b=<MASKED>");
+  });
+
+  test("leaves a key with no value alone", () => {
+    // `=` の後の空白を許さないことで、値が空のキーに続く別の語を巻き込まない。
+    assert.strictEqual(maskByKeys("user", "user= and user:"), "user= and user:");
+  });
+
+  test("does not mask a spaced-out assignment (意図的な取りこぼし)", () => {
+    // `user = hoge` を拾うには `=` の後の空白を許す必要があり、それは上の
+    // 誤マスクと引き換えになる。設定ダンプ以外ではまず見ない形なので拾わない。
+    assert.strictEqual(maskByKeys("user", "user = hoge"), "user = hoge");
+  });
+
+  test("returns no pattern for a blank input", () => {
+    assert.strictEqual(buildKeyMaskPattern("  , "), undefined);
   });
 });
 
@@ -2193,7 +2290,7 @@ suite("normalize / custom mask pattern in the interactive builders (#195)", () =
   test("buildInteractivePayload applies the pattern before formatting, alongside the other masks", async () => {
     const result = await buildInteractivePayload(parseLog(ENTRY_TEXT), {}, {
       mask: { maskHost: true },
-      maskPattern: /user=\w+/,
+      maskPatterns: [/user=\w+/],
     });
 
     assert.ok(result.ok);
@@ -2211,7 +2308,7 @@ suite("normalize / custom mask pattern in the interactive builders (#195)", () =
     // マスクだけで、パネルは壊れず他のマスクは効き続ける。
     const result = await buildInteractivePayload(parseLog(ENTRY_TEXT), {}, {
       mask: { maskHost: true },
-      maskPattern: /user=\w+/,
+      maskPatterns: [/user=\w+/],
       maskPatternTimeoutMs: 1,
     });
 
@@ -2232,7 +2329,7 @@ suite("normalize / custom mask pattern in the interactive builders (#195)", () =
 
     const result = await buildInteractivePayload(parseLog(text), {}, {
       collapseThreshold: 3,
-      maskPattern: /user=\w+/,
+      maskPatterns: [/user=\w+/],
     });
 
     assert.ok(result.ok);
@@ -2246,7 +2343,7 @@ suite("normalize / custom mask pattern in the interactive builders (#195)", () =
   test("buildInteractiveMergedPayload applies the pattern", async () => {
     const merged = mergeLogFiles([{ fileName: "app.log", text: ENTRY_TEXT }]);
 
-    const result = await buildInteractiveMergedPayload(merged, {}, { maskPattern: /user=\w+/ });
+    const result = await buildInteractiveMergedPayload(merged, {}, { maskPatterns: [/user=\w+/] });
 
     assert.ok(result.ok);
     assert.strictEqual(
@@ -2260,12 +2357,12 @@ suite("normalize / custom mask pattern in the interactive builders (#195)", () =
 
     const entries = parseLog(ENTRY_TEXT);
 
-    const applied = await buildInteractiveExportText(entries, {}, { maskPattern: /user=\w+/ });
+    const applied = await buildInteractiveExportText(entries, {}, { maskPatterns: [/user=\w+/] });
     assert.ok(applied.ok);
     assert.match(applied.ok ? applied.formatted.text : "", /<MASKED> from 10\.0\.0\.1/);
 
     const failed = await buildInteractiveExportText(entries, {}, {
-      maskPattern: /user=\w+/,
+      maskPatterns: [/user=\w+/],
       maskPatternTimeoutMs: 1,
     });
     assert.ok(failed.ok);
@@ -2279,7 +2376,7 @@ suite("normalize / custom mask pattern in the interactive builders (#195)", () =
   test("buildInteractiveMergedExportText applies the pattern", async () => {
     const merged = mergeLogFiles([{ fileName: "app.log", text: ENTRY_TEXT }]);
 
-    const result = await buildInteractiveMergedExportText(merged, {}, { maskPattern: /user=\w+/ });
+    const result = await buildInteractiveMergedExportText(merged, {}, { maskPatterns: [/user=\w+/] });
 
     assert.ok(result.ok);
     assert.match(result.ok ? result.formatted.text : "", /INFO <MASKED> from/);

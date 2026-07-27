@@ -39,10 +39,13 @@ export interface MaskByPatternOptions {
  */
 const WORKER_SOURCE = `
 const { parentPort, workerData } = require("node:worker_threads");
-const { source, flags, placeholder, texts } = workerData;
-const masker = new RegExp(source, flags);
+const { patterns, placeholder, texts } = workerData;
+const maskers = patterns.map(({ source, flags }) => new RegExp(source, flags));
 const masked = texts.map((text) =>
-  text.split("\\n").map((line) => line.replace(masker, placeholder)).join("\\n")
+  text
+    .split("\\n")
+    .map((line) => maskers.reduce((current, masker) => current.replace(masker, placeholder), line))
+    .join("\\n")
 );
 parentPort.postMessage(masked);
 `;
@@ -62,17 +65,23 @@ parentPort.postMessage(masked);
  * 整形層（{@link maskDisplayMessageLines}）ではなく整形の手前で処理するのは、
  * 破局的バックトラッキングを起こすパターンから拡張ホストを守るため——別
  * スレッドに逃がしてタイムアウトで強制終了できる形は、この位置でしか取れない。
+ *
+ * パターンを配列で受けるのは、キー指定欄と任意パターン欄を同時に効かせる
+ * ため（issue #212）。複数のパターンを `(?:a)|(?:b)` と1本に連結せず配列の
+ * まま渡すのは、絞り込み側（#206）と同じ理由——ユーザーが書いた正規表現同士を
+ * 貼り合わせると、どちらが原因で失敗したのかを追えなくなる。ワーカーの起動は
+ * 配列でも1回のままなので、追加のコストはほぼ無い。
  */
-export function maskEntriesByPattern(
+export function maskEntriesByPatterns(
   entries: readonly LogEntry[],
-  pattern: RegExp,
+  patterns: readonly RegExp[],
   options: MaskByPatternOptions = {}
 ): Promise<MaskByPatternResult<LogEntry>> {
   return maskMessages(
     entries,
     (entry) => entry.message,
     (entry, message) => ({ ...entry, message }),
-    pattern,
+    patterns,
     options
   );
 }
@@ -83,16 +92,16 @@ export function maskEntriesByPattern(
  * メッセージだけ——ファイル名・種別・`fileIndex` は行の出どころを示す情報なので
  * マスクの対象にしない。
  */
-export function maskMergedEntriesByPattern(
+export function maskMergedEntriesByPatterns(
   mergedEntries: readonly MergedEntry[],
-  pattern: RegExp,
+  patterns: readonly RegExp[],
   options: MaskByPatternOptions = {}
 ): Promise<MaskByPatternResult<MergedEntry>> {
   return maskMessages(
     mergedEntries,
     (merged) => merged.entry.message,
     (merged, message) => ({ ...merged, entry: { ...merged.entry, message } }),
-    pattern,
+    patterns,
     options
   );
 }
@@ -112,28 +121,28 @@ export interface AppliedMaskPattern<TEntry> {
  * エントリと失敗理由を返す。Interactive View の4つの合成処理（表示/書き出し ×
  * 単一/マージ）が同じ縮退の仕方をするよう、この判断をここに1本化する。
  */
-export async function applyMaskPatternToEntries(
+export async function applyMaskPatternsToEntries(
   entries: readonly LogEntry[],
-  pattern: RegExp | undefined,
+  patterns: readonly RegExp[] | undefined,
   options: MaskByPatternOptions = {}
 ): Promise<AppliedMaskPattern<LogEntry>> {
-  if (!pattern) {
+  if (!patterns || patterns.length === 0) {
     return { entries };
   }
-  const result = await maskEntriesByPattern(entries, pattern, options);
+  const result = await maskEntriesByPatterns(entries, patterns, options);
   return result.ok ? { entries: result.entries } : { entries, failure: result.reason };
 }
 
-/** {@link applyMaskPatternToEntries} のマージ版。 */
-export async function applyMaskPatternToMergedEntries(
+/** {@link applyMaskPatternsToEntries} のマージ版。 */
+export async function applyMaskPatternsToMergedEntries(
   mergedEntries: readonly MergedEntry[],
-  pattern: RegExp | undefined,
+  patterns: readonly RegExp[] | undefined,
   options: MaskByPatternOptions = {}
 ): Promise<AppliedMaskPattern<MergedEntry>> {
-  if (!pattern) {
+  if (!patterns || patterns.length === 0) {
     return { entries: mergedEntries };
   }
-  const result = await maskMergedEntriesByPattern(mergedEntries, pattern, options);
+  const result = await maskMergedEntriesByPatterns(mergedEntries, patterns, options);
   return result.ok
     ? { entries: result.entries }
     : { entries: mergedEntries, failure: result.reason };
@@ -148,7 +157,7 @@ function maskMessages<TEntry>(
   entries: readonly TEntry[],
   getMessage: (entry: TEntry) => string,
   withMessage: (entry: TEntry, message: string) => TEntry,
-  pattern: RegExp,
+  patterns: readonly RegExp[],
   options: MaskByPatternOptions
 ): Promise<MaskByPatternResult<TEntry>> {
   if (entries.length === 0) {
@@ -157,16 +166,17 @@ function maskMessages<TEntry>(
 
   const timeoutMs = options.timeoutMs ?? DEFAULT_TIMEOUT_MS;
   const texts = entries.map(getMessage);
-  // 一致箇所を「全て」置き換えるため、呼び出し側のフラグに関わらず `g` を足す
-  // （`RegExp#replace` は `g` が無いと最初の1件しか置換しない）。
-  const flags = pattern.flags.includes("g") ? pattern.flags : `${pattern.flags}g`;
 
   return new Promise((resolve) => {
     const worker = new Worker(WORKER_SOURCE, {
       eval: true,
       workerData: {
-        source: pattern.source,
-        flags,
+        patterns: patterns.map((pattern) => ({
+          source: pattern.source,
+          // 一致箇所を「全て」置き換えるため、呼び出し側のフラグに関わらず `g` を
+          // 足す（`RegExp#replace` は `g` が無いと最初の1件しか置換しない）。
+          flags: pattern.flags.includes("g") ? pattern.flags : `${pattern.flags}g`,
+        })),
         placeholder: CUSTOM_MASK_PLACEHOLDER,
         texts,
       },

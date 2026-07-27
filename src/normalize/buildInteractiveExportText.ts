@@ -7,8 +7,8 @@ import { filterEntriesByCriteria, type FilterCriteria } from "./filterEntries";
 import { filterMergedEntriesByCriteria } from "./filterMergedEntries";
 import { filterMergedEntriesByFileIndex, isFileIndexVisible, SINGLE_FILE_INDEX } from "./filterByFile";
 import {
-  applyMaskPatternToEntries,
-  applyMaskPatternToMergedEntries,
+  applyMaskPatternsToEntries,
+  applyMaskPatternsToMergedEntries,
 } from "./maskByPattern";
 import { formatNormalizedLogWithLineSources } from "./formatNormalizedLog";
 import { formatMergedLogWithLineSources } from "./formatMergedLog";
@@ -38,10 +38,10 @@ export interface BuildInteractiveExportTextOptions {
   readonly mask?: DisplayMaskOptions;
 
   /**
-   * 指定すると、一致箇所を `<MASKED>` に置き換える（issue #195）。表示側と
-   * 同じく、書き出しもマスクパネルの状態をそのまま引き継ぐ。
+   * 指定すると、一致箇所を `<MASKED>` に置き換える（issue #195・#212）。
+   * 表示側と同じく、書き出しもマスクパネルの状態をそのまま引き継ぐ。
    */
-  readonly maskPattern?: RegExp;
+  readonly maskPatterns?: readonly RegExp[];
   /** 任意パターンのマスクに使うタイムアウト（ミリ秒）を上書きしたい場合に指定する（主にテスト用）。 */
   readonly maskPatternTimeoutMs?: number;
 
@@ -83,7 +83,7 @@ export async function buildInteractiveExportText(
     return filterResult;
   }
 
-  const masked = await applyMaskPatternToEntries(filterResult.entries, options.maskPattern, {
+  const masked = await applyMaskPatternsToEntries(filterResult.entries, options.maskPatterns, {
     timeoutMs: options.maskPatternTimeoutMs,
   });
 
@@ -131,7 +131,7 @@ export async function buildInteractiveMergedExportText(
     return filterResult;
   }
 
-  const masked = await applyMaskPatternToMergedEntries(filterResult.entries, options.maskPattern, {
+  const masked = await applyMaskPatternsToMergedEntries(filterResult.entries, options.maskPatterns, {
     timeoutMs: options.maskPatternTimeoutMs,
   });
 

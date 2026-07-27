@@ -5,7 +5,7 @@ import type { DisplayMaskOptions } from "./displayMask";
 import { getDistinctSeverities } from "./filterBySeverity";
 import { filterEntriesByCriteria, type FilterCriteria } from "./filterEntries";
 import { isFileIndexVisible, SINGLE_FILE_INDEX } from "./filterByFile";
-import { applyMaskPatternToEntries } from "./maskByPattern";
+import { applyMaskPatternsToEntries } from "./maskByPattern";
 import { formatNormalizedLogWithLineSources } from "./formatNormalizedLog";
 import { buildInteractiveCollapsedLines, type InteractiveDisplayItem } from "./buildInteractiveCollapsedLines";
 
@@ -30,11 +30,12 @@ export interface BuildInteractivePayloadOptions {
   readonly mask?: DisplayMaskOptions;
 
   /**
-   * 指定すると、一致箇所を `<MASKED>` に置き換える（issue #195、マスクパネルの
-   * 任意パターン入力）。{@link mask} と違って整形層ではなく整形の手前で効く
-   * ため別のオプションにしてある（理由は {@link maskEntriesByPattern} 参照）。
+   * 指定すると、一致箇所を `<MASKED>` に置き換える（issue #195・#212、マスク
+   * パネルのキー指定欄と任意パターン欄）。{@link mask} と違って整形層ではなく
+   * 整形の手前で効くため別のオプションにしてある（理由は
+   * {@link maskEntriesByPatterns} 参照）。指定順に適用する。
    */
-  readonly maskPattern?: RegExp;
+  readonly maskPatterns?: readonly RegExp[];
   /** 任意パターンのマスクに使うタイムアウト（ミリ秒）を上書きしたい場合に指定する（主にテスト用）。 */
   readonly maskPatternTimeoutMs?: number;
 
@@ -101,7 +102,7 @@ export async function buildInteractivePayload(
 
   // 任意パターンのマスクは絞り込みの後に掛ける（issue #195）。マスク前の本文で
   // 絞り込むという既存の扱い（`mask` のコメント参照）を、こちらでも揃えるため。
-  const masked = await applyMaskPatternToEntries(filterResult.entries, options.maskPattern, {
+  const masked = await applyMaskPatternsToEntries(filterResult.entries, options.maskPatterns, {
     timeoutMs: options.maskPatternTimeoutMs,
   });
 
