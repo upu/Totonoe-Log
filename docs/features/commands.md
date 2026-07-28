@@ -8,7 +8,9 @@ feature is *for* is explained in the [README](../../README.md), and each entry
 links back to the relevant section there.
 
 All commands are prefixed with `Totonoe Log:` in the Command Palette
-(`Ctrl+Shift+P`).
+(`Ctrl+Shift+P`). Settings are written here without their namespace —
+`gap.thresholdSeconds` means `totonoeLog.gap.thresholdSeconds` in
+`settings.json`.
 
 ## At a glance
 
@@ -18,12 +20,17 @@ All commands are prefixed with `Totonoe Log:` in the Command Palette
 | Show Normalized View | `totonoeLog.showNormalizedView` | Palette | Active editor |
 | Show Normalized View Filtered | `totonoeLog.showNormalizedViewFiltered` | Palette | Active editor |
 | Show Collapsed View | `totonoeLog.showCollapsedView` | Palette | Active editor |
-| Merge Selected Files | `totonoeLog.mergeSelectedFiles` | Explorer right-click | Two or more selected files |
-| Merge Selected Files Filtered | `totonoeLog.mergeSelectedFilesFiltered` | Explorer right-click | Two or more selected files |
+| Merge Selected Files | `totonoeLog.mergeSelectedFiles` | Explorer right-click (also palette \*) | Two or more selected files |
+| Merge Selected Files Filtered | `totonoeLog.mergeSelectedFilesFiltered` | Explorer right-click (also palette \*) | Two or more selected files |
 | Compare Logs | `totonoeLog.compareLogs` | Palette | Two files picked from a dialog |
 | Copy Masked Text | `totonoeLog.copyMaskedText` | Palette | Active editor's selection, or the whole file |
 | Go to Source Line | `totonoeLog.goToSourceLine` | Palette, editor right-click | Cursor line of a normalized / merged view |
 | Go to Source Line | `totonoeLog.goToSourceLineFromInteractiveView` | Interactive View right-click only | Right-clicked line of the panel |
+
+\* The two `Merge Selected Files` commands are contributed to the Command
+Palette like the rest, so they are listed there — but the palette gives them no
+Explorer selection to work with, so running them that way only produces a
+warning. Treat Explorer right-click as the way to run them.
 
 Two commands share the title **Go to Source Line** because they are the same
 action in two different surfaces. The Interactive View one is hidden from the
@@ -32,10 +39,8 @@ Command Palette (`when: false`), so only the other appears there.
 ## Where commands appear
 
 - **Command Palette** — every command except
-  `totonoeLog.goToSourceLineFromInteractiveView`. Note that the two
-  `Merge Selected Files` commands are listed there but need an Explorer
-  selection, so running them from the palette only shows a warning; see their
-  entries below.
+  `totonoeLog.goToSourceLineFromInteractiveView`, with the
+  `Merge Selected Files` caveat noted above.
 - **Explorer right-click** — `Merge Selected Files` and
   `Merge Selected Files Filtered` on a multi-file selection
   (`listMultiSelection`), and `Show Interactive View` on anything that is not a

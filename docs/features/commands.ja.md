@@ -7,6 +7,8 @@ Totonoe Log が提供する全コマンドを、コマンドID・起動導線・
 [README](../../README.ja.md) 側で説明しており、各項目からその節へリンクしている。
 
 コマンドパレット（`Ctrl+Shift+P`）では、すべて `Totonoe Log:` の接頭辞が付く。
+設定名はこのページでは名前空間を省いて書いている。`gap.thresholdSeconds` は
+`settings.json` 上の `totonoeLog.gap.thresholdSeconds` を指す。
 
 ## 一覧
 
@@ -16,12 +18,16 @@ Totonoe Log が提供する全コマンドを、コマンドID・起動導線・
 | Show Normalized View | `totonoeLog.showNormalizedView` | パレット | アクティブエディタ |
 | Show Normalized View Filtered | `totonoeLog.showNormalizedViewFiltered` | パレット | アクティブエディタ |
 | Show Collapsed View | `totonoeLog.showCollapsedView` | パレット | アクティブエディタ |
-| Merge Selected Files | `totonoeLog.mergeSelectedFiles` | エクスプローラ右クリック | 選択した2つ以上のファイル |
-| Merge Selected Files Filtered | `totonoeLog.mergeSelectedFilesFiltered` | エクスプローラ右クリック | 選択した2つ以上のファイル |
+| Merge Selected Files | `totonoeLog.mergeSelectedFiles` | エクスプローラ右クリック（パレットにも出る ※） | 選択した2つ以上のファイル |
+| Merge Selected Files Filtered | `totonoeLog.mergeSelectedFilesFiltered` | エクスプローラ右クリック（パレットにも出る ※） | 選択した2つ以上のファイル |
 | Compare Logs | `totonoeLog.compareLogs` | パレット | ダイアログで選ぶ2ファイル |
 | Copy Masked Text | `totonoeLog.copyMaskedText` | パレット | アクティブエディタの選択範囲、無ければ全体 |
 | Go to Source Line | `totonoeLog.goToSourceLine` | パレット、エディタ右クリック | 正規化ビュー／マージビューのカーソル行 |
 | Go to Source Line | `totonoeLog.goToSourceLineFromInteractiveView` | Interactive View の右クリックのみ | パネル上で右クリックした行 |
+
+※ `Merge Selected Files` 系の2つも他と同じくコマンドパレットに登録されているため
+パレットには並ぶ。ただしパレット経由では対象となるエクスプローラの選択が渡らず、
+警告が出るだけで終わる。実行する導線はエクスプローラ右クリックだと考えてよい。
 
 **Go to Source Line** という同じタイトルのコマンドが2つあるのは、同じ操作を別の
 場所で提供しているため。Interactive View 用のほうはコマンドパレットから隠して
@@ -30,8 +36,7 @@ Totonoe Log が提供する全コマンドを、コマンドID・起動導線・
 ## どこに出るか
 
 - **コマンドパレット** — `totonoeLog.goToSourceLineFromInteractiveView` 以外の
-  すべて。ただし `Merge Selected Files` 系の2つはパレットにも並ぶが、そこには
-  対象の選択が無いため警告が出るだけになる（各項目参照）
+  すべて。`Merge Selected Files` 系については上の ※ のとおり
 - **エクスプローラ右クリック** — 複数選択時（`listMultiSelection`）に
   `Merge Selected Files` と `Merge Selected Files Filtered`、フォルダ以外
   （`!explorerResourceIsFolder`）に `Show Interactive View`
