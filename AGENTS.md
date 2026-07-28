@@ -47,7 +47,10 @@ VSCode 拡張機能「Totonoe Log」。コンセプトは「バラバラなロ�
   テスト・ドキュメントのみの変更で、ユーザー影響がない場合は不要）
 - README.md（英語）/ README.ja.md（日本語）は常に内容を揃える
 - PR は `.github/pull_request_template.md` に従う
-- コマンドを追加する場合は `package.json` の `contributes.commands` に登録する
+- コマンドを追加・変更する場合は `package.json` の `contributes.commands` に登録し、
+  `docs/features/commands.md`（英語）と `docs/features/commands.ja.md`（日本語）の
+  一覧・該当節も同じ PR で更新する（起動導線を変える `contributes.menus` の変更も
+  同様。README は機能の説明、こちらはコマンドID・起動導線・出力を引くための表）
 - TypeScript（`*.ts`）を作成・変更・レビューする場合は、作業前に
   `docs/coding-guidelines.md` の「TypeScript」セクションを読み、その規約に従う
 - vsce がパッケージするファイル一覧は `scripts/check-package-contents.js` の
