@@ -4,7 +4,7 @@
   ここには利用者向けの内容だけを置いてください（開発者向けの記述を追加しないこと）。
 -->
 
-🇬🇧 [English](README.md)
+🌐 [English](README.md)
 
 # Totonoe Log
 

@@ -4,7 +4,7 @@
   keep this file limited to user-facing content only.
 -->
 
-🇯🇵 [日本語](README.ja.md)
+🌐 [日本語](README.ja.md)
 
 # Totonoe Log
 
