@@ -8,6 +8,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.8.0] - 2026-07-28
+
 ### Added
 
 - New `Totonoe Log: Show Interactive View` command:
@@ -481,7 +483,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   entire base name for dotfiles with no other extension (e.g. `.env`),
   producing a path like `/.normalized-1.log`. Leading dots are now preserved.
 
-[Unreleased]: https://github.com/upu/Totonoe-Log/compare/v0.7.0...HEAD
+[Unreleased]: https://github.com/upu/Totonoe-Log/compare/v0.8.0...HEAD
+[0.8.0]: https://github.com/upu/Totonoe-Log/releases/tag/v0.8.0
 [0.7.0]: https://github.com/upu/Totonoe-Log/releases/tag/v0.7.0
 [0.6.0]: https://github.com/upu/Totonoe-Log/releases/tag/v0.6.0
 [0.5.0]: https://github.com/upu/Totonoe-Log/releases/tag/v0.5.0
