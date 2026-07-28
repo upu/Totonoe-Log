@@ -14,6 +14,8 @@ Totonoe Log is a VS Code extension for log investigation. Real-world troubleshoo
 
 Start with **Interactive View**, where every filter is a live toggle. Everything it shows can also be written out as a regular read-only editor tab, and each step is available as its own command too — so VS Code's built-in search, copy, and diff keep working exactly as you expect. Run the commands from the Command Palette (`Ctrl+Shift+P`).
 
+For a lookup-style list of every command — command IDs, where each one can be run from, and what it produces — see the [command reference](https://github.com/upu/Totonoe-Log/blob/main/docs/features/commands.md).
+
 ## Interactive View
 
 `Totonoe Log: Show Interactive View` opens the log in a Webview panel where the whole investigation happens in one place, with no round-tripping through Quick Pick dialogs. Run it from the Command Palette against the active editor's log (unsaved changes included), or right-click a log file — or a multi-file selection — in the Explorer.

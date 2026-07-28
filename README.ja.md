@@ -14,6 +14,8 @@ Totonoe Log はログ調査のための VS Code 拡張機能です。実際の�
 
 まずは、すべての絞り込みがその場で効く **Interactive View** から始めてください。パネルで見ている状態は通常の読み取り専用エディタタブとして書き出せますし、各処理は単独のコマンドとしても使えるので、VS Code 標準の検索・コピー・diff もそのまま活きます。各コマンドはコマンドパレット（`Ctrl+Shift+P`）から実行します。
 
+コマンドID・起動導線・出力を引ける一覧は[コマンド一覧](https://github.com/upu/Totonoe-Log/blob/main/docs/features/commands.ja.md)にあります。
+
 ## Interactive View
 
 `Totonoe Log: Show Interactive View` は、ログをWebviewパネルで開き、QuickPickダイアログを往復せずに調査を1か所で完結させるビューです。コマンドパレットから実行するとアクティブなエディタのログ（未保存の変更も含む）が対象になり、エクスプローラでログファイル（複数選択も可）を右クリックして選ぶこともできます。
