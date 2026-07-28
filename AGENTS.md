@@ -51,6 +51,10 @@ VSCode 拡張機能「Totonoe Log」。コンセプトは「バラバラなロ�
   `docs/features/commands.md`（英語）と `docs/features/commands.ja.md`（日本語）の
   一覧・該当節も同じ PR で更新する（起動導線を変える `contributes.menus` の変更も
   同様。README は機能の説明、こちらはコマンドID・起動導線・出力を引くための表）
+- ログ本文のパターンに依存する機能（マスク・絞り込み・折りたたみ等）を追加・変更
+  したときは、動作確認用の行を同じ PR で `demo/` のサンプルログにも足す。実装した
+  本人がそのパターンを一番よく分かっている時点で1〜2行足すのが最も安く、後から
+  「試す行が無い」と気づいて別 issue を起票する手間を避けられる
 - TypeScript（`*.ts`）を作成・変更・レビューする場合は、作業前に
   `docs/coding-guidelines.md` の「TypeScript」セクションを読み、その規約に従う
 - vsce がパッケージするファイル一覧は `scripts/check-package-contents.js` の
