@@ -10,6 +10,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- Custom epoch timestamp formats in `totonoeLog.timestampFormats` no longer
+  accept values that cannot be represented as a date. An `epochMs` capture
+  outside the range JavaScript dates can express (or an `epochSec` with a
+  non-numeric `ms` capture) used to be treated as a recognized timestamp and
+  then crashed formatting with `Invalid time value`, breaking the whole view.
+  Such lines are now kept as ordinary unrecognized lines (issue #219).
 - `Totonoe Log: Show Interactive View` no longer hides entries whose
   timestamp could not be recognized when a date/time boundary cannot be
   interpreted. Entering something like `not-a-date` warned but still left a

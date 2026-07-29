@@ -10,6 +10,11 @@
 
 ### Fixed
 
+- `totonoeLog.timestampFormats` のカスタム epoch 形式が、日時として表現できない
+  値を受け付けないようにした。JavaScript の Date で表せる範囲を超える `epochMs`
+  や、数字列でない `ms` を伴う `epochSec` が認識済みタイムスタンプとして扱われ、
+  整形時に `Invalid time value` の例外でビュー全体が壊れていた。これらの行は
+  通常の未認識行として保持するようにした（issue #219）。
 - `Totonoe Log: Show Interactive View` で、日時の境界を解釈できなかったときに
   タイムスタンプ未認識のエントリが隠れないようにした。`not-a-date` のような入力は
   警告こそ出るものの日付条件が残ったままで、日付範囲が適用されるとタイムスタンプ
