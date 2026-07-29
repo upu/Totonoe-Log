@@ -47,6 +47,7 @@ import {
   addNewlyAppearedSeverities,
   compileMaskPattern,
   getLoadedDistinctSeverities,
+  resolveIncomingCriteria,
   toFilterCriteria,
   type CompileMaskPatternResult,
 } from "./interactiveViewCriteria";
@@ -322,19 +323,14 @@ export class InteractiveViewPanelController implements vscode.Disposable {
       return;
     }
     if (message.type === "exportVirtualDocument") {
-      await this.exportVirtualDocument();
+      await this.exportVirtualDocument(message.criteria);
       return;
     }
     if (message.type === "revealSourceLine") {
       await this.revealClickedSourceLine(message.lineSource);
       return;
     }
-    // ファイルの追加・取り消しと絞り込みのメッセージが前後しても表示状態が
-    // ずれないよう、ファイル選択だけは現在のファイル数に合わせ直して受け取る。
-    this.criteria = {
-      ...message.criteria,
-      visibleFiles: normalizeFileVisibility(message.criteria.visibleFiles, this.loadedFiles.length),
-    };
+    this.criteria = resolveIncomingCriteria(message.criteria, this.loadedFiles.length);
     await this.postState();
   }
 
@@ -654,12 +650,25 @@ export class InteractiveViewPanelController implements vscode.Disposable {
    * 新規タブとして開く（issue #175）。検索・コピー・`Go to Source Line`・
    * `Compare Logs` は、書き出し後は仮想ドキュメント側の既存導線をそのまま
    * 使う想定で、Webview側には作り込まない。
+   *
+   * `requestedCriteria` は Export を押した時点のフォーム内容（issue #217）。
+   * 最後に受け取った条件ではなくこちらを採用したうえで、そのまま
+   * `this.criteria` にも反映する——書き出し内容と、この後パネルが描き直された
+   * ときの表示内容を食い違わせないため。デバウンス待ちのメッセージが後から
+   * 届いても表示は巻き戻らない（Webview側は発火時点のフォームを読み直すので、
+   * 遅れて届く内容がこのスナップショットより古くなることはない）。ここで
+   * 再描画まではしない——直後にそのメッセージが届いて描き直されるため、
+   * 重いパターンの評価を二度走らせないようにする。
    */
-  private async exportVirtualDocument(): Promise<void> {
+  private async exportVirtualDocument(
+    requestedCriteria: SerializedFilterCriteria
+  ): Promise<void> {
     const [firstFile] = this.loadedFiles;
     if (!firstFile) {
       return;
     }
+
+    this.criteria = resolveIncomingCriteria(requestedCriteria, this.loadedFiles.length);
 
     const displayTimezone = readDisplayTimezone();
     const { criteria } = toFilterCriteria(this.criteria, displayTimezone);

@@ -109,8 +109,12 @@ addFilesButton.addEventListener("click", () => {
 });
 
 // 書き出しも離散的な操作なので、テキスト入力と違いデバウンスせず即座に送る。
+// ただし押した時点のフォーム内容を同送する（issue #217）——デバウンス待ちの
+// 入力があると、拡張機能本体が最後に受け取っている条件では直前の入力が欠けた
+// まま書き出されてしまう。デバウンスを flush して往復を待つ手もあるが、
+// 操作をこのメッセージだけで完結させるほうが単純。
 exportButton.addEventListener("click", () => {
-  vscodeApi.postMessage({ type: "exportVirtualDocument" });
+  vscodeApi.postMessage({ type: "exportVirtualDocument", criteria: collectCriteria() });
 });
 
 /**

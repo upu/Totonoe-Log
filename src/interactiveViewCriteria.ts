@@ -7,7 +7,29 @@ import {
   type LogEntry,
   type MergedEntry,
 } from "./normalize";
+import { normalizeFileVisibility } from "./interactiveViewFiles";
 import type { SerializedFilterCriteria } from "./webview/interactiveView/protocol";
+
+/**
+ * Webviewから届いたフォームの状態を、拡張機能本体が使える形へ整える。
+ * 現在のファイル数へ合わせ直す以外は、届いた内容をそのまま採用する
+ * （`normalizeFileVisibility` の必要性は issue #170 参照）。
+ *
+ * 絞り込みの変更（`filterChanged`）と書き出し（`exportVirtualDocument`、
+ * issue #217）の両方がこれを通る。書き出しが「最後に受け取った条件」ではなく
+ * 要求と一緒に届いた条件を使うのは、テキスト欄が300msデバウンスされるため
+ * ——入力直後に Export を押すと、直前の入力が反映されないまま書き出されて
+ * いた。マスク欄でこれが起きると、伏せたつもりの情報がそのまま共有される。
+ */
+export function resolveIncomingCriteria(
+  incoming: SerializedFilterCriteria,
+  fileCount: number
+): SerializedFilterCriteria {
+  return {
+    ...incoming,
+    visibleFiles: normalizeFileVisibility(incoming.visibleFiles, fileCount),
+  };
+}
 
 /**
  * 読み込み済みエントリのセベリティ一覧を返す。Interactive View は単一ファイル

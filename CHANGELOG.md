@@ -8,6 +8,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- `Totonoe Log: Show Interactive View`'s "Export as Virtual Document" now
+  applies whatever is in the form at the moment the button is pressed.
+  Text fields are debounced by 300 ms, so exporting right after typing used
+  to write out the previous state — most importantly, a mask key or pattern
+  entered just before exporting was not applied, leaving information the
+  user meant to hide in a document about to be shared (issue #217).
+
 ## [0.8.0] - 2026-07-28
 
 ### Added
