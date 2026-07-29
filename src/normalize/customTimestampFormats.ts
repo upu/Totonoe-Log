@@ -46,6 +46,18 @@ function getNamedGroups(source: string): string[] {
 }
 
 /**
+ * ECMAScript の Date として表現できない値（NaN・Infinity・TimeClip 範囲
+ * ±8.64e15 の外）を弾く。組み込みのエポック形式は桁数を10／13桁に固定して
+ * いるが、カスタム形式のパターンはユーザーが自由に書けるため範囲外の有限値も
+ * 捕捉しうる。ここで通すと認識済みタイムスタンプとして扱われ、整形時の
+ * `Date#toISOString()` が例外を投げてビュー全体が壊れる（#219）。
+ */
+function toValidEpochMs(value: number): number | undefined {
+  const timeValue = new Date(value).getTime();
+  return Number.isNaN(timeValue) ? undefined : timeValue;
+}
+
+/**
  * 検証済みのグループ名一覧から、この形式のパース方法を決めてマッチ結果を
  * エポックミリ秒へ変換する parse 関数を作る。
  */
@@ -55,18 +67,16 @@ function createParseFunction(groupNames: readonly string[]): TimestampFormat["pa
   return (match, context) => {
     const groups = match.groups ?? {};
     if (hasEpochMs && groups.epochMs) {
-      const epochMs = Number(groups.epochMs);
-      return Number.isFinite(epochMs) ? epochMs : undefined;
+      return toValidEpochMs(Number(groups.epochMs));
     }
     if (hasEpochSec && groups.epochSec) {
-      const epochSec = Number(groups.epochSec);
-      if (!Number.isFinite(epochSec)) {
+      // ms が数字列であることの検証と、小数ミリ秒の桁埋め・切り捨て規則は
+      // 組み込み形式（isoLikeGroupsToEpochMs）と揃える。
+      if (groups.ms !== undefined && !/^\d+$/.test(groups.ms)) {
         return undefined;
       }
-      // 小数ミリ秒の桁埋め・切り捨て規則は組み込み形式（isoLikeGroupsToEpochMs）
-      // と揃える。
       const ms = groups.ms ? Number(groups.ms.padEnd(3, "0").slice(0, 3)) : 0;
-      return epochSec * 1000 + ms;
+      return toValidEpochMs(Number(groups.epochSec) * 1000 + ms);
     }
     // カレンダー形式は組み込み形式と同じ規則でソースオフセット（#13）の
     // フォールバック対象になる（tzs / tzz グループを捕捉していれば書かれて

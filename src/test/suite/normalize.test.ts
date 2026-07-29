@@ -471,6 +471,59 @@ suite("normalize / compileCustomTimestampFormats", () => {
     assert.strictEqual(boundary.timestampMs, Date.UTC(2024, 0, 2, 9, 59, 59, 999));
   });
 
+  test("rejects epochMs values that cannot be represented as a Date", () => {
+    const { formats } = compileCustomTimestampFormats([
+      { name: "epoch-ms", pattern: "ts=(?<epochMs>\\d+)" },
+    ]);
+
+    for (const line of ["ts=99999999999999999999 boom", "ts=8640000000000001 boom"]) {
+      const [entry] = parseLog(line, { timestampFormats: formats });
+      assert.strictEqual(entry.matched, false, line);
+      assert.strictEqual(entry.timestampMs, undefined, line);
+    }
+
+    const [boundary] = parseLog("ts=8640000000000000 boom", { timestampFormats: formats });
+    assert.strictEqual(boundary.matched, true);
+    assert.strictEqual(boundary.timestampMs, 8640000000000000);
+  });
+
+  test("rejects epochSec values that cannot be represented as a Date", () => {
+    const { formats } = compileCustomTimestampFormats([
+      { name: "epoch-sec", pattern: "(?<epochSec>\\d+)s" },
+    ]);
+
+    const [entry] = parseLog("99999999999999999999s boom", { timestampFormats: formats });
+    assert.strictEqual(entry.matched, false);
+    assert.strictEqual(entry.timestampMs, undefined);
+  });
+
+  test("rejects an epochSec ms group that is not a digit sequence", () => {
+    const { formats } = compileCustomTimestampFormats([
+      { name: "epoch-sec", pattern: "(?<epochSec>\\d{10})#(?<ms>[^ ]+)" },
+    ]);
+
+    const [entry] = parseLog("1704164645#abc hello", { timestampFormats: formats });
+    assert.strictEqual(entry.matched, false);
+    assert.strictEqual(entry.timestampMs, undefined);
+
+    const [valid] = parseLog("1704164645#678 hello", { timestampFormats: formats });
+    assert.strictEqual(valid.timestampMs, Date.UTC(2024, 0, 2, 3, 4, 5, 678));
+  });
+
+  test("keeps lines with an invalid custom epoch renderable as unrecognized lines", () => {
+    const { formats } = compileCustomTimestampFormats([
+      { name: "epoch-ms", pattern: "ts=(?<epochMs>\\d+)" },
+    ]);
+
+    const entries = parseLog("ts=99999999999999999999 boom\nts=1704164645678 ok", {
+      timestampFormats: formats,
+    });
+
+    const output = formatNormalizedLog(entries);
+    assert.ok(output.includes("ts=99999999999999999999 boom"));
+    assert.ok(output.includes("2024-01-02T03:04:05.678Z"));
+  });
+
   test("uses a positional fallback name when name is omitted", () => {
     const { formats, errors } = compileCustomTimestampFormats([
       { pattern: "(?<epochMs>\\d{13})" },

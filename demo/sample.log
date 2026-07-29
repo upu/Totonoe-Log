@@ -17,4 +17,5 @@ Jan  2 03:04:12 host myapp[1204]: heartbeat ok
 2024-01-04T06:45:00.000Z INFO Nightly batch job started
 2024-01-04T07:10:00.000Z INFO Nightly batch job completed
 2024-01-05T21:59:59.000Z ERROR Disk full, cannot write logs
+ts=99999999999999999999 WARNING Out-of-range epoch, for custom pattern ts=(?<epochMs>\d+)
 2024-01-06T00:00:00.000Z INFO Shutting down gracefully
