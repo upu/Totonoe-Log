@@ -10,6 +10,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- `Totonoe Log: Show Interactive View` now shows the result of the filter
+  you asked for last. Pattern evaluation runs in a worker thread and can
+  take seconds, so a slow earlier condition could finish after a quick
+  later one and overwrite the newer view — and because the form state was
+  read at send time rather than at compute time, the panel could pair the
+  condition you see with a body computed from a different one. Both made
+  an out-of-date result look like a match (issue #218).
+
 - `Totonoe Log: Show Interactive View`'s "Export as Virtual Document" now
   applies whatever is in the form at the moment the button is pressed.
   Text fields are debounced by 300 ms, so exporting right after typing used
