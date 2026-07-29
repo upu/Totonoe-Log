@@ -116,13 +116,44 @@ suite("Totonoe Log filter prompts (shared)", () => {
     }
   });
 
-  test("keeps a date range with no boundary when both inputs are left empty", async () => {
+  test("omits the date range when both boundaries are left empty", async () => {
     const mock = installPromptMocks({ inputs: ["", ""] });
 
     try {
       const criteria = await promptFilterCriteriaForKinds(kinds("dateRange"), ENTRIES, 0);
 
-      assert.deepStrictEqual(criteria?.dateRange, { startMs: undefined, endMs: undefined });
+      assert.ok(criteria);
+      assert.strictEqual(criteria!.dateRange, undefined);
+    } finally {
+      mock.restore();
+    }
+  });
+
+  test("keeps a one-sided date range when only the start boundary is given", async () => {
+    const mock = installPromptMocks({ inputs: ["2024-01-02", ""] });
+
+    try {
+      const criteria = await promptFilterCriteriaForKinds(kinds("dateRange"), ENTRIES, 0);
+
+      assert.deepStrictEqual(criteria?.dateRange, {
+        startMs: Date.UTC(2024, 0, 2),
+        endMs: undefined,
+      });
+    } finally {
+      mock.restore();
+    }
+  });
+
+  test("keeps a one-sided date range when only the end boundary is given", async () => {
+    const mock = installPromptMocks({ inputs: ["", "2024-01-02"] });
+
+    try {
+      const criteria = await promptFilterCriteriaForKinds(kinds("dateRange"), ENTRIES, 0);
+
+      assert.deepStrictEqual(criteria?.dateRange, {
+        startMs: undefined,
+        endMs: Date.UTC(2024, 0, 2, 23, 59, 59, 999),
+      });
     } finally {
       mock.restore();
     }

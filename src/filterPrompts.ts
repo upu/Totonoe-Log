@@ -219,7 +219,14 @@ export async function promptFilterCriteriaForKinds(
       return undefined;
     }
 
-    dateRange = { startMs, endMs };
+    // 境界が1つも入力されていないなら、日付条件そのものを付けない（issue #231）。
+    // `filterEntriesByDateRange` は DateRange が指定されているだけでタイムスタンプ
+    // 未認識のエントリを除外するため、両端とも `undefined` の範囲を渡すと、
+    // 日付では何も絞り込めていないのに未認識行だけが黙って消える。
+    // Interactive View 側（`interactiveViewCriteria.ts`）の #220 と同じ方針。
+    if (startMs !== undefined || endMs !== undefined) {
+      dateRange = { startMs, endMs };
+    }
   }
 
   let ignorePattern: RegExp | undefined;

@@ -8,6 +8,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- `Totonoe Log: Show Normalized View Filtered` and `Totonoe Log: Merge
+  Selected Files (Filtered)` no longer hide entries whose timestamp could not
+  be recognized when you pick the date range condition but leave both
+  boundaries empty. An empty range still counted as a date condition, and
+  applying any date range drops entries with no recognized timestamp — so
+  lines disappeared even though no date filtering was actually happening.
+  Entering just one boundary still applies that side on its own, and a
+  boundary that cannot be interpreted still aborts the command
+  (issue #231).
+
 ## [0.8.1] - 2026-07-29
 
 ### Fixed
