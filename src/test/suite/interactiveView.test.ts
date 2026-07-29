@@ -74,12 +74,68 @@ suite("interactiveViewCriteria / toFilterCriteria (#166)", () => {
     assert.deepStrictEqual(errors, []);
   });
 
-  test("drops an unparseable date boundary and reports an error", () => {
+  test("ignores the date condition entirely when no boundary survived, and reports an error (#220)", () => {
+    // 以前は `{ startMs: undefined, endMs: undefined }` を返していた。
+    // `filterEntriesByDateRange` は DateRange が付いた時点でタイムスタンプ
+    // 未認識のエントリを常に除外するため、日付条件は実質効いていないのに
+    // 未認識行だけが黙って消えていた（issue #220）。
     const { criteria, errors } = toFilterCriteria(serializedCriteria({ dateRangeStart: "not-a-date" }), 0);
 
-    assert.deepStrictEqual(criteria.dateRange, { startMs: undefined, endMs: undefined });
+    assert.strictEqual(criteria.dateRange, undefined);
     assert.strictEqual(errors.length, 1);
     assert.match(errors[0], /開始日時を解釈できませんでした/);
+  });
+
+  test("ignores the date condition when both boundaries are unparseable, reporting both (#220)", () => {
+    const { criteria, errors } = toFilterCriteria(
+      serializedCriteria({ dateRangeStart: "not-a-date", dateRangeEnd: "nope" }),
+      0
+    );
+
+    assert.strictEqual(criteria.dateRange, undefined);
+    assert.strictEqual(errors.length, 2);
+  });
+
+  test("keeps the boundary that did parse when only the other one is invalid (#220)", () => {
+    // 片側が有効なら、その片側だけの範囲として適用する。入力済みの有効な境界を
+    // 捨てないため（issue #220 の案1）。この場合はタイムスタンプ未認識行が
+    // 除外されるが、ユーザーが実際に日付で絞り込んでいる以上それが筋。
+    const { criteria, errors } = toFilterCriteria(
+      serializedCriteria({ dateRangeStart: "not-a-date", dateRangeEnd: "2024-01-03" }),
+      0
+    );
+
+    assert.deepStrictEqual(criteria.dateRange, {
+      startMs: undefined,
+      endMs: Date.UTC(2024, 0, 3, 23, 59, 59, 999),
+    });
+    assert.strictEqual(errors.length, 1);
+    assert.match(errors[0], /開始日時を解釈できませんでした/);
+  });
+
+  test("keeps a valid start when the end is the invalid one (#220)", () => {
+    const { criteria, errors } = toFilterCriteria(
+      serializedCriteria({ dateRangeStart: "2024-01-02", dateRangeEnd: "nope" }),
+      0
+    );
+
+    assert.deepStrictEqual(criteria.dateRange, {
+      startMs: Date.UTC(2024, 0, 2, 0, 0, 0, 0),
+      endMs: undefined,
+    });
+    assert.strictEqual(errors.length, 1);
+    assert.match(errors[0], /終了日時を解釈できませんでした/);
+  });
+
+  test("applies a one-sided range when only one boundary was entered", () => {
+    // 既存挙動。片側だけ入力した場合はそのまま片側の範囲になる。
+    const { criteria, errors } = toFilterCriteria(serializedCriteria({ dateRangeStart: "2024-01-02" }), 0);
+
+    assert.deepStrictEqual(criteria.dateRange, {
+      startMs: Date.UTC(2024, 0, 2, 0, 0, 0, 0),
+      endMs: undefined,
+    });
+    assert.deepStrictEqual(errors, []);
   });
 
   test("compiles a valid ignore pattern case-insensitively", () => {
