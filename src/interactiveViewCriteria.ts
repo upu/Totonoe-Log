@@ -169,6 +169,14 @@ function parseDateRange(
     }
   }
 
+  // 解釈できた境界が1つも無いなら、日付条件そのものを付けない（issue #220）。
+  // `filterEntriesByDateRange` は DateRange が指定されているだけでタイムスタンプ
+  // 未認識のエントリを除外するため、両端とも `undefined` の範囲を返すと、
+  // 日付では何も絞り込めていないのに未認識行だけが黙って消える。
+  if (startMs === undefined && endMs === undefined) {
+    return undefined;
+  }
+
   return { startMs, endMs };
 }
 

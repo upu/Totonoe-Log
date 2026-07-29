@@ -10,6 +10,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- `Totonoe Log: Show Interactive View` no longer hides entries whose
+  timestamp could not be recognized when a date/time boundary cannot be
+  interpreted. Entering something like `not-a-date` warned but still left a
+  date condition in place, and applying any date range drops entries with no
+  recognized timestamp — so lines disappeared even though no date filtering
+  was actually happening. A boundary that does parse is still applied on its
+  own (issue #220).
+
 - `Totonoe Log: Show Interactive View` now shows the result of the filter
   you asked for last. Pattern evaluation runs in a worker thread and can
   take seconds, so a slow earlier condition could finish after a quick
