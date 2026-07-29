@@ -32,6 +32,7 @@ import {
   type LoadedLogFile,
 } from "./logFileReading";
 import { classifyInteractiveViewConfigChange } from "./interactiveViewConfigWatch";
+import { RefreshRevisionGate } from "./interactiveViewRefresh";
 import {
   normalizeFileVisibility,
   removeFileVisibilityAt,
@@ -191,6 +192,12 @@ export class InteractiveViewPanelController implements vscode.Disposable {
   /** `loadedFiles.length > 1` の間だけ使う、マージ済みエントリのキャッシュ。 */
   private mergedEntries: readonly MergedEntry[] = [];
   private criteria: SerializedFilterCriteria = createDefaultSerializedCriteria([], 0);
+  /**
+   * 再描画の世代管理（issue #218）。ファイルの差し替え・絞り込みの変更・設定変更は
+   * いずれも最後に {@link postState} を呼ぶため、そこで世代を進めるだけで、
+   * それらの経路すべてで古い結果の公開を止められる。
+   */
+  private readonly refreshGate = new RefreshRevisionGate();
   /** 「仮想ドキュメントとして書き出す」操作（issue #175）で発行するマージ用URIの連番。 */
   private exportMergedCounter = 0;
 
@@ -521,8 +528,14 @@ export class InteractiveViewPanelController implements vscode.Disposable {
       return;
     }
 
+    const revision = this.refreshGate.begin();
+    // 以降はこのスナップショットだけを見る。`this.criteria` は差し替えで更新される
+    // （書き換えではない）ため参照を保持すれば足りる。送信時に読み直すと、
+    // 計算中に届いた新しい条件と、この計算の結果とが1つのメッセージに混ざる。
+    const criteriaSnapshot = this.criteria;
+
     const displayTimezone = readDisplayTimezone();
-    const { criteria, errors } = toFilterCriteria(this.criteria, displayTimezone);
+    const { criteria, errors } = toFilterCriteria(criteriaSnapshot, displayTimezone);
     const maskPatterns = this.compileEnabledMaskPatterns();
     const warnings = [...errors, ...maskPatterns.errors];
     // マージ表示（2ファイル以上）は折りたたみ非対応（issue #172、#158の未解決課題を踏まえた判断）。
@@ -531,19 +544,26 @@ export class InteractiveViewPanelController implements vscode.Disposable {
       gapThresholdMs: readGapThresholdMs(),
       displayTimezone,
       collapseThreshold:
-        collapsibleSupported && this.criteria.collapseEnabled ? readCollapseThreshold() : undefined,
-      mask: toDisplayMaskOptions(this.criteria),
+        collapsibleSupported && criteriaSnapshot.collapseEnabled
+          ? readCollapseThreshold()
+          : undefined,
+      mask: toDisplayMaskOptions(criteriaSnapshot),
       maskPatterns: maskPatterns.patterns,
-      visibleFileIndices: toVisibleFileIndices(this.criteria.visibleFiles),
+      visibleFileIndices: toVisibleFileIndices(criteriaSnapshot.visibleFiles),
     };
 
     const payload = await this.computePayload(criteria, formatOptions);
+    if (!this.refreshGate.isCurrent(revision)) {
+      return;
+    }
 
     if (payload.ok) {
       await this.sendState(
         payload,
         [...warnings, ...maskPatternFailureWarnings(payload.maskPatternFailure, "表示しています")],
-        collapsibleSupported
+        collapsibleSupported,
+        criteriaSnapshot,
+        revision
       );
       return;
     }
@@ -557,6 +577,10 @@ export class InteractiveViewPanelController implements vscode.Disposable {
       ignorePattern: undefined,
     };
     const fallbackPayload = await this.computePayload(fallbackCriteria, formatOptions);
+    if (!this.refreshGate.isCurrent(revision)) {
+      return;
+    }
+
     if (fallbackPayload.ok) {
       const reason =
         payload.reason === "timeout"
@@ -569,7 +593,9 @@ export class InteractiveViewPanelController implements vscode.Disposable {
           reason,
           ...maskPatternFailureWarnings(fallbackPayload.maskPatternFailure, "表示しています"),
         ],
-        collapsibleSupported
+        collapsibleSupported,
+        criteriaSnapshot,
+        revision
       );
     }
   }
@@ -601,17 +627,24 @@ export class InteractiveViewPanelController implements vscode.Disposable {
   }
 
   /**
-   * `criteria` はユーザーがWebview上のフォームへ入力した生の文字列
-   * （`this.criteria`）をそのままエコーバックする。無視パターンが不正で
-   * 適用されなかった場合も、ユーザーが入力欄を修正できるよう入力内容を
-   * 消さずに `warning` だけで通知する。
+   * `criteria` はユーザーがWebview上のフォームへ入力した生の文字列を
+   * そのままエコーバックする。無視パターンが不正で適用されなかった場合も、
+   * ユーザーが入力欄を修正できるよう入力内容を消さずに `warning` だけで通知する。
+   *
+   * 送信時点の `this.criteria` ではなく、この結果を計算した条件そのもの
+   * （`criteria`）を返す（issue #218）。計算中に新しい条件が届いていると、
+   * フォーム上の条件と本文が食い違ったまま1つのメッセージになり、
+   * 「条件に一致しているように見えて実際は古い結果」という誤認につながる。
    */
   private async sendState(
     payload: Extract<InteractivePayloadResult, { ok: true }>,
     errors: readonly string[],
-    collapsibleSupported: boolean
+    collapsibleSupported: boolean,
+    criteria: SerializedFilterCriteria,
+    revision: number
   ): Promise<void> {
-    if (!this.panel) {
+    // パネルが閉じられた後、および後から始まった再描画に追い越された後は送らない。
+    if (!this.panel || !this.refreshGate.isCurrent(revision)) {
       return;
     }
 
@@ -625,7 +658,7 @@ export class InteractiveViewPanelController implements vscode.Disposable {
 
     const message: ExtensionToWebviewMessage = {
       type: "state",
-      criteria: this.criteria,
+      criteria,
       distinctSeverities: payload.distinctSeverities,
       text: limited.text,
       totalLineCount: payload.totalLineCount,
