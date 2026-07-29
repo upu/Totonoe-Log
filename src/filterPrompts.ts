@@ -5,6 +5,7 @@ import {
   UNRECOGNIZED_SEVERITY_KEY,
   type DateBoundaryKind,
   type DisplayTimezone,
+  type FilterCriteria,
   type LogEntry,
 } from "./normalize";
 
@@ -173,6 +174,64 @@ export async function promptFilterKinds(): Promise<Set<FilterKind> | undefined> 
   }
 
   return new Set(selectedItems.map((item) => item.filterKind));
+}
+
+/**
+ * {@link promptFilterKinds} で選ばれた条件について、対応するプロンプトを
+ * 決まった順（セベリティ → 日付範囲 → 無視パターン）で尋ね、
+ * `filterEntriesByCriteria` にそのまま渡せる {@link FilterCriteria} を組み立てる。
+ * どれか1つでもキャンセル・不正入力で中断した場合は、呼び出し側にコマンド全体を
+ * 中断させるため `undefined` を返す（何も選ばれていない場合はキャンセルではなく、
+ * どの条件も持たない criteria を返す）。
+ *
+ * 正規化ビュー（`normalizedView.ts`）とマージビュー（`mergedView.ts`）が同じ
+ * 組み合わせ・同じ中断判定を各コマンドに複製していたため、条件の追加や中断方針の
+ * 変更で片方だけ直すリスクがあった。それを一箇所へ寄せる（issue #221）。
+ *
+ * 条件選択（{@link promptFilterKinds}）自体を含めず選択済みの集合を受け取るのは、
+ * 呼び出し側でピッカー確定後に初めてログをパースする現在の順序（正規化ビュー）を
+ * 変えないため。エントリを引数で受け取る形にすると、パースとそれに伴う認識率警告
+ * （issue #101）がピッカーより前に出てしまう。
+ */
+export async function promptFilterCriteriaForKinds(
+  selectedKinds: ReadonlySet<FilterKind>,
+  entries: readonly LogEntry[],
+  displayTimezone: DisplayTimezone
+): Promise<FilterCriteria | undefined> {
+  let severities: Set<string> | undefined;
+  if (selectedKinds.has("severity")) {
+    severities = await promptSeveritySelection(entries);
+    if (severities === undefined) {
+      return undefined;
+    }
+  }
+
+  let dateRange: FilterCriteria["dateRange"];
+  if (selectedKinds.has("dateRange")) {
+    const startMs = await promptDateBoundary("開始日時", "start", displayTimezone);
+    // null はキャンセル、または不正な入力による中断を表す。
+    if (startMs === null) {
+      return undefined;
+    }
+
+    const endMs = await promptDateBoundary("終了日時", "end", displayTimezone);
+    if (endMs === null) {
+      return undefined;
+    }
+
+    dateRange = { startMs, endMs };
+  }
+
+  let ignorePattern: RegExp | undefined;
+  if (selectedKinds.has("ignorePattern")) {
+    ignorePattern = await promptIgnorePattern();
+    // ユーザーがキャンセルした場合、または不正な入力による中断の場合は何もしない。
+    if (ignorePattern === undefined) {
+      return undefined;
+    }
+  }
+
+  return { severities, dateRange, ignorePattern };
 }
 
 /**
