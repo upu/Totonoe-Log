@@ -121,7 +121,17 @@ export type WebviewToExtensionMessage =
   | { readonly type: "addFiles" }
   /** 読み込み済みファイル1件を取り消す要求（issue #170）。`fileIndex` は `loadedFileNames` の位置。 */
   | { readonly type: "removeFile"; readonly fileIndex: number }
-  | { readonly type: "exportVirtualDocument" }
+  /**
+   * 現在の表示状態を仮想ドキュメントへ書き出す要求（issue #175）。押した時点の
+   * フォーム内容を `criteria` に同送する（issue #217）——テキスト欄の
+   * `filterChanged` は300msデバウンスされるため、入力直後に押された場合、
+   * 拡張機能本体が最後に受け取っている条件では直前の入力が欠けている。
+   * 特にマスク欄でそれが起きると、伏せたつもりの情報が書き出しに残る。
+   */
+  | {
+      readonly type: "exportVirtualDocument";
+      readonly criteria: SerializedFilterCriteria;
+    }
   /** 行のダブルクリックで、対応する元ログファイルの行を開く要求（issue #179、#191）。 */
   | { readonly type: "revealSourceLine"; readonly lineSource: LineSource };
 

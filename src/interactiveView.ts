@@ -45,8 +45,10 @@ import { readConfiguredTimestampFormats } from "./timestampFormatSettings";
 import { readMaskOptions } from "./copyMasked";
 import {
   addNewlyAppearedSeverities,
+  buildIgnoredInputWarning,
   compileMaskPattern,
   getLoadedDistinctSeverities,
+  resolveIncomingCriteria,
   toFilterCriteria,
   type CompileMaskPatternResult,
 } from "./interactiveViewCriteria";
@@ -322,19 +324,14 @@ export class InteractiveViewPanelController implements vscode.Disposable {
       return;
     }
     if (message.type === "exportVirtualDocument") {
-      await this.exportVirtualDocument();
+      await this.exportVirtualDocument(message.criteria);
       return;
     }
     if (message.type === "revealSourceLine") {
       await this.revealClickedSourceLine(message.lineSource);
       return;
     }
-    // ファイルの追加・取り消しと絞り込みのメッセージが前後しても表示状態が
-    // ずれないよう、ファイル選択だけは現在のファイル数に合わせ直して受け取る。
-    this.criteria = {
-      ...message.criteria,
-      visibleFiles: normalizeFileVisibility(message.criteria.visibleFiles, this.loadedFiles.length),
-    };
+    this.criteria = resolveIncomingCriteria(message.criteria, this.loadedFiles.length);
     await this.postState();
   }
 
@@ -654,15 +651,36 @@ export class InteractiveViewPanelController implements vscode.Disposable {
    * 新規タブとして開く（issue #175）。検索・コピー・`Go to Source Line`・
    * `Compare Logs` は、書き出し後は仮想ドキュメント側の既存導線をそのまま
    * 使う想定で、Webview側には作り込まない。
+   *
+   * `requestedCriteria` は Export を押した時点のフォーム内容（issue #217）。
+   * 最後に受け取った条件ではなくこちらを採用したうえで、そのまま
+   * `this.criteria` にも反映する——書き出し内容と、この後パネルが描き直された
+   * ときの表示内容を食い違わせないため。デバウンス待ちのメッセージが後から
+   * 届いても表示は巻き戻らない（Webview側は発火時点のフォームを読み直すので、
+   * 遅れて届く内容がこのスナップショットより古くなることはない）。ここで
+   * 再描画まではしない——直後にそのメッセージが届いて描き直されるため、
+   * 重いパターンの評価を二度走らせないようにする。
    */
-  private async exportVirtualDocument(): Promise<void> {
+  private async exportVirtualDocument(
+    requestedCriteria: SerializedFilterCriteria
+  ): Promise<void> {
     const [firstFile] = this.loadedFiles;
     if (!firstFile) {
       return;
     }
 
+    this.criteria = resolveIncomingCriteria(requestedCriteria, this.loadedFiles.length);
+
     const displayTimezone = readDisplayTimezone();
-    const { criteria } = toFilterCriteria(this.criteria, displayTimezone);
+    const { criteria, errors } = toFilterCriteria(this.criteria, displayTimezone);
+    const maskPatterns = this.compileEnabledMaskPatterns();
+    // 押した時点の入力をそのまま使う以上、その入力がまだ描画されておらず
+    // パネル内の警告行を一度も見ていないことがある。表示側と同じく該当条件だけを
+    // 落として書き出すが、落としたことは通知で伝える（issue #217）。
+    const ignoredInputWarning = buildIgnoredInputWarning([...errors, ...maskPatterns.errors]);
+    if (ignoredInputWarning !== undefined) {
+      vscode.window.showWarningMessage(`Totonoe Log: ${ignoredInputWarning}`);
+    }
     // マージ表示（2ファイル以上）は折りたたみ非対応（issue #172と同じ判断）。
     const collapsibleSupported = this.isSingleFile();
     const options: BuildInteractiveExportTextOptions = {
@@ -672,7 +690,7 @@ export class InteractiveViewPanelController implements vscode.Disposable {
         collapsibleSupported && this.criteria.collapseEnabled ? readCollapseThreshold() : undefined,
       // 書き出しは表示の状態を引き継ぐ（issue #194、絞り込み・折りたたみと同じ扱い）。
       mask: toDisplayMaskOptions(this.criteria),
-      maskPatterns: this.compileEnabledMaskPatterns().patterns,
+      maskPatterns: maskPatterns.patterns,
       visibleFileIndices: toVisibleFileIndices(this.criteria.visibleFiles),
     };
 

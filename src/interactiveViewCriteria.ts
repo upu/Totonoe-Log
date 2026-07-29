@@ -7,7 +7,29 @@ import {
   type LogEntry,
   type MergedEntry,
 } from "./normalize";
+import { normalizeFileVisibility } from "./interactiveViewFiles";
 import type { SerializedFilterCriteria } from "./webview/interactiveView/protocol";
+
+/**
+ * Webviewから届いたフォームの状態を、拡張機能本体が使える形へ整える。
+ * 現在のファイル数へ合わせ直す以外は、届いた内容をそのまま採用する
+ * （`normalizeFileVisibility` の必要性は issue #170 参照）。
+ *
+ * 絞り込みの変更（`filterChanged`）と書き出し（`exportVirtualDocument`、
+ * issue #217）の両方がこれを通る。書き出しが「最後に受け取った条件」ではなく
+ * 要求と一緒に届いた条件を使うのは、テキスト欄が300msデバウンスされるため
+ * ——入力直後に Export を押すと、直前の入力が反映されないまま書き出されて
+ * いた。マスク欄でこれが起きると、伏せたつもりの情報がそのまま共有される。
+ */
+export function resolveIncomingCriteria(
+  incoming: SerializedFilterCriteria,
+  fileCount: number
+): SerializedFilterCriteria {
+  return {
+    ...incoming,
+    visibleFiles: normalizeFileVisibility(incoming.visibleFiles, fileCount),
+  };
+}
 
 /**
  * 読み込み済みエントリのセベリティ一覧を返す。Interactive View は単一ファイル
@@ -43,6 +65,23 @@ export function addNewlyAppearedSeverities(
     (severity) => !known.has(severity) && !alreadyChecked.has(severity)
   );
   return [...checked, ...newlyAppeared];
+}
+
+/**
+ * 解釈できなかった入力（{@link toFilterCriteria} や {@link compileMaskPattern}
+ * が積んだ説明）を、書き出し時の通知1件にまとめる（issue #217）。該当が無ければ
+ * `undefined`。
+ *
+ * 表示側はパネル内の警告行に出せば済むが、書き出しは押した時点の入力を
+ * そのまま使うため、その入力がまだ一度も描画されておらず、ユーザーが警告を
+ * 見ていないことがある。不正なマスクパターンが黙って外れたまま、書き出しを
+ * そのまま共有してしまうのを防ぐ。
+ */
+export function buildIgnoredInputWarning(errors: readonly string[]): string | undefined {
+  if (errors.length === 0) {
+    return undefined;
+  }
+  return `${errors.join(" / ")}。該当の条件を適用せずに書き出しました。`;
 }
 
 /** {@link toFilterCriteria} の結果。 */

@@ -2,8 +2,10 @@ import * as assert from "node:assert";
 import * as vscode from "vscode";
 import {
   addNewlyAppearedSeverities,
+  buildIgnoredInputWarning,
   compileMaskPattern,
   getLoadedDistinctSeverities,
+  resolveIncomingCriteria,
   toFilterCriteria,
 } from "../../interactiveViewCriteria";
 import { mergeLogFiles, parseLog } from "../../normalize";
@@ -149,6 +151,99 @@ suite("interactiveViewCriteria / compileMaskPattern (#195)", () => {
     assert.strictEqual(errors.length, 1);
     // 入力欄が3つ（一致・無視・マスク）になるため、どの欄が不正なのかが分かること。
     assert.match(errors[0], /マスクパターン/);
+  });
+});
+
+suite("interactiveViewCriteria / resolveIncomingCriteria (#217)", () => {
+  test("takes the mask fields from the request itself, so a value typed just before Export survives", () => {
+    // #217 の本体。テキスト欄は300msデバウンスされるため、入力直後に Export を
+    // 押すと、拡張機能側が最後に受け取っていた条件（マスク欄が空）で書き出して
+    // しまい、伏せたつもりの情報が残っていた。書き出し要求が運んできた条件を
+    // そのまま使うことを固定する。
+    const justTyped = serializedCriteria({
+      mask: {
+        enabled: true,
+        maskTimestamp: true,
+        maskHost: true,
+        maskProcessId: false,
+        keys: "token",
+        pattern: "secret-\\w+",
+      },
+    });
+
+    const resolved = resolveIncomingCriteria(justTyped, 1);
+
+    assert.strictEqual(resolved.mask.keys, "token");
+    assert.strictEqual(resolved.mask.pattern, "secret-\\w+");
+    assert.strictEqual(resolved.mask.enabled, true);
+  });
+
+  test("takes the filter and display fields from the request too", () => {
+    const incoming = serializedCriteria({
+      severities: ["ERROR"],
+      dateRangeStart: "2024-01-02",
+      dateRangeEnd: "2024-01-03",
+      matchPattern: "timeout",
+      ignorePattern: "heartbeat",
+      collapseEnabled: true,
+    });
+
+    const resolved = resolveIncomingCriteria(incoming, 1);
+
+    assert.deepStrictEqual(resolved.severities, ["ERROR"]);
+    assert.strictEqual(resolved.dateRangeStart, "2024-01-02");
+    assert.strictEqual(resolved.dateRangeEnd, "2024-01-03");
+    assert.strictEqual(resolved.matchPattern, "timeout");
+    assert.strictEqual(resolved.ignorePattern, "heartbeat");
+    assert.strictEqual(resolved.collapseEnabled, true);
+  });
+
+  test("fits visibleFiles to the current file count, as the filter path does", () => {
+    // 絞り込みメッセージと同じくファイル数のずれを吸収する（issue #170）。
+    // 書き出しだけ別扱いにすると、ファイル追加直後の書き出しで表示ON/OFFが
+    // ずれる。
+    const resolved = resolveIncomingCriteria(serializedCriteria({ visibleFiles: [false] }), 3);
+
+    assert.deepStrictEqual(resolved.visibleFiles, [false, true, true]);
+  });
+
+  test("drops visibility entries for files that are already gone", () => {
+    const resolved = resolveIncomingCriteria(
+      serializedCriteria({ visibleFiles: [true, false, true] }),
+      1
+    );
+
+    assert.deepStrictEqual(resolved.visibleFiles, [true]);
+  });
+});
+
+suite("interactiveViewCriteria / buildIgnoredInputWarning (#217)", () => {
+  test("stays silent when every input was understood", () => {
+    assert.strictEqual(buildIgnoredInputWarning([]), undefined);
+  });
+
+  test("says the condition was not applied, so a silently dropped mask is noticed", () => {
+    // 書き出しは押した時点の入力をそのまま使うため、その入力がまだ一度も
+    // 描画されておらず、パネル内の警告行を見ていないことがある。不正なマスク
+    // パターンが黙って外れたまま共有されるのを防ぐ。
+    const warning = buildIgnoredInputWarning([
+      'マスクパターンを正規表現として解釈できませんでした: "(unterminated"',
+    ]);
+
+    assert.ok(warning !== undefined);
+    assert.match(warning, /マスクパターン/);
+    assert.match(warning, /適用せずに書き出しました/);
+  });
+
+  test("joins several ignored inputs into one warning", () => {
+    const warning = buildIgnoredInputWarning([
+      '開始日時を解釈できませんでした: "not-a-date"',
+      'マスクパターンを正規表現として解釈できませんでした: "(unterminated"',
+    ]);
+
+    assert.ok(warning !== undefined);
+    assert.match(warning, /開始日時/);
+    assert.match(warning, /マスクパターン/);
   });
 });
 
