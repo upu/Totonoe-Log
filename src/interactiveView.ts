@@ -1069,13 +1069,15 @@ export class InteractiveViewPanelController implements vscode.Disposable {
          OR、欄同士は AND。行の並びは main.ts が状態から描く。 -->
     <div class="pattern-field">
       <span class="pattern-field-label" title="ここに挙げたどれかに一致する行だけを表示します（複数指定は OR）">一致パターン</span>
-      <div id="match-patterns" class="pattern-list"></div>
-      <button id="add-match-pattern" type="button" class="add-pattern">+ 追加</button>
+      <!-- 行ごとの入力欄は動的に増減するため <label> で囲めない。欄の名前は
+           グループとして持たせ、行の中の各操作には aria-label を付ける。 -->
+      <div id="match-patterns" class="pattern-list" role="group" aria-label="一致パターン"></div>
+      <button id="add-match-pattern" type="button" class="add-pattern" aria-label="一致パターンを追加する">+ 追加</button>
     </div>
     <div class="pattern-field">
       <span class="pattern-field-label" title="ここに挙げたどれかに一致する行を隠します（複数指定は OR）">無視パターン</span>
-      <div id="ignore-patterns" class="pattern-list"></div>
-      <button id="add-ignore-pattern" type="button" class="add-pattern">+ 追加</button>
+      <div id="ignore-patterns" class="pattern-list" role="group" aria-label="無視パターン"></div>
+      <button id="add-ignore-pattern" type="button" class="add-pattern" aria-label="無視パターンを追加する">+ 追加</button>
     </div>
     <label><input type="checkbox" id="collapse-toggle" checked>繰り返しを折りたたむ</label>
   </div>

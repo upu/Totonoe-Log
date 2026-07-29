@@ -87,12 +87,14 @@ function createPatternRow(patternSource: string, enabled: boolean): HTMLElement 
   toggle.type = "checkbox";
   toggle.checked = enabled;
   toggle.title = "この行を一時的に外す（入力は残ります）";
+  toggle.setAttribute("aria-label", "このパターンを有効にする");
   toggle.addEventListener("change", postFilterChanged);
 
   const input = document.createElement("input");
   input.type = "text";
   input.value = patternSource;
   input.placeholder = "正規表現";
+  input.setAttribute("aria-label", "パターン（正規表現）");
   input.addEventListener("input", postFilterChangedDebounced);
 
   const removeButton = document.createElement("button");
@@ -102,10 +104,11 @@ function createPatternRow(patternSource: string, enabled: boolean): HTMLElement 
   removeButton.title = "この行を削除する";
   removeButton.setAttribute("aria-label", "このパターンを削除する");
   removeButton.addEventListener("click", () => {
+    // 親は取り出してから外す（`remove()` の後は `parentElement` が null になる）。
+    const list = row.parentElement;
     row.remove();
     // 最後の1行を消しても空の行を1つ残す。読み込み済みファイル（issue #170）と
     // 違って0行でも「+ 追加」で戻せるが、欄そのものが消えたように見えるため。
-    const list = row.parentElement;
     if (list instanceof HTMLDivElement && list.childElementCount === 0) {
       list.appendChild(createPatternRow("", true));
     }
