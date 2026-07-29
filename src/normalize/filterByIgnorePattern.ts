@@ -34,25 +34,34 @@ export interface FilterByIgnorePatternOptions {
  * （`RegExp#test` を複製したインスタンスで呼ぶだけ）と同一で、
  * ワーカーが呼び出し元のモジュールを `require` できない都合上、
  * 内容を文字列として複製している（数行のため保守コストは小さい）。
+ *
+ * 複数パターンは `{ source, flags }` の配列として受け取り、ここで `some()`
+ * 判定する（issue #206）。交替正規表現へ連結しないのは、どのパターンが不正
+ * なのかの帰属が失われ、破局的バックトラッキングのリスクも合成で増えるため。
+ * ワーカーの起動は1回のままなので、パターンが増えても追加コストはほぼ無い。
  */
 const WORKER_SOURCE = `
 const { parentPort, workerData } = require("node:worker_threads");
-const { source, flags, texts } = workerData;
-const matcher = new RegExp(source, flags);
-const excluded = texts.map((text) => {
-  matcher.lastIndex = 0;
-  return matcher.test(text);
-});
+const { patterns, texts } = workerData;
+const matchers = patterns.map(({ source, flags }) => new RegExp(source, flags));
+const excluded = texts.map((text) =>
+  matchers.some((matcher) => {
+    matcher.lastIndex = 0;
+    return matcher.test(text);
+  })
+);
 parentPort.postMessage(excluded);
 `;
 
 /**
- * 指定した正規表現にマッチするエントリを除外する。
+ * 指定した正規表現の**どれか**にマッチするエントリを除外する（issue #206）。
  * 判定対象は `entry.raw`（エントリを構成する全物理行の元テキスト）とし、
  * スタックトレース等の複数行にまたがるエントリでも、いずれかの行が
  * マッチすればエントリごと除外できるようにする。
  *
- * `pattern` が `g` / `y` フラグ付きの場合、`RegExp#test` はマッチのたびに
+ * `patterns` が空の場合は「無視パターンの条件なし」として全件そのまま返す。
+ *
+ * パターンが `g` / `y` フラグ付きの場合、`RegExp#test` はマッチのたびに
  * `lastIndex` を進めてしまい、エントリをまたいだ呼び出し順で判定が
  * 不安定になる。呼び出し側から渡された `RegExp` インスタンス自体を
  * 書き換える副作用を避けつつ安定させるため、ワーカー側で毎回
@@ -73,11 +82,14 @@ parentPort.postMessage(excluded);
  */
 export function filterEntriesByIgnorePattern(
   entries: readonly LogEntry[],
-  pattern: RegExp,
+  patterns: readonly RegExp[],
   options: FilterByIgnorePatternOptions = {}
 ): Promise<FilterByIgnorePatternResult> {
   if (entries.length === 0) {
     return Promise.resolve({ ok: true, entries: [] });
+  }
+  if (patterns.length === 0) {
+    return Promise.resolve({ ok: true, entries: [...entries] });
   }
 
   const timeoutMs = options.timeoutMs ?? DEFAULT_TIMEOUT_MS;
@@ -86,7 +98,10 @@ export function filterEntriesByIgnorePattern(
   return new Promise((resolve) => {
     const worker = new Worker(WORKER_SOURCE, {
       eval: true,
-      workerData: { source: pattern.source, flags: pattern.flags, texts },
+      workerData: {
+        patterns: patterns.map((pattern) => ({ source: pattern.source, flags: pattern.flags })),
+        texts,
+      },
     });
 
     let settled = false;

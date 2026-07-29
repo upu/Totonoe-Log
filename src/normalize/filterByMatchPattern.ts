@@ -27,23 +27,30 @@ export interface FilterByMatchPatternOptions {
 /**
  * ワーカースレッド側で実行するマッチング処理本体。
  * `filterByIgnorePattern` と同じ理由で、素の JS の文字列として複製している
- * （ワーカーが呼び出し元のモジュールを `require` できないため）。
+ * （ワーカーが呼び出し元のモジュールを `require` できないため）。複数パターンを
+ * 配列で受け取って `some()` で判定する点も同じ（issue #206）。
  */
 const WORKER_SOURCE = `
 const { parentPort, workerData } = require("node:worker_threads");
-const { source, flags, texts } = workerData;
-const matcher = new RegExp(source, flags);
-const matched = texts.map((text) => {
-  matcher.lastIndex = 0;
-  return matcher.test(text);
-});
+const { patterns, texts } = workerData;
+const matchers = patterns.map(({ source, flags }) => new RegExp(source, flags));
+const matched = texts.map((text) =>
+  matchers.some((matcher) => {
+    matcher.lastIndex = 0;
+    return matcher.test(text);
+  })
+);
 parentPort.postMessage(matched);
 `;
 
 /**
- * 指定した正規表現にマッチするエントリ**だけ**を残す（issue #182）。
+ * 指定した正規表現の**どれか**にマッチするエントリだけを残す（issue #182、#206）。
  * 「一致行のみ表示する」フィルタ型の検索の中核で、
  * {@link filterEntriesByIgnorePattern} のちょうど逆になる。
+ *
+ * `patterns` が空の場合は「一致パターンの条件なし」として全件そのまま返す
+ * （「どれにも一致しない」と解釈して0件にすると、パターンを1件も入力していない
+ * 初期状態で全行が消えてしまう）。
  *
  * 判定対象は `entry.raw` ではなく `entry.message`（タイムスタンプ・セベリティを
  * 除いた本文）とし、無視パターンとはあえて非対称にしている。タイムスタンプと
@@ -59,11 +66,14 @@ parentPort.postMessage(matched);
  */
 export function filterEntriesByMatchPattern(
   entries: readonly LogEntry[],
-  pattern: RegExp,
+  patterns: readonly RegExp[],
   options: FilterByMatchPatternOptions = {}
 ): Promise<FilterByMatchPatternResult> {
   if (entries.length === 0) {
     return Promise.resolve({ ok: true, entries: [] });
+  }
+  if (patterns.length === 0) {
+    return Promise.resolve({ ok: true, entries: [...entries] });
   }
 
   const timeoutMs = options.timeoutMs ?? DEFAULT_TIMEOUT_MS;
@@ -72,7 +82,10 @@ export function filterEntriesByMatchPattern(
   return new Promise((resolve) => {
     const worker = new Worker(WORKER_SOURCE, {
       eval: true,
-      workerData: { source: pattern.source, flags: pattern.flags, texts },
+      workerData: {
+        patterns: patterns.map((pattern) => ({ source: pattern.source, flags: pattern.flags })),
+        texts,
+      },
     });
 
     let settled = false;

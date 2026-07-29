@@ -1,6 +1,7 @@
 import type {
   ExtensionToWebviewMessage,
   SerializedFilterCriteria,
+  SerializedFilterPattern,
   WebviewToExtensionMessage,
 } from "./protocol";
 
@@ -36,8 +37,10 @@ const loadedFilesElement = document.getElementById("loaded-files") as HTMLDivEle
 const severitiesContainer = document.getElementById("severities") as HTMLDivElement;
 const dateStartInput = document.getElementById("date-start") as HTMLInputElement;
 const dateEndInput = document.getElementById("date-end") as HTMLInputElement;
-const matchPatternInput = document.getElementById("match-pattern") as HTMLInputElement;
-const ignorePatternInput = document.getElementById("ignore-pattern") as HTMLInputElement;
+const matchPatternList = document.getElementById("match-patterns") as HTMLDivElement;
+const ignorePatternList = document.getElementById("ignore-patterns") as HTMLDivElement;
+const addMatchPatternButton = document.getElementById("add-match-pattern") as HTMLButtonElement;
+const addIgnorePatternButton = document.getElementById("add-ignore-pattern") as HTMLButtonElement;
 const collapseToggle = document.getElementById("collapse-toggle") as HTMLInputElement;
 const statusElement = document.getElementById("status") as HTMLDivElement;
 const warningElement = document.getElementById("warning") as HTMLDivElement;
@@ -57,6 +60,109 @@ function debounce<Args extends unknown[]>(
   };
 }
 
+/**
+ * パターン欄1つ分の入力行を、フォームの状態としてそのまま集める（issue #206）。
+ * 空の行・OFFの行も落とさずに送るのは、条件として使うかどうかを決めるのは
+ * 拡張機能側（`toFilterCriteria`）の役目で、こちらは画面の状態を丸ごと預ける
+ * 側だから——エコーバックで返ってきた内容がそのまま次の描画になるため、ここで
+ * 間引くと入力途中の行やOFFの行が消えてしまう。
+ */
+function collectPatterns(list: HTMLDivElement): SerializedFilterPattern[] {
+  return Array.from(list.querySelectorAll<HTMLElement>(".pattern-row"), (row) => ({
+    source: row.querySelector<HTMLInputElement>("input[type='text']")?.value ?? "",
+    enabled: row.querySelector<HTMLInputElement>("input[type='checkbox']")?.checked ?? true,
+  }));
+}
+
+/**
+ * パターン入力行を1つ作る。チェックボックスは「この行を条件に含めるか」で、
+ * 削除（✕）とは別の操作にしている——調査中は一時的に外して戻す使い方が多く、
+ * 消してしまうと打ち直しになるため（issue #206）。
+ */
+function createPatternRow(patternSource: string, enabled: boolean): HTMLElement {
+  const row = document.createElement("span");
+  row.className = "pattern-row";
+
+  const toggle = document.createElement("input");
+  toggle.type = "checkbox";
+  toggle.checked = enabled;
+  toggle.title = "この行を一時的に外す（入力は残ります）";
+  toggle.addEventListener("change", postFilterChanged);
+
+  const input = document.createElement("input");
+  input.type = "text";
+  input.value = patternSource;
+  input.placeholder = "正規表現";
+  input.addEventListener("input", postFilterChangedDebounced);
+
+  const removeButton = document.createElement("button");
+  removeButton.type = "button";
+  removeButton.className = "remove-pattern";
+  removeButton.textContent = "✕";
+  removeButton.title = "この行を削除する";
+  removeButton.setAttribute("aria-label", "このパターンを削除する");
+  removeButton.addEventListener("click", () => {
+    row.remove();
+    // 最後の1行を消しても空の行を1つ残す。読み込み済みファイル（issue #170）と
+    // 違って0行でも「+ 追加」で戻せるが、欄そのものが消えたように見えるため。
+    const list = row.parentElement;
+    if (list instanceof HTMLDivElement && list.childElementCount === 0) {
+      list.appendChild(createPatternRow("", true));
+    }
+    postFilterChanged();
+  });
+
+  row.appendChild(toggle);
+  row.appendChild(input);
+  row.appendChild(removeButton);
+  return row;
+}
+
+/** 「+ 追加」で空の行を足し、そのまま打ち始められるようフォーカスを移す。 */
+function appendPatternRow(list: HTMLDivElement): void {
+  const row = createPatternRow("", true);
+  list.appendChild(row);
+  row.querySelector<HTMLInputElement>("input[type='text']")?.focus();
+  // 空の行は条件を変えないが、拡張機能側の状態にも足しておく——次のエコーバック
+  // で行数が戻ってしまわないようにするため。
+  postFilterChanged();
+}
+
+/**
+ * 届いた状態にフォーム側の行を合わせる。行数が変わったときだけ作り直し、
+ * 同じなら値だけを差し替える——入力のたびにDOMを作り直すと、デバウンス後の
+ * エコーバックで入力中のカーソル位置が飛んでしまうため
+ * （{@link syncTextInputIfNotFocused} と同じ理由）。
+ *
+ * 1行も無いときは空の行を1つ描き、欄が消えたように見えないようにする。
+ */
+function renderPatternRows(
+  list: HTMLDivElement,
+  patterns: readonly SerializedFilterPattern[]
+): void {
+  const incoming = patterns.length > 0 ? patterns : [{ source: "", enabled: true }];
+  const rows = list.querySelectorAll<HTMLElement>(".pattern-row");
+
+  if (rows.length !== incoming.length) {
+    list.textContent = "";
+    for (const incomingPattern of incoming) {
+      list.appendChild(createPatternRow(incomingPattern.source, incomingPattern.enabled));
+    }
+    return;
+  }
+
+  rows.forEach((row, index) => {
+    const input = row.querySelector<HTMLInputElement>("input[type='text']");
+    const toggle = row.querySelector<HTMLInputElement>("input[type='checkbox']");
+    if (input) {
+      syncTextInputIfNotFocused(input, incoming[index].source);
+    }
+    if (toggle) {
+      toggle.checked = incoming[index].enabled;
+    }
+  });
+}
+
 function collectCriteria(): SerializedFilterCriteria {
   const checkedBoxes = severitiesContainer.querySelectorAll<HTMLInputElement>(
     "input[type='checkbox']:checked"
@@ -65,8 +171,8 @@ function collectCriteria(): SerializedFilterCriteria {
     severities: Array.from(checkedBoxes, (checkbox) => checkbox.value),
     dateRangeStart: dateStartInput.value,
     dateRangeEnd: dateEndInput.value,
-    matchPattern: matchPatternInput.value,
-    ignorePattern: ignorePatternInput.value,
+    matchPatterns: collectPatterns(matchPatternList),
+    ignorePatterns: collectPatterns(ignorePatternList),
     collapseEnabled: collapseToggle.checked,
     mask: {
       enabled: maskButton.getAttribute("aria-pressed") === "true",
@@ -97,9 +203,16 @@ severitiesContainer.addEventListener("change", postFilterChanged);
 loadedFilesElement.addEventListener("change", postFilterChanged);
 dateStartInput.addEventListener("input", postFilterChangedDebounced);
 dateEndInput.addEventListener("input", postFilterChangedDebounced);
-matchPatternInput.addEventListener("input", postFilterChangedDebounced);
-ignorePatternInput.addEventListener("input", postFilterChangedDebounced);
 collapseToggle.addEventListener("change", postFilterChanged);
+
+// パターン行そのものの入力・チェックは行を作るときに配線する（issue #206）。
+// ここは行を増やすボタンだけ。
+addMatchPatternButton.addEventListener("click", () => {
+  appendPatternRow(matchPatternList);
+});
+addIgnorePatternButton.addEventListener("click", () => {
+  appendPatternRow(ignorePatternList);
+});
 
 // ファイル選択ダイアログを開くのは拡張機能本体側の責務（Webviewからは
 // vscode.window.showOpenDialog を呼べない）。ボタンは離散的な操作なので
@@ -425,8 +538,8 @@ function renderState(state: ExtensionToWebviewMessage): void {
   renderSeverities(state.distinctSeverities, state.criteria.severities);
   syncTextInputIfNotFocused(dateStartInput, state.criteria.dateRangeStart);
   syncTextInputIfNotFocused(dateEndInput, state.criteria.dateRangeEnd);
-  syncTextInputIfNotFocused(matchPatternInput, state.criteria.matchPattern);
-  syncTextInputIfNotFocused(ignorePatternInput, state.criteria.ignorePattern);
+  renderPatternRows(matchPatternList, state.criteria.matchPatterns);
+  renderPatternRows(ignorePatternList, state.criteria.ignorePatterns);
   collapseToggle.checked = state.criteria.collapseEnabled;
   collapseToggle.disabled = !state.collapsibleSupported;
   setMaskEnabled(state.criteria.mask.enabled);

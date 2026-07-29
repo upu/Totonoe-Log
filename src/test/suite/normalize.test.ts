@@ -901,8 +901,11 @@ suite("normalize / filterEntriesByDateRange", () => {
 
 suite("normalize / filterEntriesByIgnorePattern", () => {
   /** テストの意図（マッチ結果の検証）を明確にするための、成功時のみ通すヘルパー。 */
-  async function filterOk(entries: Parameters<typeof filterEntriesByIgnorePattern>[0], pattern: RegExp) {
-    const result = await filterEntriesByIgnorePattern(entries, pattern);
+  async function filterOk(
+    entries: Parameters<typeof filterEntriesByIgnorePattern>[0],
+    patterns: readonly RegExp[]
+  ) {
+    const result = await filterEntriesByIgnorePattern(entries, patterns);
     assert.strictEqual(result.ok, true);
     if (!result.ok) {
       throw new Error("unreachable");
@@ -917,7 +920,7 @@ suite("normalize / filterEntriesByIgnorePattern", () => {
     ].join("\n");
     const entries = parseLog(text);
 
-    const filtered = await filterOk(entries, /heartbeat/i);
+    const filtered = await filterOk(entries, [/heartbeat/i]);
 
     assert.strictEqual(filtered.length, 1);
     assert.strictEqual(filtered[0].message, "boom");
@@ -930,7 +933,7 @@ suite("normalize / filterEntriesByIgnorePattern", () => {
     ].join("\n");
     const entries = parseLog(text);
 
-    const filtered = await filterOk(entries, /^.*DEBUG.*$/im);
+    const filtered = await filterOk(entries, [/^.*DEBUG.*$/im]);
 
     assert.strictEqual(filtered.length, 1);
     assert.strictEqual(filtered[0].message, "boom");
@@ -944,7 +947,7 @@ suite("normalize / filterEntriesByIgnorePattern", () => {
     ].join("\n");
     const entries = parseLog(text);
 
-    const filtered = await filterOk(entries, /com\.example/);
+    const filtered = await filterOk(entries, [/com\.example/]);
 
     assert.strictEqual(filtered.length, 1);
     assert.strictEqual(filtered[0].message, "keep");
@@ -954,7 +957,7 @@ suite("normalize / filterEntriesByIgnorePattern", () => {
     const text = "2024-01-02T03:04:05Z INFO hello";
     const entries = parseLog(text);
 
-    const filtered = await filterOk(entries, /nope/);
+    const filtered = await filterOk(entries, [/nope/]);
 
     assert.strictEqual(filtered.length, 1);
   });
@@ -969,7 +972,7 @@ suite("normalize / filterEntriesByIgnorePattern", () => {
     ].join("\n");
     const entries = parseLog(text);
 
-    const filtered = await filterOk(entries, /heartbeat/g);
+    const filtered = await filterOk(entries, [/heartbeat/g]);
 
     assert.strictEqual(filtered.length, 1);
     assert.strictEqual(filtered[0].message, "boom");
@@ -983,7 +986,7 @@ suite("normalize / filterEntriesByIgnorePattern", () => {
     const entries = parseLog(lines.join("\n"));
 
     const startedAt = Date.now();
-    const filtered = await filterOk(entries, /number 42$/);
+    const filtered = await filterOk(entries, [/number 42$/]);
     const elapsedMs = Date.now() - startedAt;
 
     assert.strictEqual(filtered.length, entries.length - 1);
@@ -1022,7 +1025,7 @@ suite("normalize / filterEntriesByIgnorePattern", () => {
     const entries = parseLog(text);
 
     const startedAt = Date.now();
-    const result = await filterEntriesByIgnorePattern(entries, /hello/, {
+    const result = await filterEntriesByIgnorePattern(entries, [/hello/], {
       timeoutMs: 1,
     });
     const elapsedMs = Date.now() - startedAt;
@@ -1036,15 +1039,54 @@ suite("normalize / filterEntriesByIgnorePattern", () => {
     // 余裕を持たせる。
     assert.ok(elapsedMs < 4000, `expected an early termination, took ${elapsedMs}ms`);
   });
+
+  test("excludes an entry matching any one of several patterns (#206)", async () => {
+    // 同じ欄の中は OR。交替正規表現を手で書かなくても、1件ずつ足せば同じ結果に
+    // なることを固定する。
+    const text = [
+      "2024-01-02T03:04:05Z INFO heartbeat ok",
+      "2024-01-02T03:04:06Z DEBUG verbose trace",
+      "2024-01-02T03:04:07Z ERROR boom",
+    ].join("\n");
+    const entries = parseLog(text);
+
+    const filtered = await filterOk(entries, [/heartbeat/, /verbose/]);
+
+    assert.strictEqual(filtered.length, 1);
+    assert.strictEqual(filtered[0].message, "boom");
+  });
+
+  test("keeps every entry when the pattern list is empty (#206)", async () => {
+    const entries = parseLog("2024-01-02T03:04:05Z INFO hello");
+
+    const filtered = await filterOk(entries, []);
+
+    assert.strictEqual(filtered.length, 1);
+  });
+
+  test("evaluates each pattern independently even when one of them has a global flag (#206)", async () => {
+    // 単一パターンのときと同じ lastIndex リセットが、パターンごとに効くこと。
+    const text = [
+      "2024-01-02T03:04:05Z INFO heartbeat one",
+      "2024-01-02T03:04:06Z ERROR boom",
+      "2024-01-02T03:04:07Z INFO heartbeat two",
+    ].join("\n");
+    const entries = parseLog(text);
+
+    const filtered = await filterOk(entries, [/heartbeat/g, /nothing-matches/]);
+
+    assert.strictEqual(filtered.length, 1);
+    assert.strictEqual(filtered[0].message, "boom");
+  });
 });
 
 suite("normalize / filterEntriesByMatchPattern (#182)", () => {
   /** テストの意図（マッチ結果の検証）を明確にするための、成功時のみ通すヘルパー。 */
   async function filterOk(
     entries: Parameters<typeof filterEntriesByMatchPattern>[0],
-    pattern: RegExp
+    patterns: readonly RegExp[]
   ) {
-    const result = await filterEntriesByMatchPattern(entries, pattern);
+    const result = await filterEntriesByMatchPattern(entries, patterns);
     assert.strictEqual(result.ok, true);
     if (!result.ok) {
       throw new Error("unreachable");
@@ -1059,7 +1101,7 @@ suite("normalize / filterEntriesByMatchPattern (#182)", () => {
     ].join("\n");
     const entries = parseLog(text);
 
-    const filtered = await filterOk(entries, /heartbeat/i);
+    const filtered = await filterOk(entries, [/heartbeat/i]);
 
     assert.strictEqual(filtered.length, 1);
     assert.strictEqual(filtered[0].message, "heartbeat ok");
@@ -1072,7 +1114,7 @@ suite("normalize / filterEntriesByMatchPattern (#182)", () => {
     ].join("\n");
     const entries = parseLog(text);
 
-    const filtered = await filterOk(entries, /^connection\b/im);
+    const filtered = await filterOk(entries, [/^connection\b/im]);
 
     assert.strictEqual(filtered.length, 1);
     assert.strictEqual(filtered[0].message, "connection refused");
@@ -1086,7 +1128,7 @@ suite("normalize / filterEntriesByMatchPattern (#182)", () => {
     ].join("\n");
     const entries = parseLog(text);
 
-    const filtered = await filterOk(entries, /com\.example/);
+    const filtered = await filterOk(entries, [/com\.example/]);
 
     assert.strictEqual(filtered.length, 1);
     assert.strictEqual(filtered[0].message.startsWith("boom"), true);
@@ -1102,12 +1144,12 @@ suite("normalize / filterEntriesByMatchPattern (#182)", () => {
     ].join("\n");
     const entries = parseLog(text);
 
-    const bySeverityWord = await filterOk(entries, /ERROR/i);
+    const bySeverityWord = await filterOk(entries, [/ERROR/i]);
 
     assert.strictEqual(bySeverityWord.length, 1);
     assert.strictEqual(bySeverityWord[0].message, "ERROR-free startup");
 
-    const byTimestamp = await filterOk(entries, /2024-01-02/);
+    const byTimestamp = await filterOk(entries, [/2024-01-02/]);
 
     assert.strictEqual(byTimestamp.length, 0);
   });
@@ -1116,7 +1158,7 @@ suite("normalize / filterEntriesByMatchPattern (#182)", () => {
     const text = "2024-01-02T03:04:05Z INFO hello";
     const entries = parseLog(text);
 
-    const filtered = await filterOk(entries, /nope/);
+    const filtered = await filterOk(entries, [/nope/]);
 
     assert.strictEqual(filtered.length, 0);
   });
@@ -1131,7 +1173,7 @@ suite("normalize / filterEntriesByMatchPattern (#182)", () => {
     ].join("\n");
     const entries = parseLog(text);
 
-    const filtered = await filterOk(entries, /heartbeat/g);
+    const filtered = await filterOk(entries, [/heartbeat/g]);
 
     assert.strictEqual(filtered.length, 2);
     assert.deepStrictEqual(
@@ -1141,7 +1183,7 @@ suite("normalize / filterEntriesByMatchPattern (#182)", () => {
   });
 
   test("returns an empty result without spawning a worker when there are no entries", async () => {
-    const filtered = await filterOk([], /anything/);
+    const filtered = await filterOk([], [/anything/]);
 
     assert.deepStrictEqual(filtered, []);
   });
@@ -1155,12 +1197,39 @@ suite("normalize / filterEntriesByMatchPattern (#182)", () => {
     // テストのコメント参照）。
     const entries = parseLog("2024-01-02T03:04:05Z INFO hello");
 
-    const result = await filterEntriesByMatchPattern(entries, /hello/, { timeoutMs: 1 });
+    const result = await filterEntriesByMatchPattern(entries, [/hello/], { timeoutMs: 1 });
 
     assert.strictEqual(result.ok, false);
     if (!result.ok) {
       assert.strictEqual(result.reason, "timeout");
     }
+  });
+
+  test("keeps an entry matching any one of several patterns (#206)", async () => {
+    // 無視パターン側と同じく、同じ欄の中は OR。
+    const text = [
+      "2024-01-02T03:04:05Z ERROR connection refused",
+      "2024-01-02T03:04:06Z ERROR payment declined",
+      "2024-01-02T03:04:07Z INFO unrelated",
+    ].join("\n");
+    const entries = parseLog(text);
+
+    const filtered = await filterOk(entries, [/connection/, /payment/]);
+
+    assert.deepStrictEqual(
+      filtered.map((entry) => entry.message),
+      ["connection refused", "payment declined"]
+    );
+  });
+
+  test("keeps every entry when the pattern list is empty (#206)", async () => {
+    // 一致パターンは「指定した場合だけ絞る」条件なので、空リストは
+    // 「条件なし」＝全件通過。0件に絞ってしまうと、全ての行を消してしまう。
+    const entries = parseLog("2024-01-02T03:04:05Z INFO hello");
+
+    const filtered = await filterOk(entries, []);
+
+    assert.strictEqual(filtered.length, 1);
   });
 });
 
@@ -1219,7 +1288,7 @@ suite("normalize / filterEntriesByCriteria", () => {
   test("applies only the ignore pattern filter when only a pattern is specified", async () => {
     const entries = parseLog(sampleText);
 
-    const filtered = await filterOk(entries, { ignorePattern: /heartbeat/ });
+    const filtered = await filterOk(entries, { ignorePatterns: [/heartbeat/] });
 
     assert.strictEqual(filtered.length, entries.length - 1);
     assert.ok(!filtered.some((entry) => entry.message.includes("heartbeat")));
@@ -1234,7 +1303,7 @@ suite("normalize / filterEntriesByCriteria", () => {
         startMs: Date.UTC(2024, 0, 2, 0, 0, 0),
         endMs: Date.UTC(2024, 0, 2, 23, 59, 59),
       },
-      ignorePattern: /heartbeat/,
+      ignorePatterns: [/heartbeat/],
     });
 
     assert.strictEqual(filtered.length, 1);
@@ -1246,7 +1315,7 @@ suite("normalize / filterEntriesByCriteria", () => {
 
     const result = await filterEntriesByCriteria(
       entries,
-      { ignorePattern: /hello/ },
+      { ignorePatterns: [/hello/] },
       { ignorePatternTimeoutMs: 1 }
     );
 
@@ -1259,7 +1328,7 @@ suite("normalize / filterEntriesByCriteria", () => {
   test("applies only the match pattern filter when only a match pattern is specified (#182)", async () => {
     const entries = parseLog(sampleText);
 
-    const filtered = await filterOk(entries, { matchPattern: /in range/ });
+    const filtered = await filterOk(entries, { matchPatterns: [/in range/] });
 
     assert.deepStrictEqual(
       filtered.map((entry) => entry.message),
@@ -1272,8 +1341,8 @@ suite("normalize / filterEntriesByCriteria", () => {
 
     const filtered = await filterOk(entries, {
       severities: new Set(["ERROR"]),
-      matchPattern: /range|heartbeat/,
-      ignorePattern: /heartbeat/,
+      matchPatterns: [/range|heartbeat/],
+      ignorePatterns: [/heartbeat/],
     });
 
     assert.deepStrictEqual(
@@ -1287,7 +1356,7 @@ suite("normalize / filterEntriesByCriteria", () => {
 
     const result = await filterEntriesByCriteria(
       entries,
-      { matchPattern: /hello/ },
+      { matchPatterns: [/hello/] },
       { matchPatternTimeoutMs: 1 }
     );
 
@@ -1295,6 +1364,32 @@ suite("normalize / filterEntriesByCriteria", () => {
     if (!result.ok) {
       assert.strictEqual(result.reason, "timeout");
     }
+  });
+
+  test("ORs the patterns within each field and ANDs the two fields (#206)", async () => {
+    const entries = parseLog(sampleText);
+
+    const filtered = await filterOk(entries, {
+      matchPatterns: [/in range/, /heartbeat/],
+      ignorePatterns: [/wrong severity/, /noise/],
+    });
+
+    // 一致側の OR で3件（in range 2件 + heartbeat 1件）に絞られ、そこから
+    // 無視側の OR で2件が落ちる。
+    assert.deepStrictEqual(
+      filtered.map((entry) => entry.message),
+      ["in range and matching"]
+    );
+  });
+
+  test("treats an empty pattern list as no condition at all (#206)", async () => {
+    // 空配列で「一致するものが1件も無い」と解釈すると、パターンを1件も足して
+    // いない初期状態で全行が消える。
+    const entries = parseLog(sampleText);
+
+    const filtered = await filterOk(entries, { matchPatterns: [], ignorePatterns: [] });
+
+    assert.strictEqual(filtered.length, entries.length);
   });
 });
 
@@ -1364,7 +1459,7 @@ suite("normalize / buildInteractivePayload (#166)", () => {
 
     const payload = await buildInteractivePayload(
       entries,
-      { ignorePattern: /hello/ },
+      { ignorePatterns: [/hello/] },
       { ignorePatternTimeoutMs: 1 }
     );
 
@@ -1492,7 +1587,7 @@ suite("normalize / buildInteractiveMergedPayload (#168)", () => {
 
     const payload = await buildInteractiveMergedPayload(
       mergedEntries,
-      { ignorePattern: /hello/ },
+      { ignorePatterns: [/hello/] },
       { ignorePatternTimeoutMs: 1 }
     );
 
@@ -2989,7 +3084,7 @@ suite("normalize / filterMergedEntriesByCriteria", () => {
   });
 
   test("applies only the ignore pattern filter when only a pattern is specified", async () => {
-    const filtered = await filterOk(sampleMerged, { ignorePattern: /heartbeat/ });
+    const filtered = await filterOk(sampleMerged, { ignorePatterns: [/heartbeat/] });
 
     assert.strictEqual(filtered.length, sampleMerged.length - 1);
     assert.ok(!filtered.some((merged) => merged.entry.message.includes("heartbeat")));
@@ -3002,7 +3097,7 @@ suite("normalize / filterMergedEntriesByCriteria", () => {
         startMs: Date.UTC(2024, 0, 2, 0, 0, 0),
         endMs: Date.UTC(2024, 0, 2, 23, 59, 59),
       },
-      ignorePattern: /heartbeat/,
+      ignorePatterns: [/heartbeat/],
     });
 
     assert.strictEqual(filtered.length, 1);
@@ -3037,7 +3132,7 @@ suite("normalize / filterMergedEntriesByCriteria", () => {
   test("propagates a timeout failure from the ignore pattern stage", async () => {
     const result = await filterMergedEntriesByCriteria(
       sampleMerged,
-      { ignorePattern: /heartbeat/ },
+      { ignorePatterns: [/heartbeat/] },
       { ignorePatternTimeoutMs: 1 }
     );
 
@@ -3793,7 +3888,7 @@ suite("normalize / buildInteractiveExportText (#175)", () => {
 
     const result = await buildInteractiveExportText(
       entries,
-      { ignorePattern: /hello/ },
+      { ignorePatterns: [/hello/] },
       { ignorePatternTimeoutMs: 1 }
     );
 
@@ -3851,7 +3946,7 @@ suite("normalize / buildInteractiveMergedExportText (#175)", () => {
 
     const result = await buildInteractiveMergedExportText(
       mergedEntries,
-      { ignorePattern: /hello/ },
+      { ignorePatterns: [/hello/] },
       { ignorePatternTimeoutMs: 1 }
     );
 

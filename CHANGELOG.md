@@ -8,6 +8,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- `Totonoe Log: Show Interactive View` now takes any number of match patterns
+  and ignore patterns instead of one each. Add a row with **+ 追加**, remove
+  one with **✕**, or untick a row to set that pattern aside without losing
+  what you typed. Patterns within a field are OR'd and the two fields are
+  AND'd, so entries matching any match pattern and none of the ignore
+  patterns are kept — writing an alternation like `a|b` by hand is no longer
+  necessary. An invalid pattern only drops its own row, and the warning says
+  which row it was (issue #206).
+
 ### Fixed
 
 - `Totonoe Log: Show Normalized View Filtered` and `Totonoe Log: Merge

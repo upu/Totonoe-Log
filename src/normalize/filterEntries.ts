@@ -19,13 +19,16 @@ export interface FilterCriteria {
   /** 指定した場合、この日付範囲に含まれるエントリだけを残す。 */
   readonly dateRange?: DateRange;
   /**
-   * 指定した場合、このパターンが `message` にマッチするエントリだけを残す
-   * （issue #182）。`ignorePattern` のちょうど逆で、判定対象が `raw` ではなく
-   * `message` である理由は {@link filterEntriesByMatchPattern} 参照。
+   * 指定した場合、このいずれかのパターンが `message` にマッチするエントリだけを
+   * 残す（issue #182、#206）。`ignorePatterns` のちょうど逆で、判定対象が `raw`
+   * ではなく `message` である理由は {@link filterEntriesByMatchPattern} 参照。
+   *
+   * 配列の中は OR、`ignorePatterns` との間は AND。空配列は「条件なし」として
+   * 扱う（＝全件通過）ので、呼び出し側は空かどうかを気にしなくてよい。
    */
-  readonly matchPattern?: RegExp;
-  /** 指定した場合、このパターンにマッチするエントリを除外する。 */
-  readonly ignorePattern?: RegExp;
+  readonly matchPatterns?: readonly RegExp[];
+  /** 指定した場合、このいずれかのパターンにマッチするエントリを除外する（配列の中は OR）。 */
+  readonly ignorePatterns?: readonly RegExp[];
 }
 
 /** `filterEntriesByCriteria` の結果。無視パターンの評価がタイムアウトした場合は `ok: false`。 */
@@ -70,8 +73,8 @@ export async function filterEntriesByCriteria(
     filtered = filterEntriesByDateRange(filtered, criteria.dateRange);
   }
 
-  if (criteria.matchPattern !== undefined) {
-    const matchResult = await filterEntriesByMatchPattern(filtered, criteria.matchPattern, {
+  if (criteria.matchPatterns !== undefined) {
+    const matchResult = await filterEntriesByMatchPattern(filtered, criteria.matchPatterns, {
       timeoutMs: options.matchPatternTimeoutMs,
     });
     if (!matchResult.ok) {
@@ -80,8 +83,8 @@ export async function filterEntriesByCriteria(
     filtered = matchResult.entries;
   }
 
-  if (criteria.ignorePattern !== undefined) {
-    const ignoreResult = await filterEntriesByIgnorePattern(filtered, criteria.ignorePattern, {
+  if (criteria.ignorePatterns !== undefined) {
+    const ignoreResult = await filterEntriesByIgnorePattern(filtered, criteria.ignorePatterns, {
       timeoutMs: options.ignorePatternTimeoutMs,
     });
     if (!ignoreResult.ok) {
