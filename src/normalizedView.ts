@@ -6,7 +6,6 @@ import {
   collapseRepeatedEntries,
   DEFAULT_COLLAPSE_THRESHOLD,
   type DisplayTimezone,
-  type FilterCriteria,
   type FormattedLogWithLineSources,
   type LogEntry,
 } from "./normalize";
@@ -14,13 +13,7 @@ import {
   VirtualDocumentContentProvider,
   NORMALIZED_VIEW_SCHEME,
 } from "./virtualDocumentContentProvider";
-import {
-  promptSeveritySelection,
-  promptDateBoundary,
-  promptIgnorePattern,
-  promptFilterKinds,
-  countLines,
-} from "./filterPrompts";
+import { promptFilterKinds, promptFilterCriteriaForKinds, countLines } from "./filterPrompts";
 import { getSourceDocumentOrWarn, parseSourceLog } from "./logSourceDocument";
 import { readDisplayTimezone } from "./timezoneSettings";
 import { readGapThresholdMs } from "./gapThresholdSetting";
@@ -175,40 +168,11 @@ export function createShowNormalizedViewFilteredCommand(
     const entries = parseSourceLog(sourceDocument);
     const displayTimezone = readDisplayTimezone();
 
-    let severities: Set<string> | undefined;
-    if (selectedKinds.has("severity")) {
-      severities = await promptSeveritySelection(entries);
-      if (severities === undefined) {
-        return;
-      }
+    const criteria = await promptFilterCriteriaForKinds(selectedKinds, entries, displayTimezone);
+    // いずれかのプロンプトがキャンセル・不正入力で中断された場合は何もしない。
+    if (criteria === undefined) {
+      return;
     }
-
-    let dateRange: FilterCriteria["dateRange"];
-    if (selectedKinds.has("dateRange")) {
-      const startMs = await promptDateBoundary("開始日時", "start", displayTimezone);
-      // null はキャンセル、または不正な入力による中断を表す。
-      if (startMs === null) {
-        return;
-      }
-
-      const endMs = await promptDateBoundary("終了日時", "end", displayTimezone);
-      if (endMs === null) {
-        return;
-      }
-
-      dateRange = { startMs, endMs };
-    }
-
-    let ignorePattern: RegExp | undefined;
-    if (selectedKinds.has("ignorePattern")) {
-      ignorePattern = await promptIgnorePattern();
-      // ユーザーがキャンセルした場合、または不正な入力による中断の場合は何もしない。
-      if (ignorePattern === undefined) {
-        return;
-      }
-    }
-
-    const criteria: FilterCriteria = { severities, dateRange, ignorePattern };
 
     const filterResult = await filterEntriesByCriteria(entries, criteria);
     if (!filterResult.ok) {
