@@ -2,6 +2,7 @@ import * as assert from "node:assert";
 import * as vscode from "vscode";
 import {
   addNewlyAppearedSeverities,
+  buildIgnoredInputWarning,
   compileMaskPattern,
   getLoadedDistinctSeverities,
   resolveIncomingCriteria,
@@ -213,6 +214,36 @@ suite("interactiveViewCriteria / resolveIncomingCriteria (#217)", () => {
     );
 
     assert.deepStrictEqual(resolved.visibleFiles, [true]);
+  });
+});
+
+suite("interactiveViewCriteria / buildIgnoredInputWarning (#217)", () => {
+  test("stays silent when every input was understood", () => {
+    assert.strictEqual(buildIgnoredInputWarning([]), undefined);
+  });
+
+  test("says the condition was not applied, so a silently dropped mask is noticed", () => {
+    // 書き出しは押した時点の入力をそのまま使うため、その入力がまだ一度も
+    // 描画されておらず、パネル内の警告行を見ていないことがある。不正なマスク
+    // パターンが黙って外れたまま共有されるのを防ぐ。
+    const warning = buildIgnoredInputWarning([
+      'マスクパターンを正規表現として解釈できませんでした: "(unterminated"',
+    ]);
+
+    assert.ok(warning !== undefined);
+    assert.match(warning, /マスクパターン/);
+    assert.match(warning, /適用せずに書き出しました/);
+  });
+
+  test("joins several ignored inputs into one warning", () => {
+    const warning = buildIgnoredInputWarning([
+      '開始日時を解釈できませんでした: "not-a-date"',
+      'マスクパターンを正規表現として解釈できませんでした: "(unterminated"',
+    ]);
+
+    assert.ok(warning !== undefined);
+    assert.match(warning, /開始日時/);
+    assert.match(warning, /マスクパターン/);
   });
 });
 

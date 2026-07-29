@@ -45,6 +45,7 @@ import { readConfiguredTimestampFormats } from "./timestampFormatSettings";
 import { readMaskOptions } from "./copyMasked";
 import {
   addNewlyAppearedSeverities,
+  buildIgnoredInputWarning,
   compileMaskPattern,
   getLoadedDistinctSeverities,
   resolveIncomingCriteria,
@@ -671,7 +672,15 @@ export class InteractiveViewPanelController implements vscode.Disposable {
     this.criteria = resolveIncomingCriteria(requestedCriteria, this.loadedFiles.length);
 
     const displayTimezone = readDisplayTimezone();
-    const { criteria } = toFilterCriteria(this.criteria, displayTimezone);
+    const { criteria, errors } = toFilterCriteria(this.criteria, displayTimezone);
+    const maskPatterns = this.compileEnabledMaskPatterns();
+    // 押した時点の入力をそのまま使う以上、その入力がまだ描画されておらず
+    // パネル内の警告行を一度も見ていないことがある。表示側と同じく該当条件だけを
+    // 落として書き出すが、落としたことは通知で伝える（issue #217）。
+    const ignoredInputWarning = buildIgnoredInputWarning([...errors, ...maskPatterns.errors]);
+    if (ignoredInputWarning !== undefined) {
+      vscode.window.showWarningMessage(`Totonoe Log: ${ignoredInputWarning}`);
+    }
     // マージ表示（2ファイル以上）は折りたたみ非対応（issue #172と同じ判断）。
     const collapsibleSupported = this.isSingleFile();
     const options: BuildInteractiveExportTextOptions = {
@@ -681,7 +690,7 @@ export class InteractiveViewPanelController implements vscode.Disposable {
         collapsibleSupported && this.criteria.collapseEnabled ? readCollapseThreshold() : undefined,
       // 書き出しは表示の状態を引き継ぐ（issue #194、絞り込み・折りたたみと同じ扱い）。
       mask: toDisplayMaskOptions(this.criteria),
-      maskPatterns: this.compileEnabledMaskPatterns().patterns,
+      maskPatterns: maskPatterns.patterns,
       visibleFileIndices: toVisibleFileIndices(this.criteria.visibleFiles),
     };
 

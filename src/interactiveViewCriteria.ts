@@ -67,6 +67,23 @@ export function addNewlyAppearedSeverities(
   return [...checked, ...newlyAppeared];
 }
 
+/**
+ * 解釈できなかった入力（{@link toFilterCriteria} や {@link compileMaskPattern}
+ * が積んだ説明）を、書き出し時の通知1件にまとめる（issue #217）。該当が無ければ
+ * `undefined`。
+ *
+ * 表示側はパネル内の警告行に出せば済むが、書き出しは押した時点の入力を
+ * そのまま使うため、その入力がまだ一度も描画されておらず、ユーザーが警告を
+ * 見ていないことがある。不正なマスクパターンが黙って外れたまま、書き出しを
+ * そのまま共有してしまうのを防ぐ。
+ */
+export function buildIgnoredInputWarning(errors: readonly string[]): string | undefined {
+  if (errors.length === 0) {
+    return undefined;
+  }
+  return `${errors.join(" / ")}。該当の条件を適用せずに書き出しました。`;
+}
+
 /** {@link toFilterCriteria} の結果。 */
 export interface ToFilterCriteriaResult {
   readonly criteria: FilterCriteria;
