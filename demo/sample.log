@@ -11,7 +11,9 @@ java.lang.NullPointerException
 2024-01-02T03:04:11+09:00 INFO Request completed in 250ms
 Jan  2 03:04:12 host myapp[1204]: heartbeat ok
 2024-01-02T03:04:20Z WARNING Session expired for user=fuga, worker pid=1204 restarting
+Jan  3 00:14:50 host myapp[1204]: polling queue, 0 messages
 2024-01-03T00:15:00.000Z ERROR Connection to db.internal:5432 timed out
+2024-01-03T00:15:10.000Z ERROR Payment gateway rejected transaction txn=8842
 2024-01-03T00:15:30.000Z INFO Reconnected to database
 2024-01-03T12:00:00.000Z WARNING Memory usage at 90%
 2024-01-04T06:45:00.000Z INFO Nightly batch job started

@@ -89,8 +89,9 @@ function createDefaultSerializedCriteria(
     severities: [...distinctSeverities],
     dateRangeStart: "",
     dateRangeEnd: "",
-    matchPattern: "",
-    ignorePattern: "",
+    // 空配列で開き、Webview側が空の入力行を1つ描く（issue #206）。
+    matchPatterns: [],
+    ignorePatterns: [],
     collapseEnabled: true,
     mask: {
       enabled: false,
@@ -573,8 +574,8 @@ export class InteractiveViewPanelController implements vscode.Disposable {
     // 原因がそちらだった場合に同じ失敗を繰り返すだけになる。
     const fallbackCriteria: FilterCriteria = {
       ...criteria,
-      matchPattern: undefined,
-      ignorePattern: undefined,
+      matchPatterns: undefined,
+      ignorePatterns: undefined,
     };
     const fallbackPayload = await this.computePayload(fallbackCriteria, formatOptions);
     if (!this.refreshGate.isCurrent(revision)) {
@@ -772,8 +773,8 @@ export class InteractiveViewPanelController implements vscode.Disposable {
     // 表示側（`refresh`）と同じ理由で、フォールバックでは両方のパターンを落とす。
     const fallbackCriteria: FilterCriteria = {
       ...criteria,
-      matchPattern: undefined,
-      ignorePattern: undefined,
+      matchPatterns: undefined,
+      ignorePatterns: undefined,
     };
     const fallbackResult =
       this.isSingleFile()
@@ -940,6 +941,47 @@ export class InteractiveViewPanelController implements vscode.Disposable {
     display: inline-block;
     min-width: 6em;
   }
+  /* パターン欄（issue #206）。ラベルを左に置き、右の列に入力行を縦に積んで
+     その下に「+ 追加」を置く。行が増えても他の絞り込み項目の位置がずれない
+     よう、欄そのものは1つのブロックとして #filter-panel に並ぶ。 */
+  .pattern-field {
+    display: grid;
+    grid-template-columns: auto auto;
+    gap: 2px 6px;
+    align-items: start;
+  }
+  .pattern-field-label {
+    grid-column: 1;
+    grid-row: 1;
+    /* 行が2行以上になっても、ラベルは先頭行の高さに合わせる。 */
+    line-height: 1.8;
+  }
+  .pattern-list {
+    grid-column: 2;
+    grid-row: 1;
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+  }
+  .add-pattern {
+    grid-column: 2;
+    grid-row: 2;
+    justify-self: start;
+  }
+  .pattern-row {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+  }
+  .pattern-row input[type="text"] {
+    width: 12em;
+  }
+  .remove-pattern {
+    background-color: transparent;
+    color: inherit;
+    padding: 0 4px;
+    opacity: 0.7;
+  }
   #filter-panel {
     display: flex;
     flex-wrap: wrap;
@@ -1023,8 +1065,20 @@ export class InteractiveViewPanelController implements vscode.Disposable {
     <div id="severities"></div>
     <label>開始日時 <input type="text" id="date-start" placeholder="YYYY-MM-DD"></label>
     <label>終了日時 <input type="text" id="date-end" placeholder="YYYY-MM-DD"></label>
-    <label>一致パターン <input type="text" id="match-pattern" placeholder="正規表現"></label>
-    <label>無視パターン <input type="text" id="ignore-pattern" placeholder="正規表現"></label>
+    <!-- パターンは1行1件で、行ごとにチェックで外せる（issue #206）。同じ欄の中は
+         OR、欄同士は AND。行の並びは main.ts が状態から描く。 -->
+    <div class="pattern-field">
+      <span class="pattern-field-label" title="ここに挙げたどれかに一致する行だけを表示します（複数指定は OR）">一致パターン</span>
+      <!-- 行ごとの入力欄は動的に増減するため <label> で囲めない。欄の名前は
+           グループとして持たせ、行の中の各操作には aria-label を付ける。 -->
+      <div id="match-patterns" class="pattern-list" role="group" aria-label="一致パターン"></div>
+      <button id="add-match-pattern" type="button" class="add-pattern" aria-label="一致パターンを追加する">+ 追加</button>
+    </div>
+    <div class="pattern-field">
+      <span class="pattern-field-label" title="ここに挙げたどれかに一致する行を隠します（複数指定は OR）">無視パターン</span>
+      <div id="ignore-patterns" class="pattern-list" role="group" aria-label="無視パターン"></div>
+      <button id="add-ignore-pattern" type="button" class="add-pattern" aria-label="無視パターンを追加する">+ 追加</button>
+    </div>
     <label><input type="checkbox" id="collapse-toggle" checked>繰り返しを折りたたむ</label>
   </div>
   <div id="status"></div>

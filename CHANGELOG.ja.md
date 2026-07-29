@@ -8,6 +8,15 @@
 
 ## [Unreleased]
 
+### Added
+
+- `Totonoe Log: Show Interactive View` の一致パターン・無視パターンを、各1件から
+  何件でも指定できるようにした。**+ 追加**で行を足し、**✕**で消し、チェックを
+  外せば入力を残したまま一時的に外せる。同じ欄の中は OR、欄同士は AND で効く
+  ため（＝一致パターンのどれかに当たり、かつ無視パターンのどれにも当たらない
+  エントリが残る）、`a|b` のような交替を手で書く必要がなくなった。不正な
+  パターンはその行だけが外れ、警告には何件目かを添える（issue #206）。
+
 ### Fixed
 
 - `Totonoe Log: Show Normalized View Filtered` と `Totonoe Log: Merge Selected

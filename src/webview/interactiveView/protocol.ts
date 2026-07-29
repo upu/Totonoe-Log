@@ -73,6 +73,25 @@ export interface SerializedMaskCriteria {
   readonly pattern: string;
 }
 
+/**
+ * 一致パターン / 無視パターンの入力欄1行分（issue #206）。同じ欄に何行でも
+ * 足せて、行ごとにON/OFFできる。
+ *
+ * 複数のパターンを `(?:p1)|(?:p2)` のような交替正規表現へ連結せず1件ずつ運ぶのは、
+ * どのパターンが不正なのかの帰属が連結で失われるため（#182 でエラー文言に欄名を
+ * 入れたばかりで後退になる）。破局的バックトラッキングのリスクが合成で増え、
+ * タイムアウトの原因特定が難しくなるのも避けたい。
+ */
+export interface SerializedFilterPattern {
+  /** 入力文字列（正規表現）。空文字列は「まだ入力していない行」で、条件からは外れる。 */
+  readonly source: string;
+  /**
+   * この行を条件に含めるか。OFFの行は条件から外れるが、フォームからは消えない
+   * ——調査中に一時的に外して戻す用途があるため、削除（✕）とは別の操作にする。
+   */
+  readonly enabled: boolean;
+}
+
 /** Webview側フォームの状態をJSON化した表現。 */
 export interface SerializedFilterCriteria {
   /** チェック済みのセベリティ（`normalize` の `UNRECOGNIZED_SEVERITY_KEY` を含みうる）。 */
@@ -82,14 +101,17 @@ export interface SerializedFilterCriteria {
   /** 日付範囲の終了境界の入力文字列。空文字列は「上限なし」。 */
   readonly dateRangeEnd: string;
   /**
-   * 一致パターンの入力文字列（正規表現）。空文字列は「パターンなし」。
-   * 指定するとマッチしたエントリ**だけ**が残る、無視パターンの逆の絞り込み
-   * （issue #182）。Webview では Ctrl+F が使えないため、ハイライト型の検索では
-   * なく「一致行のみ表示する」フィルタとして提供する。
+   * 一致パターンの入力欄（issue #182、#206）。有効な行が1つでもあると、その
+   * どれかにマッチしたエントリ**だけ**が残る、無視パターンの逆の絞り込み。
+   * Webview では Ctrl+F が使えないため、ハイライト型の検索ではなく
+   * 「一致行のみ表示する」フィルタとして提供する。
+   *
+   * 同じ欄の中は OR、欄同士は AND（＝一致パターンのどれかに当たり、かつ無視
+   * パターンのどれにも当たらないエントリが残る）。
    */
-  readonly matchPattern: string;
-  /** 無視パターンの入力文字列（正規表現）。空文字列は「パターンなし」。 */
-  readonly ignorePattern: string;
+  readonly matchPatterns: readonly SerializedFilterPattern[];
+  /** 無視パターンの入力欄（issue #206）。有効な行のどれかにマッチしたエントリを除外する。 */
+  readonly ignorePatterns: readonly SerializedFilterPattern[];
   /**
    * 繰り返しエントリの折りたたみを有効にするか（issue #172）。絞り込み条件
    * ではなく表示方法の切り替えのため `FilterCriteria` には変換しないが、

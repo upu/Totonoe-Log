@@ -89,8 +89,10 @@ suite("Totonoe Log filter prompts (shared)", () => {
       assert.deepStrictEqual([...criteria!.severities!], ["ERROR"]);
       assert.strictEqual(criteria!.dateRange?.startMs, Date.UTC(2024, 0, 2));
       assert.strictEqual(criteria!.dateRange?.endMs, Date.UTC(2024, 0, 2, 23, 59, 59));
-      assert.strictEqual(criteria!.ignorePattern?.source, "heartbeat");
-      assert.strictEqual(criteria!.ignorePattern?.flags, "im");
+      // この経路は1欄1パターンのままなので、配列に包まれた1件だけが載る（#206）。
+      assert.strictEqual(criteria!.ignorePatterns?.length, 1);
+      assert.strictEqual(criteria!.ignorePatterns![0].source, "heartbeat");
+      assert.strictEqual(criteria!.ignorePatterns![0].flags, "im");
       assert.strictEqual(mock.quickPickCalls(), 1);
       assert.strictEqual(mock.inputBoxCalls(), 3);
     } finally {
@@ -107,7 +109,7 @@ suite("Totonoe Log filter prompts (shared)", () => {
       assert.deepStrictEqual(criteria, {
         severities: undefined,
         dateRange: undefined,
-        ignorePattern: undefined,
+        ignorePatterns: undefined,
       });
       assert.strictEqual(mock.quickPickCalls(), 0);
       assert.strictEqual(mock.inputBoxCalls(), 0);

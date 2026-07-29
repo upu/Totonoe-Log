@@ -238,7 +238,13 @@ export async function promptFilterCriteriaForKinds(
     }
   }
 
-  return { severities, dateRange, ignorePattern };
+  // QuickPick 経路は1欄1パターンのまま（複数指定は Interactive View 限定、
+  // issue #206 のスコープ外）。`FilterCriteria` 側が配列になったので包むだけ。
+  return {
+    severities,
+    dateRange,
+    ignorePatterns: ignorePattern !== undefined ? [ignorePattern] : undefined,
+  };
 }
 
 /**

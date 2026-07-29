@@ -18,7 +18,15 @@ import {
 import { parseWebviewLineSource } from "../../interactiveViewContext";
 import { classifyInteractiveViewConfigChange } from "../../interactiveViewConfigWatch";
 import { reresolveLogFileOffsets } from "../../logFileReading";
-import type { SerializedFilterCriteria } from "../../webview/interactiveView/protocol";
+import type {
+  SerializedFilterCriteria,
+  SerializedFilterPattern,
+} from "../../webview/interactiveView/protocol";
+
+/** パターン欄1行分。テストの関心はほぼ入力文字列なので、既定でON（有効）とする。 */
+function pattern(source: string, enabled = true): SerializedFilterPattern {
+  return { source, enabled };
+}
 
 /**
  * `toFilterCriteria` が見るのは絞り込み条件だけなので、表示状態のフィールド
@@ -31,8 +39,8 @@ function serializedCriteria(
     severities: [],
     dateRangeStart: "",
     dateRangeEnd: "",
-    ignorePattern: "",
-    matchPattern: "",
+    ignorePatterns: [],
+    matchPatterns: [],
     collapseEnabled: false,
     mask: {
       enabled: false,
@@ -53,7 +61,7 @@ suite("interactiveViewCriteria / toFilterCriteria (#166)", () => {
 
     assert.deepStrictEqual(criteria.severities, new Set(["ERROR", "INFO"]));
     assert.strictEqual(criteria.dateRange, undefined);
-    assert.strictEqual(criteria.ignorePattern, undefined);
+    assert.strictEqual(criteria.ignorePatterns, undefined);
     assert.deepStrictEqual(errors, []);
   });
 
@@ -139,43 +147,158 @@ suite("interactiveViewCriteria / toFilterCriteria (#166)", () => {
   });
 
   test("compiles a valid ignore pattern case-insensitively", () => {
-    const { criteria, errors } = toFilterCriteria(serializedCriteria({ ignorePattern: "heartbeat" }), 0);
+    const { criteria, errors } = toFilterCriteria(
+      serializedCriteria({ ignorePatterns: [pattern("heartbeat")] }),
+      0
+    );
 
-    assert.ok(criteria.ignorePattern instanceof RegExp);
-    assert.strictEqual(criteria.ignorePattern!.test("HEARTBEAT"), true);
+    assert.strictEqual(criteria.ignorePatterns?.length, 1);
+    assert.strictEqual(criteria.ignorePatterns![0].test("HEARTBEAT"), true);
     assert.deepStrictEqual(errors, []);
   });
 
   test("drops an invalid regex and reports an error", () => {
-    const { criteria, errors } = toFilterCriteria(serializedCriteria({ ignorePattern: "(unterminated" }), 0);
+    const { criteria, errors } = toFilterCriteria(
+      serializedCriteria({ ignorePatterns: [pattern("(unterminated")] }),
+      0
+    );
 
-    assert.strictEqual(criteria.ignorePattern, undefined);
+    assert.strictEqual(criteria.ignorePatterns, undefined);
     assert.strictEqual(errors.length, 1);
     assert.match(errors[0], /正規表現として解釈できませんでした/);
   });
 
-  test("omits matchPattern when the input is blank (#182)", () => {
-    const { criteria, errors } = toFilterCriteria(serializedCriteria({ matchPattern: "  " }), 0);
+  test("omits matchPatterns when the only row is blank (#182)", () => {
+    const { criteria, errors } = toFilterCriteria(
+      serializedCriteria({ matchPatterns: [pattern("  ")] }),
+      0
+    );
 
-    assert.strictEqual(criteria.matchPattern, undefined);
+    assert.strictEqual(criteria.matchPatterns, undefined);
     assert.deepStrictEqual(errors, []);
   });
 
   test("compiles a valid match pattern case-insensitively (#182)", () => {
-    const { criteria, errors } = toFilterCriteria(serializedCriteria({ matchPattern: "timeout" }), 0);
+    const { criteria, errors } = toFilterCriteria(
+      serializedCriteria({ matchPatterns: [pattern("timeout")] }),
+      0
+    );
 
-    assert.ok(criteria.matchPattern instanceof RegExp);
-    assert.strictEqual(criteria.matchPattern!.test("TIMEOUT"), true);
+    assert.strictEqual(criteria.matchPatterns?.length, 1);
+    assert.strictEqual(criteria.matchPatterns![0].test("TIMEOUT"), true);
     assert.deepStrictEqual(errors, []);
   });
 
   test("drops an invalid match pattern and reports an error naming the field (#182)", () => {
-    const { criteria, errors } = toFilterCriteria(serializedCriteria({ matchPattern: "(unterminated" }), 0);
+    const { criteria, errors } = toFilterCriteria(
+      serializedCriteria({ matchPatterns: [pattern("(unterminated")] }),
+      0
+    );
 
-    assert.strictEqual(criteria.matchPattern, undefined);
+    assert.strictEqual(criteria.matchPatterns, undefined);
     assert.strictEqual(errors.length, 1);
     // 入力欄が2つになるため、どちらの欄が不正なのかがメッセージから分かること。
     assert.match(errors[0], /一致パターン/);
+    // 1件しか無いときは位置を添えない（「1件目」だけ言われても情報にならない）。
+    assert.doesNotMatch(errors[0], /件目/);
+  });
+
+  test("compiles every enabled row, keeping the order they appear in (#206)", () => {
+    const { criteria, errors } = toFilterCriteria(
+      serializedCriteria({
+        matchPatterns: [pattern("connection"), pattern("payment")],
+        ignorePatterns: [pattern("heartbeat"), pattern("polling")],
+      }),
+      0
+    );
+
+    assert.deepStrictEqual(
+      criteria.matchPatterns?.map((compiled) => compiled.source),
+      ["connection", "payment"]
+    );
+    assert.deepStrictEqual(
+      criteria.ignorePatterns?.map((compiled) => compiled.source),
+      ["heartbeat", "polling"]
+    );
+    assert.deepStrictEqual(errors, []);
+  });
+
+  test("skips rows whose checkbox is off, without removing them from the form (#206)", () => {
+    // 個別ON/OFFは「消さずに一時的に外す」ための表示状態なので、条件からは
+    // 外れるがエラーにもならない。
+    const { criteria, errors } = toFilterCriteria(
+      serializedCriteria({
+        matchPatterns: [pattern("connection"), { source: "payment", enabled: false }],
+      }),
+      0
+    );
+
+    assert.deepStrictEqual(
+      criteria.matchPatterns?.map((compiled) => compiled.source),
+      ["connection"]
+    );
+    assert.deepStrictEqual(errors, []);
+  });
+
+  test("skips blank rows silently and keeps the rest (#206)", () => {
+    // 空の欄は「まだ入力中」とみなす。エラーにすると、+ 追加 を押した直後に
+    // 必ず警告が出てしまう。
+    const { criteria, errors } = toFilterCriteria(
+      serializedCriteria({
+        ignorePatterns: [pattern("heartbeat"), pattern("   "), pattern("polling")],
+      }),
+      0
+    );
+
+    assert.deepStrictEqual(
+      criteria.ignorePatterns?.map((compiled) => compiled.source),
+      ["heartbeat", "polling"]
+    );
+    assert.deepStrictEqual(errors, []);
+  });
+
+  test("keeps duplicated rows as they were entered (#206)", () => {
+    // 同じ欄の中は OR なので結果は変わらない。勝手に取り除くと、エコーバックで
+    // ユーザーの入力を書き換えてしまう。
+    const { criteria } = toFilterCriteria(
+      serializedCriteria({ ignorePatterns: [pattern("heartbeat"), pattern("heartbeat")] }),
+      0
+    );
+
+    assert.strictEqual(criteria.ignorePatterns?.length, 2);
+  });
+
+  test("names the offending row when several rows are present (#206)", () => {
+    const { criteria, errors } = toFilterCriteria(
+      serializedCriteria({
+        matchPatterns: [pattern("connection"), pattern("(unterminated"), pattern("payment")],
+      }),
+      0
+    );
+
+    // 不正な1件だけを落とし、残りは適用する——どれが原因かは文言で分かる。
+    assert.deepStrictEqual(
+      criteria.matchPatterns?.map((compiled) => compiled.source),
+      ["connection", "payment"]
+    );
+    assert.strictEqual(errors.length, 1);
+    assert.match(errors[0], /一致パターン/);
+    assert.match(errors[0], /2件目/);
+  });
+
+  test("omits the field entirely when every row is blank or off (#206)", () => {
+    // `undefined` にしておかないと、条件が空でもワーカーが起動してしまう。
+    const { criteria, errors } = toFilterCriteria(
+      serializedCriteria({
+        matchPatterns: [pattern(""), { source: "payment", enabled: false }],
+        ignorePatterns: [],
+      }),
+      0
+    );
+
+    assert.strictEqual(criteria.matchPatterns, undefined);
+    assert.strictEqual(criteria.ignorePatterns, undefined);
+    assert.deepStrictEqual(errors, []);
   });
 });
 
@@ -239,8 +362,8 @@ suite("interactiveViewCriteria / resolveIncomingCriteria (#217)", () => {
       severities: ["ERROR"],
       dateRangeStart: "2024-01-02",
       dateRangeEnd: "2024-01-03",
-      matchPattern: "timeout",
-      ignorePattern: "heartbeat",
+      matchPatterns: [pattern("timeout")],
+      ignorePatterns: [pattern("heartbeat"), pattern("polling", false)],
       collapseEnabled: true,
     });
 
@@ -249,8 +372,12 @@ suite("interactiveViewCriteria / resolveIncomingCriteria (#217)", () => {
     assert.deepStrictEqual(resolved.severities, ["ERROR"]);
     assert.strictEqual(resolved.dateRangeStart, "2024-01-02");
     assert.strictEqual(resolved.dateRangeEnd, "2024-01-03");
-    assert.strictEqual(resolved.matchPattern, "timeout");
-    assert.strictEqual(resolved.ignorePattern, "heartbeat");
+    assert.deepStrictEqual(resolved.matchPatterns, [{ source: "timeout", enabled: true }]);
+    // OFF の行も、消さずにそのまま返す（フォームの表示状態なので #206）。
+    assert.deepStrictEqual(resolved.ignorePatterns, [
+      { source: "heartbeat", enabled: true },
+      { source: "polling", enabled: false },
+    ]);
     assert.strictEqual(resolved.collapseEnabled, true);
   });
 

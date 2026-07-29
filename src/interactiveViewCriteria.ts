@@ -8,7 +8,10 @@ import {
   type MergedEntry,
 } from "./normalize";
 import { normalizeFileVisibility } from "./interactiveViewFiles";
-import type { SerializedFilterCriteria } from "./webview/interactiveView/protocol";
+import type {
+  SerializedFilterCriteria,
+  SerializedFilterPattern,
+} from "./webview/interactiveView/protocol";
 
 /**
  * Webviewから届いたフォームの状態を、拡張機能本体が使える形へ整える。
@@ -116,10 +119,45 @@ export function toFilterCriteria(
   const severities = new Set(serialized.severities);
 
   const dateRange = parseDateRange(serialized, displayTimezone, errors);
-  const matchPattern = compilePattern(serialized.matchPattern, "一致パターン", errors);
-  const ignorePattern = compilePattern(serialized.ignorePattern, "無視パターン", errors);
+  const matchPatterns = compilePatterns(serialized.matchPatterns, "一致パターン", errors);
+  const ignorePatterns = compilePatterns(serialized.ignorePatterns, "無視パターン", errors);
 
-  return { criteria: { severities, dateRange, matchPattern, ignorePattern }, errors };
+  return { criteria: { severities, dateRange, matchPatterns, ignorePatterns }, errors };
+}
+
+/**
+ * パターン欄1つ分（複数行）をコンパイルする（issue #206）。OFF の行と空の行は
+ * 条件から外すだけでエラーにしない——OFF は「消さずに一時的に外す」ための状態
+ * であり、空行は「+ 追加」を押した直後の入力途中だからで、どちらも警告を出す
+ * ような入力ミスではない。
+ *
+ * 使える行が1つも無い場合は `undefined` を返し、その条件自体を組み立てない
+ * （空配列を渡すとワーカーが起動しない実装ではあるが、`filterEntriesByCriteria`
+ * の段で「条件が無い」ことを明示するほうが読みやすい）。
+ *
+ * 不正な行はその1件だけを落とし、残りは適用する。エラー文言には欄名に加えて
+ * 何件目かを添えるが、行が1つしか無いときは添えない（「1件目」とだけ言われても
+ * 情報が増えないため）。
+ */
+function compilePatterns(
+  inputs: readonly SerializedFilterPattern[],
+  label: string,
+  errors: string[]
+): RegExp[] | undefined {
+  const compiled: RegExp[] = [];
+
+  inputs.forEach((input, index) => {
+    if (!input.enabled || input.source.trim() === "") {
+      return;
+    }
+    const position = inputs.length > 1 ? `（${index + 1}件目）` : "";
+    const pattern = compilePattern(input.source, `${label}${position}`, errors);
+    if (pattern !== undefined) {
+      compiled.push(pattern);
+    }
+  });
+
+  return compiled.length > 0 ? compiled : undefined;
 }
 
 /** {@link compileMaskPattern} の結果。 */
