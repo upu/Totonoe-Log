@@ -17,7 +17,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   recognized timestamp — so lines disappeared even though no date filtering
   was actually happening. A boundary that does parse is still applied on its
   own (issue #220).
-
 - `Totonoe Log: Show Interactive View` now shows the result of the filter
   you asked for last. Pattern evaluation runs in a worker thread and can
   take seconds, so a slow earlier condition could finish after a quick
@@ -25,7 +24,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   read at send time rather than at compute time, the panel could pair the
   condition you see with a body computed from a different one. Both made
   an out-of-date result look like a match (issue #218).
-
 - `Totonoe Log: Show Interactive View`'s "Export as Virtual Document" now
   applies whatever is in the form at the moment the button is pressed.
   Text fields are debounced by 300 ms, so exporting right after typing used
