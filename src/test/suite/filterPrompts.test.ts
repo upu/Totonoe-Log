@@ -22,9 +22,9 @@ interface PromptMock {
 }
 
 /**
- * セベリティ選択ピッカーと入力ボックスをモックする。`severityPick` が
- * `undefined` を返せばピッカーのキャンセル、`inputs` の要素が `undefined` を
- * 返せば入力ボックスのキャンセルを表す。
+ * セベリティ選択ピッカーと入力ボックスをモックする。`severityLabels` が
+ * `undefined` ならピッカーのキャンセル、`inputs` の要素が `undefined` なら
+ * 入力ボックスのキャンセルを表す。
  */
 function installPromptMocks(options: {
   severityLabels?: readonly string[] | undefined;
