@@ -1,5 +1,6 @@
 import type {
   ExtensionToWebviewMessage,
+  LineHighlight,
   SerializedFilterCriteria,
   SerializedFilterPattern,
   WebviewToExtensionMessage,
@@ -368,6 +369,56 @@ const PLAIN_ROW_PREFIX = " ".repeat(COLLAPSED_PREFIX.length);
 /** 直近に届いた状態の元ファイルのフルパス一覧（issue #179、`LineSource.fileIndex` で引く）。 */
 let sourceFilePaths: readonly string[] = [];
 
+/** 直近に届いたハイライト範囲（issue #18）。行のテキストで引く。 */
+let lineHighlights = new Map<string, readonly LineHighlight[]>();
+
+/**
+ * 1行を、ハイライト範囲（issue #18）に沿って色付きの断片に分けて追加する。
+ * 一致が無い行は断片を作らず、テキストノード1つで済ませる（行数が多いので、
+ * 色が付かない行の要素を増やさない）。
+ *
+ * ログ本文は非信頼な外部データのため、断片も必ず `textContent` で設定する
+ * （`innerHTML` は使わない）。色はインラインスタイルではなくCSSクラスで当てる
+ * ——値をCSSに流し込む経路を作らずに済み、明暗テーマの出し分けもCSS側に寄せられる。
+ */
+function appendHighlightedText(parent: Node, text: string): void {
+  const highlights = lineHighlights.get(text);
+  if (!highlights || highlights.length === 0) {
+    parent.appendChild(document.createTextNode(text));
+    return;
+  }
+
+  let cursor = 0;
+  for (const highlight of highlights) {
+    if (highlight.start > cursor) {
+      parent.appendChild(document.createTextNode(text.slice(cursor, highlight.start)));
+    }
+    const marked = document.createElement("span");
+    marked.className = `highlight-${highlight.color}`;
+    marked.textContent = text.slice(highlight.start, highlight.end);
+    parent.appendChild(marked);
+    cursor = highlight.end;
+  }
+  if (cursor < text.length) {
+    parent.appendChild(document.createTextNode(text.slice(cursor)));
+  }
+}
+
+/**
+ * 行の本文をハイライトしつつ、折りたたみ矢印の列（{@link PLAIN_ROW_PREFIX} 等）や
+ * 末尾の改行を添えて描く。飾りを本文と分けて渡すのは、ハイライトの対応表を
+ * **本文そのもの**で引くため——飾り込みの文字列で引くと一致しない。
+ */
+function appendDecoratedText(parent: Node, text: string, prefix: string, suffix: string): void {
+  if (prefix !== "") {
+    parent.appendChild(document.createTextNode(prefix));
+  }
+  appendHighlightedText(parent, text);
+  if (suffix !== "") {
+    parent.appendChild(document.createTextNode(suffix));
+  }
+}
+
 /**
  * 行の右クリックメニュー（issue #191）を出すための `data-vscode-context` の
  * `webviewSection` 値。`package.json` の `contributes.menus."webview/context"`
@@ -390,10 +441,15 @@ const LINE_CONTEXT_SECTION = "totonoeLogInteractiveLine";
  *
  * ログ本文は非信頼な外部データのため、必ず `textContent` で設定する。
  */
-function createSourceLineElement(text: string, lineSource: LineSource): HTMLSpanElement {
+function createSourceLineElement(
+  text: string,
+  lineSource: LineSource,
+  prefix: string,
+  suffix: string
+): HTMLSpanElement {
   const row = document.createElement("span");
   row.className = "source-line";
-  row.textContent = text;
+  appendDecoratedText(row, text, prefix, suffix);
 
   const sourceFilePath = sourceFilePaths[lineSource.fileIndex];
   if (sourceFilePath !== undefined) {
@@ -415,10 +471,18 @@ function createSourceLineElement(text: string, lineSource: LineSource): HTMLSpan
  * 無いため、ホバーもジャンプもできない見た目にする（`Go to Source Line` が
  * 「対応する元ログの行がありません」と案内するのと扱いを揃える）。
  */
-function appendLine(parent: Node, text: string, lineSource: LineSource | undefined): void {
-  parent.appendChild(
-    lineSource ? createSourceLineElement(text, lineSource) : document.createTextNode(text)
-  );
+function appendLine(
+  parent: Node,
+  text: string,
+  lineSource: LineSource | undefined,
+  prefix = "",
+  suffix = "\n"
+): void {
+  if (lineSource) {
+    parent.appendChild(createSourceLineElement(text, lineSource, prefix, suffix));
+    return;
+  }
+  appendDecoratedText(parent, text, prefix, suffix);
 }
 
 /**
@@ -444,18 +508,18 @@ function appendGroupItem(item: Extract<DisplayItem, { kind: "group" }>): void {
   collapsedRow.className = "collapse-group-header";
   collapsedRow.setAttribute("role", "button");
   collapsedRow.tabIndex = 0;
-  collapsedRow.textContent = `${COLLAPSED_PREFIX}${item.headerText}\n`;
+  appendDecoratedText(collapsedRow, item.headerText, COLLAPSED_PREFIX, "\n");
 
   const expandedFirstRow = document.createElement("span");
   expandedFirstRow.className = "collapse-group-header";
   expandedFirstRow.setAttribute("role", "button");
   expandedFirstRow.tabIndex = 0;
-  expandedFirstRow.textContent = `${EXPANDED_PREFIX}${firstLine}\n`;
+  appendDecoratedText(expandedFirstRow, firstLine, EXPANDED_PREFIX, "\n");
 
   const expandedRest = document.createElement("span");
   restLines.forEach((line, index) => {
     // `lineSources` は `lines` と同じ並びなので、先頭行のぶんだけずらして引く。
-    appendLine(expandedRest, `${PLAIN_ROW_PREFIX}${line}\n`, item.lineSources?.[index + 1]);
+    appendLine(expandedRest, line, item.lineSources?.[index + 1], PLAIN_ROW_PREFIX);
   });
 
   let expanded = false;
@@ -490,7 +554,7 @@ function renderItems(items: readonly DisplayItem[]): void {
   for (const item of items) {
     if (item.kind === "line") {
       // 折りたたみ矢印の列幅ぶんだけ、折りたためない通常行も余白を揃える。
-      appendLine(logOutputElement, `${PLAIN_ROW_PREFIX}${item.text}\n`, item.lineSource);
+      appendLine(logOutputElement, item.text, item.lineSource, PLAIN_ROW_PREFIX);
       continue;
     }
     appendGroupItem(item);
@@ -515,7 +579,7 @@ function renderText(text: string, lineSources: ExtensionToWebviewMessage["lineSo
   lines.forEach((line, index) => {
     // 末尾に余分な空行が出ないよう、最終行だけ改行を付けない。
     const suffix = index === lines.length - 1 ? "" : "\n";
-    appendLine(logOutputElement, `${line}${suffix}`, lineSources[index]);
+    appendLine(logOutputElement, line, lineSources[index], "", suffix);
   });
 }
 
@@ -535,8 +599,11 @@ function renderDisplayLimit(displayLimit: ExtensionToWebviewMessage["displayLimi
 }
 
 function renderState(state: ExtensionToWebviewMessage): void {
-  // 本文の描画（ホバー表示）より先に更新する必要がある。
+  // 本文の描画（ホバー表示・ハイライト）より先に更新する必要がある。
   sourceFilePaths = state.sourceFilePaths;
+  // 組の配列から作り直す（issue #18）。プレーンなオブジェクトで受け取ると
+  // ログ本文がキーになる都合上 `__proto__` 等と衝突しうるため、`Map` にする。
+  lineHighlights = new Map(state.highlights ?? []);
   renderLoadedFiles(state.loadedFileNames, state.sourceFilePaths, state.criteria.visibleFiles);
   renderSeverities(state.distinctSeverities, state.criteria.severities);
   syncTextInputIfNotFocused(dateStartInput, state.criteria.dateRangeStart);

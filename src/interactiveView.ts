@@ -6,6 +6,7 @@ import {
   buildInteractiveExportText,
   buildInteractiveMergedExportText,
   buildKeyMaskPattern,
+  highlightDisplayLines,
   limitInteractiveDisplay,
   mergeLogFiles,
   DEFAULT_COLLAPSE_THRESHOLD,
@@ -15,6 +16,7 @@ import {
   type FilterCriteria,
   type FormattedLogWithLineSources,
   type InteractivePayloadResult,
+  type LimitedInteractiveDisplay,
   type LineSource,
   type LogEntry,
   type MergedEntry,
@@ -44,6 +46,7 @@ import { readGapThresholdMs } from "./gapThresholdSetting";
 import { readMaxDisplayLines } from "./interactiveViewSettings";
 import { readConfiguredTimestampFormats } from "./timestampFormatSettings";
 import { readMaskOptions } from "./copyMasked";
+import { readHighlightRules } from "./highlightRuleSettings";
 import {
   addNewlyAppearedSeverities,
   buildIgnoredInputWarning,
@@ -59,6 +62,7 @@ import { NormalizedViewContentProvider, openVirtualNormalizedDocument } from "./
 import { MergedViewContentProvider } from "./mergedView";
 import type {
   ExtensionToWebviewMessage,
+  LineHighlights,
   SerializedFilterCriteria,
   WebviewToExtensionMessage,
 } from "./webview/interactiveView/protocol";
@@ -139,6 +143,28 @@ function maskPatternFailureWarnings(
       ? "マスクパターンの処理に時間がかかりすぎたため"
       : "マスクパターンの評価中にエラーが発生したため";
   return [`${reason}、そのマスクだけを適用せずに${outcome}。`];
+}
+
+/**
+ * ハイライト（issue #18）の評価対象になる、実際に描画される行を集める。
+ * 折りたたみ表示では見出し行と展開後の各行がどちらも描かれるため、両方を含める
+ * ——Webview側は行のテキストで対応表を引くので、ここで拾い漏らした行だけ色が
+ * 付かないことになる。重複は `highlightDisplayLines` 側でまとめられる。
+ */
+function collectDisplayLines(limited: LimitedInteractiveDisplay): string[] {
+  if (!limited.items) {
+    return limited.text === "" ? [] : limited.text.split("\n");
+  }
+
+  const lines: string[] = [];
+  for (const item of limited.items) {
+    if (item.kind === "line") {
+      lines.push(item.text);
+      continue;
+    }
+    lines.push(item.headerText, ...item.lines);
+  }
+  return lines;
 }
 
 /** `totonoeLog.collapse.threshold` 設定を読む（`normalizedView.ts` の `Show Collapsed View` と同じ読み取り方）。 */
@@ -657,6 +683,15 @@ export class InteractiveViewPanelController implements vscode.Disposable {
       maxDisplayLines
     );
 
+    // ハイライトは整形・マスク・表示上限まで済んだ「実際に描く行」に対して
+    // 求める（issue #18）。範囲は描画される文字列のオフセットなので、この段階
+    // より前では計算できない。ワーカーを1回挟むぶん待ちが増えるため、追い越し
+    // 判定はこの後にもう一度行う。
+    const highlights = await this.computeHighlights(limited);
+    if (!this.panel || !this.refreshGate.isCurrent(revision)) {
+      return;
+    }
+
     const message: ExtensionToWebviewMessage = {
       type: "state",
       criteria,
@@ -669,6 +704,7 @@ export class InteractiveViewPanelController implements vscode.Disposable {
       sourceFilePaths: this.loadedFiles.map((file) => file.uri.fsPath),
       lineSources: limited.lineSources,
       warning: errors.length > 0 ? errors.join(" / ") : undefined,
+      highlights,
       collapsibleSupported,
       items: limited.items,
       displayLimit:
@@ -677,6 +713,36 @@ export class InteractiveViewPanelController implements vscode.Disposable {
           : undefined,
     };
     await this.panel.webview.postMessage(message);
+  }
+
+  /**
+   * 実際に描画する行に対してハイライトルール（issue #18）を当て、Webviewへ
+   * 送る対応表を作る。ルールが未設定なら何もしない（ワーカーも起動しない）。
+   *
+   * 評価に失敗した場合は色を付けずに続行する——絞り込みの失敗は表示件数が
+   * 変わるので警告して条件を落とすが、ハイライトは付かなくても本文の表示は
+   * そのまま成立するため（マスクの任意パターンと同じ扱い、issue #195）。
+   * ただし黙って落とすと「設定したのに色が付かない」理由が分からないので、
+   * 警告だけは出す。
+   */
+  private async computeHighlights(
+    limited: LimitedInteractiveDisplay
+  ): Promise<LineHighlights | undefined> {
+    const rules = readHighlightRules();
+    if (rules.length === 0) {
+      return undefined;
+    }
+
+    const result = await highlightDisplayLines(collectDisplayLines(limited), rules);
+    if (!result.ok) {
+      const reason =
+        result.reason === "timeout"
+          ? "ハイライトルールの処理に時間がかかりすぎたため"
+          : "ハイライトルールの評価中にエラーが発生したため";
+      vscode.window.showWarningMessage(`Totonoe Log: ${reason}、色を付けずに表示しています。`);
+      return undefined;
+    }
+    return result.highlights;
   }
 
   /**
@@ -1031,6 +1097,28 @@ export class InteractiveViewPanelController implements vscode.Disposable {
   .collapse-group-header:hover {
     background-color: var(--vscode-list-hoverBackground);
   }
+  /* ハイライトルール（issue #18）の色。太字や背景色は使わない——等幅で桁を
+     揃えて読むビューなので、字幅が変わりうる装飾は避ける。既定は明るいテーマ
+     向けの濃い色で、暗いテーマは下で上書きする（VSCodeがbodyに付ける
+     vscode-dark / vscode-high-contrast クラスで出し分ける）。 */
+  .highlight-red { color: #c72e0f; }
+  .highlight-orange { color: #b8760a; }
+  .highlight-yellow { color: #8a7500; }
+  .highlight-green { color: #107c10; }
+  .highlight-blue { color: #0057b7; }
+  .highlight-purple { color: #7a3ea3; }
+  body.vscode-dark .highlight-red,
+  body.vscode-high-contrast .highlight-red { color: #f48771; }
+  body.vscode-dark .highlight-orange,
+  body.vscode-high-contrast .highlight-orange { color: #d79c4b; }
+  body.vscode-dark .highlight-yellow,
+  body.vscode-high-contrast .highlight-yellow { color: #d7d700; }
+  body.vscode-dark .highlight-green,
+  body.vscode-high-contrast .highlight-green { color: #89d185; }
+  body.vscode-dark .highlight-blue,
+  body.vscode-high-contrast .highlight-blue { color: #75beff; }
+  body.vscode-dark .highlight-purple,
+  body.vscode-high-contrast .highlight-purple { color: #c586c0; }
   /* ジャンプはダブルクリック/右クリックメニュー（issue #191）なので、
      シングルクリックを促す cursor: pointer は付けず、行が対象であることは
      ホバーの背景色だけで示す。 */

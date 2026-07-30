@@ -45,6 +45,9 @@ import {
   buildInteractiveExportText,
   buildInteractiveMergedExportText,
   limitInteractiveDisplay,
+  compileHighlightRules,
+  highlightDisplayLines,
+  DEFAULT_HIGHLIGHT_COLOR,
 } from "../../normalize";
 import * as maskForCompare from "../../normalize/maskForCompare";
 
@@ -4198,5 +4201,162 @@ suite("normalize / limitInteractiveDisplay (#178)", () => {
         ],
       },
     ]);
+  });
+});
+
+suite("normalize / compileHighlightRules (#18)", () => {
+  test("compiles a rule with a name, a pattern and a palette color", () => {
+    const { rules, errors } = compileHighlightRules([
+      { name: "OOM", pattern: "OutOfMemory", color: "red" },
+    ]);
+
+    assert.deepStrictEqual(errors, []);
+    assert.strictEqual(rules.length, 1);
+    assert.strictEqual(rules[0].name, "OOM");
+    assert.strictEqual(rules[0].color, "red");
+    // 絞り込みの2欄（#182、#206）と同じ規則で解釈する: 大文字小文字を無視し、
+    // 一致箇所を全て拾う。
+    assert.strictEqual(rules[0].regex.test("java.lang.OUTOFMEMORYERROR"), true);
+    assert.strictEqual(rules[0].regex.global, true);
+  });
+
+  test("falls back to a generated name and the default color when they are omitted", () => {
+    const { rules, errors } = compileHighlightRules([{ pattern: "timeout" }]);
+
+    assert.deepStrictEqual(errors, []);
+    assert.strictEqual(rules[0].name, "highlight-1");
+    assert.strictEqual(rules[0].color, DEFAULT_HIGHLIGHT_COLOR);
+  });
+
+  test("keeps the valid rules and reports the invalid ones one by one", () => {
+    // 設定1項目のタイポで、残りのハイライトまで効かなくなるのを防ぐ
+    // （`compileCustomTimestampFormats` と同じ縮退の仕方）。
+    const { rules, errors } = compileHighlightRules([
+      { name: "ok", pattern: "fine", color: "blue" },
+      "not-an-object",
+      { name: "no-pattern", color: "red" },
+      { name: "bad-regex", pattern: "(unterminated" },
+      { name: "bad-color", pattern: "fine", color: "chartreuse" },
+    ]);
+
+    assert.deepStrictEqual(
+      rules.map((rule) => rule.name),
+      ["ok"]
+    );
+    assert.strictEqual(errors.length, 4);
+    assert.match(errors[0], /2番目の項目/);
+    assert.match(errors[1], /no-pattern/);
+    assert.match(errors[2], /bad-regex/);
+    assert.match(errors[3], /bad-color/);
+    // 使える色が分かる文言であること（色コードではなく名前で選ぶため）。
+    assert.match(errors[3], /red/);
+  });
+});
+
+suite("normalize / highlightDisplayLines (#18)", () => {
+  /** テストの意図（範囲の検証）を明確にするための、成功時のみ通すヘルパー。 */
+  async function highlightOk(lines: readonly string[], settings: readonly unknown[]) {
+    const { rules } = compileHighlightRules(settings);
+    const result = await highlightDisplayLines(lines, rules);
+    assert.strictEqual(result.ok, true);
+    if (!result.ok) {
+      throw new Error("unreachable");
+    }
+    return new Map(result.highlights);
+  }
+
+  test("returns every occurrence in a line, with the rule's color", async () => {
+    const line = "timeout while waiting, timeout again";
+
+    const highlights = await highlightOk([line], [{ pattern: "timeout", color: "orange" }]);
+
+    assert.deepStrictEqual(highlights.get(line), [
+      { start: 0, end: 7, color: "orange" },
+      { start: 23, end: 30, color: "orange" },
+    ]);
+  });
+
+  test("keys the result by line text, so repeated lines are computed once (#18)", async () => {
+    // ログは同じ行が繰り返されることが多い。行ごとに持つより、行文字列で
+    // 引ける形にしたほうがメッセージが小さく、Webview側も引くだけで済む。
+    const line = "OutOfMemory";
+
+    const highlights = await highlightOk([line, "unrelated", line], [{ pattern: "OutOfMemory" }]);
+
+    assert.strictEqual(highlights.size, 1);
+    assert.ok(highlights.has(line));
+  });
+
+  test("omits lines that match nothing", async () => {
+    const highlights = await highlightOk(["nothing here"], [{ pattern: "OutOfMemory" }]);
+
+    assert.strictEqual(highlights.size, 0);
+  });
+
+  test("matches case-insensitively, like the filter pattern fields", async () => {
+    const line = "Connection TIMED OUT";
+
+    const highlights = await highlightOk([line], [{ pattern: "timed out" }]);
+
+    assert.deepStrictEqual(highlights.get(line), [{ start: 11, end: 20, color: DEFAULT_HIGHLIGHT_COLOR }]);
+  });
+
+  test("lets the rule listed first win when two rules overlap", async () => {
+    // 範囲が重なると描画時にどちらの色を出すか決められないため、設定の並びを
+    // 優先順位として扱う（後勝ちだと、上に足したルールが効かなくなって驚く）。
+    const line = "OutOfMemoryError";
+
+    const highlights = await highlightOk(line ? [line] : [], [
+      { pattern: "OutOfMemory", color: "red" },
+      { pattern: "MemoryError", color: "blue" },
+    ]);
+
+    assert.deepStrictEqual(highlights.get(line), [{ start: 0, end: 11, color: "red" }]);
+  });
+
+  test("keeps non-overlapping matches from several rules, sorted by position", async () => {
+    const line = "OutOfMemory then a timeout";
+
+    const highlights = await highlightOk([line], [
+      { pattern: "timeout", color: "orange" },
+      { pattern: "OutOfMemory", color: "red" },
+    ]);
+
+    assert.deepStrictEqual(highlights.get(line), [
+      { start: 0, end: 11, color: "red" },
+      { start: 19, end: 26, color: "orange" },
+    ]);
+  });
+
+  test("terminates on a pattern that can match an empty string", async function () {
+    this.timeout(5000);
+
+    // 幅0のマッチは lastIndex が進まないため、進めないと無限ループになる。
+    const highlights = await highlightOk(["abc"], [{ pattern: "x*" }]);
+
+    // 幅0のマッチは描画しても何も見えないので、範囲としては残さない。
+    assert.strictEqual(highlights.size, 0);
+  });
+
+  test("returns an empty result without spawning a worker when there are no rules", async () => {
+    const highlights = await highlightOk(["anything"], []);
+
+    assert.strictEqual(highlights.size, 0);
+  });
+
+  test("terminates and reports a timeout instead of hanging forever", async function () {
+    this.timeout(5000);
+
+    // 絞り込み・マスクと同じく、破局的バックトラッキングを起こす正規表現は
+    // literal で置かず、安全なパターンに極端に短い timeoutMs を与えて
+    // 打ち切りのコードパスを決定的に検証する。
+    const { rules } = compileHighlightRules([{ pattern: "hello" }]);
+
+    const result = await highlightDisplayLines(["hello"], rules, { timeoutMs: 1 });
+
+    assert.strictEqual(result.ok, false);
+    if (!result.ok) {
+      assert.strictEqual(result.reason, "timeout");
+    }
   });
 });

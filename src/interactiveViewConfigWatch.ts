@@ -25,6 +25,7 @@ const REDISPLAY_SECTIONS: readonly string[] = [
   "totonoeLog.gap.thresholdSeconds",
   "totonoeLog.collapse.threshold",
   "totonoeLog.interactiveView.maxDisplayLines",
+  "totonoeLog.highlightRules",
 ];
 
 /**
