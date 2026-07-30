@@ -812,6 +812,20 @@ suite("highlightRuleSettings / toHighlightRuleRows (#238)", () => {
       ["kept"]
     );
   });
+
+  test("treats a setting that is not an array as no rules at all", () => {
+    // 設定は手で書けるので、宣言したスキーマ（array）どおりとは限らない。
+    // ここで落ちると、ハイライトの読み取り経路ごと例外になる。
+    assert.deepStrictEqual(toHighlightRuleRows({ pattern: "oops" } as never), []);
+  });
+
+  test("falls back to empty strings when the fields are not strings", () => {
+    const rows = toHighlightRuleRows([{ name: 42, pattern: null, color: 7 }]);
+
+    assert.deepStrictEqual(rows, [
+      { name: "", pattern: "", color: DEFAULT_HIGHLIGHT_COLOR },
+    ]);
+  });
 });
 
 suite("highlightRuleSettings / toHighlightRuleSettings (#238)", () => {
@@ -840,6 +854,19 @@ suite("highlightRuleSettings / toHighlightRuleSettings (#238)", () => {
     ]);
 
     assert.deepStrictEqual(settings, [{ pattern: "kept", color: "blue" }]);
+  });
+
+  test("survives rows that are not shaped as expected", () => {
+    // Webview からのメッセージは型が保証されないため、壊れた行で設定の
+    // 書き戻しが例外になると表示の更新ごと壊れる。
+    const settings = toHighlightRuleSettings([
+      "nonsense",
+      null,
+      { pattern: 42 },
+      { pattern: "kept", color: "chartreuse" },
+    ]);
+
+    assert.deepStrictEqual(settings, [{ pattern: "kept", color: DEFAULT_HIGHLIGHT_COLOR }]);
   });
 
   test("keeps the row order, since it is the overlap precedence (#18)", () => {

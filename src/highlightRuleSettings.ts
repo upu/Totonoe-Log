@@ -21,10 +21,7 @@ const HIGHLIGHT_RULES_CONFIG_KEY = "highlightRules";
  * ハイライト全体が効かなくなるのを防ぐ）。
  */
 export function readHighlightRules(): HighlightRule[] {
-  const settings = vscode.workspace
-    .getConfiguration(HIGHLIGHT_RULES_CONFIG_SECTION)
-    .get<unknown[]>(HIGHLIGHT_RULES_CONFIG_KEY, []);
-  const { rules, errors } = compileHighlightRules(settings ?? []);
+  const { rules, errors } = compileHighlightRules(readRawHighlightRules());
   if (errors.length > 0) {
     vscode.window.showWarningMessage(
       `Totonoe Log: totonoeLog.highlightRules に不正な項目があるため無視しました — ${errors.join(" / ")}`
@@ -33,13 +30,19 @@ export function readHighlightRules(): HighlightRule[] {
   return rules;
 }
 
-/** `totonoeLog.highlightRules` の生の設定値を読む（コンパイルはしない）。 */
+/**
+ * `totonoeLog.highlightRules` の生の設定値を読む（コンパイルはしない）。
+ *
+ * 設定値は手で書ける以上、宣言したスキーマ（`array`）どおりとは限らない
+ * ——`get()` はファイルにある値をそのまま返すため、配列でなければ空として扱う。
+ * ここを通さずに反復すると、設定が配列でないだけでハイライトの読み取り経路
+ * 全体が例外で落ちる。
+ */
 function readRawHighlightRules(): unknown[] {
-  return (
-    vscode.workspace
-      .getConfiguration(HIGHLIGHT_RULES_CONFIG_SECTION)
-      .get<unknown[]>(HIGHLIGHT_RULES_CONFIG_KEY, []) ?? []
-  );
+  const settings = vscode.workspace
+    .getConfiguration(HIGHLIGHT_RULES_CONFIG_SECTION)
+    .get<unknown>(HIGHLIGHT_RULES_CONFIG_KEY, []);
+  return Array.isArray(settings) ? settings : [];
 }
 
 /** 現在の設定値を、編集パネル（issue #238）に表示する行へ変換する。 */
@@ -52,30 +55,44 @@ function isHighlightColor(value: unknown): value is HighlightRuleRow["color"] {
 }
 
 /**
+ * 1項目を編集パネルの行へ正規化する。オブジェクトですらない値は、行として
+ * 表示しようがないので `undefined` を返す。
+ *
+ * 設定ファイル（手書き）と Webview からのメッセージ（改ざんされうる）という、
+ * どちらも型が保証されない2つの入口が同じ検証を通るよう、両方向でこれを使う。
+ */
+function toHighlightRuleRow(value: unknown): HighlightRuleRow | undefined {
+  if (typeof value !== "object" || value === null) {
+    return undefined;
+  }
+  const { name, pattern, color } = value as Partial<HighlightRuleSetting>;
+  return {
+    name: typeof name === "string" ? name : "",
+    pattern: typeof pattern === "string" ? pattern : "",
+    // パレットに無い色は既定色に寄せる（ドロップダウンで選択状態を作れないため）。
+    color: isHighlightColor(color) ? color : DEFAULT_HIGHLIGHT_COLOR,
+  };
+}
+
+/**
  * 設定値の配列を編集パネルの行へ変換する（issue #238）。
  *
  * `compileHighlightRules` と違い、**正規表現として壊れたパターンも行として残す**
  * ——ハイライトとしては効かないが、パネルから直せなければ「設定したのに一覧に
- * 無い」状態になってしまうため。オブジェクトですらない項目だけは、行として
- * 表示しようがないので落とす。
- *
- * パレットに無い色は既定色に寄せる（ドロップダウンで選択状態を作れないため）。
+ * 無い」状態になってしまうため。
  */
 export function toHighlightRuleRows(settings: readonly unknown[]): HighlightRuleRow[] {
-  const rows: HighlightRuleRow[] = [];
-
-  for (const setting of settings) {
-    if (typeof setting !== "object" || setting === null) {
-      continue;
-    }
-    const { name, pattern, color } = setting as Partial<HighlightRuleSetting>;
-    rows.push({
-      name: typeof name === "string" ? name : "",
-      pattern: typeof pattern === "string" ? pattern : "",
-      color: isHighlightColor(color) ? color : DEFAULT_HIGHLIGHT_COLOR,
-    });
+  if (!Array.isArray(settings)) {
+    return [];
   }
 
+  const rows: HighlightRuleRow[] = [];
+  for (const setting of settings) {
+    const row = toHighlightRuleRow(setting);
+    if (row) {
+      rows.push(row);
+    }
+  }
   return rows;
 }
 
@@ -88,13 +105,21 @@ export function toHighlightRuleRows(settings: readonly unknown[]): HighlightRule
  *
  * 並び順はそのまま保つ。順序が重なったときの優先度（issue #18）だからで、
  * 並べ替えUIもこの順序を動かしている。
+ *
+ * 引数を `unknown[]` で受けるのは、これが Webview から届いたメッセージだから
+ * ——期待した形でない値で設定の書き戻しが例外になると、表示の更新ごと壊れる。
  */
-export function toHighlightRuleSettings(
-  rows: readonly HighlightRuleRow[]
-): HighlightRuleSetting[] {
-  const settings: HighlightRuleSetting[] = [];
+export function toHighlightRuleSettings(rows: readonly unknown[]): HighlightRuleSetting[] {
+  if (!Array.isArray(rows)) {
+    return [];
+  }
 
-  for (const row of rows) {
+  const settings: HighlightRuleSetting[] = [];
+  for (const value of rows) {
+    const row = toHighlightRuleRow(value);
+    if (!row) {
+      continue;
+    }
     const pattern = row.pattern.trim();
     if (pattern === "") {
       continue;
@@ -102,7 +127,6 @@ export function toHighlightRuleSettings(
     const name = row.name.trim();
     settings.push(name === "" ? { pattern, color: row.color } : { name, pattern, color: row.color });
   }
-
   return settings;
 }
 
@@ -137,7 +161,7 @@ export function resolveHighlightRulesTarget(
  * 書き込みは設定変更イベントを起こし、#183 の redisplay 経路で表示へ反映される
  * ——ここで自前に再描画を促す必要はない。
  */
-export async function writeHighlightRuleRows(rows: readonly HighlightRuleRow[]): Promise<void> {
+export async function writeHighlightRuleRows(rows: readonly unknown[]): Promise<void> {
   const configuration = vscode.workspace.getConfiguration(HIGHLIGHT_RULES_CONFIG_SECTION);
   const target = resolveHighlightRulesTarget(
     configuration.inspect(HIGHLIGHT_RULES_CONFIG_KEY),
