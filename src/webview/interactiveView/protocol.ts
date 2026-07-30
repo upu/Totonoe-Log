@@ -36,6 +36,13 @@ export type InteractiveDisplayItem =
       readonly headerText: string;
       readonly lines: readonly string[];
       readonly lineSources?: readonly LineSource[];
+      /**
+       * グループに含まれる由来ファイルの {@link LineSource.fileIndex}
+       * （重複を除いた出現順、issue #158）。見出しの列には代表1件しか出せない
+       * ため、Webview 側が `sourceFilePaths` で解決してホバーに出す。別フォルダの
+       * 同名ファイルを見分けられるよう、名前ではなくインデックスで受け取る。
+       */
+      readonly headerFileIndices?: readonly number[];
     };
 
 /**

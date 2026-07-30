@@ -42,6 +42,8 @@ import {
   buildInteractivePayload,
   buildInteractiveMergedPayload,
   buildInteractiveCollapsedLines,
+  buildInteractiveMergedCollapsedLines,
+  collapseRepeatedMergedEntries,
   buildInteractiveExportText,
   buildInteractiveMergedExportText,
   limitInteractiveDisplay,
@@ -4358,5 +4360,210 @@ suite("normalize / highlightDisplayLines (#18)", () => {
     if (!result.ok) {
       assert.strictEqual(result.reason, "timeout");
     }
+  });
+});
+
+suite("normalize / merged collapse (#158)", () => {
+  /**
+   * 2台のサーバが同じハートビートを出し、マージするとタイムスタンプ順に
+   * 交互へ並ぶ状況。折りたたみが最も効いてほしい場面（issue #158 の動機）。
+   */
+  function interleavedHeartbeats() {
+    return mergeLogFiles([
+      {
+        fileName: "server-a.log",
+        text: [
+          "2024-01-02T03:04:05Z INFO heartbeat ok",
+          "2024-01-02T03:04:15Z INFO heartbeat ok",
+        ].join("\n"),
+      },
+      {
+        fileName: "server-b.log",
+        text: [
+          "2024-01-02T03:04:06Z INFO heartbeat ok",
+          "2024-01-02T03:04:16Z INFO heartbeat ok",
+        ].join("\n"),
+      },
+    ]);
+  }
+
+  test("collapseRepeatedMergedEntries groups repeats across different files", () => {
+    // 由来ファイルでグループを分けると、交互に並ぶぶん1件も畳めない。
+    const items = collapseRepeatedMergedEntries(interleavedHeartbeats(), { threshold: 3 });
+
+    assert.strictEqual(items.length, 1);
+    assert.strictEqual(items[0].kind, "group");
+    if (items[0].kind !== "group") {
+      throw new Error("unreachable");
+    }
+    assert.deepStrictEqual(
+      items[0].entries.map((merged) => merged.fileName),
+      ["server-a.log", "server-b.log", "server-a.log", "server-b.log"]
+    );
+  });
+
+  test("collapseRepeatedMergedEntries leaves a run below the threshold as singles", () => {
+    const items = collapseRepeatedMergedEntries(interleavedHeartbeats(), { threshold: 5 });
+
+    assert.strictEqual(items.length, 4);
+    assert.ok(items.every((item) => item.kind === "single"));
+  });
+
+  test("collapseRepeatedMergedEntries keeps the source file of every grouped entry", () => {
+    // ここが失われると、折りたたみからの Go to Source Line が全部1ファイル目へ飛ぶ。
+    const items = collapseRepeatedMergedEntries(interleavedHeartbeats(), { threshold: 3 });
+
+    if (items[0].kind !== "group") {
+      throw new Error("unreachable");
+    }
+    assert.deepStrictEqual(
+      items[0].entries.map((merged) => merged.fileIndex),
+      [0, 1, 0, 1]
+    );
+  });
+
+  test("names the first file and marks that there are others in the group header", () => {
+    const items = buildInteractiveMergedCollapsedLines(interleavedHeartbeats(), { threshold: 3 });
+
+    assert.strictEqual(items.length, 1);
+    if (items[0].kind !== "group") {
+      throw new Error("unreachable");
+    }
+    assert.match(items[0].headerText, /server-a\.log 他/);
+    assert.match(items[0].headerText, /\(×4\)/);
+  });
+
+  test("reports every source file of the group, de-duplicated and in order", () => {
+    // 展開しなくても由来が分かるようにする（見出しには代表1件しか出せないため）。
+    // 名前ではなくインデックスで返し、フルパスへの解決は Webview 側に任せる。
+    const items = buildInteractiveMergedCollapsedLines(interleavedHeartbeats(), { threshold: 3 });
+
+    if (items[0].kind !== "group") {
+      throw new Error("unreachable");
+    }
+    assert.deepStrictEqual(items[0].headerFileIndices, [0, 1]);
+  });
+
+  test("marks a group spanning same-named files in different folders as multi-file (#137)", () => {
+    // demo/merge-demo のように、別フォルダの同名ファイルをマージする構成。
+    // 名前の一致で判定すると1ファイルのグループに見えてしまう。
+    const merged = mergeLogFiles([
+      { fileName: "app.log", text: "2024-01-02T03:04:05Z INFO heartbeat ok" },
+      {
+        fileName: "app.log",
+        text: [
+          "2024-01-02T03:04:06Z INFO heartbeat ok",
+          "2024-01-02T03:04:07Z INFO heartbeat ok",
+        ].join("\n"),
+      },
+    ]);
+
+    const items = buildInteractiveMergedCollapsedLines(merged, { threshold: 3 });
+
+    if (items[0].kind !== "group") {
+      throw new Error("unreachable");
+    }
+    assert.match(items[0].headerText, /app\.log 他/);
+    assert.deepStrictEqual(items[0].headerFileIndices, [0, 1]);
+    // 種別は両方 "app" で違いが無いので、そちらには印を付けない。
+    assert.doesNotMatch(items[0].headerText, /app 他/);
+  });
+
+  test("shows the plain file name when the whole group comes from one file", () => {
+    const merged = mergeLogFiles([
+      {
+        fileName: "server-a.log",
+        text: [
+          "2024-01-02T03:04:05Z INFO polling",
+          "2024-01-02T03:04:06Z INFO polling",
+          "2024-01-02T03:04:07Z INFO polling",
+        ].join("\n"),
+      },
+    ]);
+
+    const items = buildInteractiveMergedCollapsedLines(merged, { threshold: 3 });
+
+    if (items[0].kind !== "group") {
+      throw new Error("unreachable");
+    }
+    assert.match(items[0].headerText, /server-a\.log/);
+    assert.doesNotMatch(items[0].headerText, /他/);
+  });
+
+  test("keeps each expanded line pointing at its own source file (#137)", () => {
+    const items = buildInteractiveMergedCollapsedLines(interleavedHeartbeats(), { threshold: 3 });
+
+    if (items[0].kind !== "group") {
+      throw new Error("unreachable");
+    }
+    assert.deepStrictEqual(
+      items[0].lineSources?.map((source) => source.fileIndex),
+      [0, 1, 0, 1]
+    );
+  });
+
+  test("keeps the file / kind columns aligned between the header and the expanded lines", () => {
+    // 見出しだけ列がずれると、折りたたみを開いた瞬間に読みにくくなる（#174）。
+    const items = buildInteractiveMergedCollapsedLines(interleavedHeartbeats(), { threshold: 3 });
+
+    if (items[0].kind !== "group") {
+      throw new Error("unreachable");
+    }
+    const columnsOf = (text: string) => text.split(" | ").slice(0, 2).map((part) => part.length);
+    const headerColumns = columnsOf(items[0].headerText);
+    for (const line of items[0].lines) {
+      assert.deepStrictEqual(columnsOf(line), headerColumns);
+    }
+  });
+
+  test("buildInteractiveMergedPayload collapses when a threshold is given", async () => {
+    const payload = await buildInteractiveMergedPayload(interleavedHeartbeats(), {}, {
+      collapseThreshold: 3,
+    });
+
+    assert.strictEqual(payload.ok, true);
+    if (!payload.ok) {
+      throw new Error("unreachable");
+    }
+    assert.strictEqual(payload.items?.length, 1);
+    assert.strictEqual(payload.items?.[0].kind, "group");
+  });
+
+  test("buildInteractiveMergedPayload leaves the expanded text when no threshold is given", async () => {
+    const payload = await buildInteractiveMergedPayload(interleavedHeartbeats(), {});
+
+    assert.strictEqual(payload.ok, true);
+    if (!payload.ok) {
+      throw new Error("unreachable");
+    }
+    assert.strictEqual(payload.items, undefined);
+    assert.strictEqual(payload.text.split("\n").length, 4);
+  });
+
+  test("buildInteractiveMergedExportText carries the collapsed state over (#175)", async () => {
+    // 書き出しだけ展開表示になると、#175 で揃えた「書き出しは表示の状態を
+    // 引き継ぐ」が崩れる。
+    const result = await buildInteractiveMergedExportText(interleavedHeartbeats(), {}, {
+      collapseThreshold: 3,
+    });
+
+    assert.strictEqual(result.ok, true);
+    if (!result.ok) {
+      throw new Error("unreachable");
+    }
+    assert.strictEqual(result.formatted.text.split("\n").length, 1);
+    assert.match(result.formatted.text, /\(×4\)/);
+    assert.match(result.formatted.text, /server-a\.log 他/);
+  });
+
+  test("buildInteractiveMergedExportText points the group header at the range start", async () => {
+    const result = await buildInteractiveMergedExportText(interleavedHeartbeats(), {}, {
+      collapseThreshold: 3,
+    });
+
+    if (!result.ok) {
+      throw new Error("unreachable");
+    }
+    assert.deepStrictEqual(result.formatted.lineSources, [{ fileIndex: 0, line: 1 }]);
   });
 });

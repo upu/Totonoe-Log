@@ -5,6 +5,8 @@
 java.sql.SQLException: Connection timed out
 	at com.example.db.ConnectionPool.acquire(ConnectionPool.java:142)
 	at com.example.app.Service.handleRequest(Service.java:57)
+2024-02-01T09:00:10.000Z INFO heartbeat ok
+2024-02-01T09:00:20.000Z INFO heartbeat ok
 2024-02-01T09:00:48.200Z INFO Connection pool recovered
 2024-02-01T09:00:49.000Z INFO Handling request /api/orders
 2024-02-01T09:00:49.050Z INFO Handling request /api/orders
