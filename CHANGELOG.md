@@ -8,6 +8,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Removed
+
+- **Breaking:** `Totonoe Log: Show Collapsed View`
+  (`totonoeLog.showCollapsedView`) was removed. `Totonoe Log: Show Interactive
+  View` covers everything it did and more: collapsing is on by default there,
+  so opening the panel already shows the folded result, and "Export as Virtual
+  Document" writes it out as the same kind of read-only document the old
+  command produced. Since #158 it also works on the merged display, which the
+  command never did. If you had a keybinding for it, point that at
+  `totonoeLog.showInteractiveView`. The `totonoeLog.collapse.threshold` setting
+  stays — the Interactive View reads it (issue #233).
+
 ### Added
 
 - `Totonoe Log: Show Interactive View` now collapses repeated entries in the

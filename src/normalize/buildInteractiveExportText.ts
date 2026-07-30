@@ -27,7 +27,7 @@ export interface BuildInteractiveExportTextOptions {
   readonly ignorePatternTimeoutMs?: number;
   /**
    * 指定すると、折りたたみグループを `formatCollapsedLogWithLineSources`
-   * （`Show Collapsed View` と同じ整形）でまとめた状態を書き出す（issue #175）。
+   * （{@link formatCollapsedLogWithLineSources} による整形）でまとめた状態を書き出す（issue #175）。
    * Webview内での個々のグループの展開/復元はブラウザ側だけのローカル状態で
    * 拡張機能本体に届いていないため、書き出し時点では常に全グループ折りたたみ
    * 済みとして書き出す。
@@ -69,7 +69,7 @@ export type InteractiveExportTextResult =
 /**
  * Interactive View が単一ファイル表示中に「仮想ドキュメントとして
  * 書き出す」操作（issue #175）で呼ぶ、絞り込み＋整形の合成処理。折りたたみが
- * 有効なら `Show Collapsed View` と同じ関数で折りたたみ済みテキストを、
+ * 有効なら {@link formatCollapsedLogWithLineSources} で折りたたみ済みテキストを、
  * 無効なら通常の正規化テキストを組み立てる。
  */
 export async function buildInteractiveExportText(

@@ -62,10 +62,6 @@
         "title": "Totonoe Log: Copy Masked Text"
       },
       {
-        "command": "totonoeLog.showCollapsedView",
-        "title": "Totonoe Log: Show Collapsed View"
-      },
-      {
         "command": "totonoeLog.goToSourceLine",
         "title": "Totonoe Log: Go to Source Line"
       },
@@ -139,7 +135,7 @@
           "type": "number",
           "default": 3,
           "minimum": 2,
-          "description": "Totonoe Log: Show Collapsed View で、何回以上連続で繰り返されたら1行に折りたたむかのしきい値。"
+          "description": "Totonoe Log: Show Interactive View の「繰り返しを折りたたむ」で、何回以上連続で繰り返されたら1行に折りたたむかのしきい値。"
         },
         "totonoeLog.gap.thresholdSeconds": {
           "type": "number",

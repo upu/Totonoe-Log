@@ -19,7 +19,6 @@ All commands are prefixed with `Totonoe Log:` in the Command Palette
 | Show Interactive View | `totonoeLog.showInteractiveView` | Palette, Explorer right-click | Explorer selection, otherwise the active editor |
 | Show Normalized View | `totonoeLog.showNormalizedView` | Palette | Active editor |
 | Show Normalized View Filtered | `totonoeLog.showNormalizedViewFiltered` | Palette | Active editor |
-| Show Collapsed View | `totonoeLog.showCollapsedView` | Palette | Active editor |
 | Merge Selected Files | `totonoeLog.mergeSelectedFiles` | Explorer right-click (also palette \*) | Two or more selected files |
 | Merge Selected Files Filtered | `totonoeLog.mergeSelectedFilesFiltered` | Explorer right-click (also palette \*) | Two or more selected files |
 | Compare Logs | `totonoeLog.compareLogs` | Palette | Two files picked from a dialog |
@@ -55,9 +54,8 @@ from the table above in **Preferences: Open Keyboard Shortcuts (JSON)**.
 
 ## Commands that read the active editor
 
-`Show Normalized View`, `Show Normalized View Filtered`, `Show Collapsed View`,
-`Copy Masked Text`, and `Show Interactive View` (when run without an Explorer
-selection) all read the log from the active editor, unsaved changes included.
+`Show Normalized View`, `Show Normalized View Filtered`, `Copy Masked Text`,
+and `Show Interactive View` (when run without an Explorer selection) all read the log from the active editor, unsaved changes included.
 They refuse to run on Totonoe Log's own read-only views and warn instead —
 re-parsing an already formatted view would misread it.
 
@@ -118,21 +116,6 @@ re-parsing an already formatted view would misread it.
 - **Settings** — `gap.thresholdSeconds`, plus the common parsing and display
   settings.
 - **Details** — [Filter out the noise](../../README.md#filter-out-the-noise).
-
-### Show Collapsed View
-
-`totonoeLog.showCollapsedView`
-
-- **Runs from** — Command Palette.
-- **Input** — the active editor.
-- **Output** — a read-only virtual document named `<source>.collapsed-N.log`,
-  where runs of consecutive repeats are folded into one line carrying a repeat
-  count and the group's timestamp span.
-- **Notes** — gap markers are not inserted in this view. To see every original
-  line, open `Show Normalized View` separately.
-- **Settings** — `collapse.threshold`, plus the common parsing and display
-  settings.
-- **Details** — [Collapse repeated lines](../../README.md#collapse-repeated-lines).
 
 ### Merge Selected Files
 

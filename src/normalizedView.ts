@@ -1,10 +1,7 @@
 import * as vscode from "vscode";
 import {
   formatNormalizedLogWithLineSources,
-  formatCollapsedLogWithLineSources,
   filterEntriesByCriteria,
-  collapseRepeatedEntries,
-  DEFAULT_COLLAPSE_THRESHOLD,
   type DisplayTimezone,
   type FormattedLogWithLineSources,
   type LogEntry,
@@ -190,39 +187,5 @@ export function createShowNormalizedViewFilteredCommand(
     await openVirtualNormalizedDocument(provider, sourceDocument.uri, formatted, "filtered");
 
     reportHiddenLineCount("条件に合わない", entries, filteredEntries);
-  };
-}
-
-/** 折りたたみのしきい値を読み込むVSCode設定のセクション名。 */
-const COLLAPSE_CONFIG_SECTION = "totonoeLog.collapse";
-
-/**
- * アクティブなエディタの内容を正規化し、連続して繰り返される（可変部分を
- * 除いて一致する）エントリを「×N」付きの1行にまとめた、読み取り専用の
- * 仮想ドキュメントとして開くコマンド。折りたたみのしきい値は
- * `totonoeLog.collapse.threshold` 設定で調整できる。元の全行を確認したい
- * 場合は、折りたたまれていない通常の正規化ビュー（`showNormalizedView`）を
- * 別途開けばよい。
- */
-export function createShowCollapsedViewCommand(
-  provider: NormalizedViewContentProvider
-): () => Promise<void> {
-  return async function showCollapsedView(): Promise<void> {
-    const sourceDocument = getSourceDocumentOrWarn("折りたたむ");
-    if (!sourceDocument) {
-      return;
-    }
-
-    const threshold = vscode.workspace
-      .getConfiguration(COLLAPSE_CONFIG_SECTION)
-      .get<number>("threshold", DEFAULT_COLLAPSE_THRESHOLD);
-
-    const entries = parseSourceLog(sourceDocument);
-    const items = collapseRepeatedEntries(entries, { threshold });
-    const formatted = formatCollapsedLogWithLineSources(entries, items, {
-      displayTimezone: readDisplayTimezone(),
-    });
-
-    await openVirtualNormalizedDocument(provider, sourceDocument.uri, formatted, "collapsed");
   };
 }
