@@ -1,0 +1,12 @@
+02.01.2024 03:04:00 INFO Batch job started
+02.01.2024 03:04:01 INFO Reading input from /var/spool/batch/in
+02.01.2024 03:04:02 DEBUG Parsed 1200 records
+02.01.2024 03:04:03 INFO Connecting to db.internal:5432
+02.01.2024 03:04:04 WARN Retrying connection (attempt 2)
+02.01.2024 03:04:05 INFO Connected
+02.01.2024 03:04:06 INFO Writing output to /var/spool/batch/out
+02.01.2024 03:04:07 ERROR Failed to write record 815
+02.01.2024 03:04:08 INFO Retrying record 815
+02.01.2024 03:04:09 INFO Record 815 written
+02.01.2024 03:04:10 INFO Flushing buffers
+02.01.2024 03:04:11 INFO Batch job finished in 11s

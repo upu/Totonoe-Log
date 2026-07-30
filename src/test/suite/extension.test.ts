@@ -2629,6 +2629,25 @@ suite("Totonoe Log low timestamp recognition warning", () => {
       }
     );
   });
+
+  test("leaves the warning to the Interactive View panel instead of a modal (#186)", async function () {
+    this.timeout(10000);
+    const extension = vscode.extensions.getExtension("upu.totonoe-log");
+    await extension!.activate();
+
+    await withTempLogFiles([{ name: "interactive.log", content: UNRECOGNIZED_LOG }], async (uris) => {
+      await vscode.commands.executeCommand("workbench.action.closeAllEditors");
+
+      const warnings = await collectRecognitionWarningsWhile(async () => {
+        await vscode.commands.executeCommand("totonoeLog.showInteractiveView", uris[0], uris);
+      });
+
+      // 開いたままのパネルは追加読み込み・設定変更のたびに描き直されるため、
+      // 認識率はパネル内の警告行（読み込まれている限り出続ける表示状態）で
+      // 伝える。モーダルを併用すると同じ内容が二重に出る。
+      assert.strictEqual(warnings.length, 0, "the interactive view should not show a modal warning");
+    });
+  });
 });
 
 suite("Totonoe Log go to source line (#137)", () => {

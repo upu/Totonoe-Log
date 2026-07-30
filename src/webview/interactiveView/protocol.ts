@@ -235,7 +235,12 @@ export interface ExtensionToWebviewMessage {
    * `items` を描画する場合は各 `InteractiveDisplayItem` 側が持つ。
    */
   readonly lineSources?: readonly (LineSource | undefined)[];
-  /** 無視パターンのタイムアウト・構文エラー等、絞り込み条件の一部を無視した場合の警告文。 */
+  /**
+   * パネル内の警告行に出す文。無視パターンのタイムアウト・構文エラー等で
+   * 絞り込み条件の一部を無視した場合のほか、読み込み済みファイルのタイム
+   * スタンプ認識率が低い場合（issue #186）もここに載せる。複数あるときは
+   * 拡張機能本体側で1つの文字列に連結してから送る。
+   */
   readonly warning?: string;
   /**
    * ハイライトルール（issue #18）に一致した箇所。ルールが未設定、または評価が

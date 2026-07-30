@@ -178,6 +178,12 @@ match. Custom formats are tried before the built-in ones, so they can also
 override a built-in interpretation. Patterns are automatically anchored to
 the start of the line.
 
+When most lines of a log are left without a timestamp, Totonoe Log says so
+instead of quietly folding them into one huge entry: the virtual-document
+commands notify you once per file, and the Interactive View shows it in its
+warning line for every loaded file — including the ones added later with
+**+ Add Files...**.
+
 ```jsonc
 "totonoeLog.timestampFormats": [
   {

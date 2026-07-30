@@ -1,6 +1,8 @@
 import * as vscode from "vscode";
 import { randomBytes } from "node:crypto";
 import {
+  assessTimestampRecognition,
+  assessTimestampRecognitionByFile,
   buildInteractivePayload,
   buildInteractiveMergedPayload,
   buildInteractiveExportText,
@@ -23,9 +25,10 @@ import {
 } from "./normalize";
 import {
   getSourceDocumentOrWarn,
-  parseLogFileInput,
+  parseLogFileEntries,
   buildLogFileInputFromDocument,
 } from "./logSourceDocument";
+import { buildLowTimestampRecognitionWarnings } from "./timestampRecognitionWarning";
 import {
   filterOutFolders,
   loadLogFiles,
@@ -222,6 +225,12 @@ export class InteractiveViewPanelController implements vscode.Disposable {
   private singleEntries: readonly LogEntry[] = [];
   /** `loadedFiles.length > 1` の間だけ使う、マージ済みエントリのキャッシュ。 */
   private mergedEntries: readonly MergedEntry[] = [];
+  /**
+   * 読み込み済みファイルのうち、タイムスタンプ認識率が低いものの警告文
+   * （issue #186）。全行を走査する評価なので、絞り込みのたびの再描画では
+   * なくファイル集合が変わる {@link recomputeEntries} でだけ作り直す。
+   */
+  private recognitionWarnings: readonly string[] = [];
   private criteria: SerializedFilterCriteria = createDefaultSerializedCriteria([], 0);
   /**
    * 再描画の世代管理（issue #218）。ファイルの差し替え・絞り込みの変更・設定変更は
@@ -516,8 +525,12 @@ export class InteractiveViewPanelController implements vscode.Disposable {
     }
 
     if (rest.length === 0) {
-      this.singleEntries = parseLogFileInput(first.input, first.uri);
+      this.singleEntries = parseLogFileEntries(first.input);
       this.mergedEntries = [];
+      this.recognitionWarnings = buildLowTimestampRecognitionWarnings(
+        [first.input.fileName],
+        [assessTimestampRecognition(this.singleEntries)]
+      );
       return;
     }
 
@@ -526,6 +539,10 @@ export class InteractiveViewPanelController implements vscode.Disposable {
       { timestampFormats: readConfiguredTimestampFormats() }
     );
     this.singleEntries = [];
+    this.recognitionWarnings = buildLowTimestampRecognitionWarnings(
+      this.loadedFileNames(),
+      assessTimestampRecognitionByFile(this.mergedEntries, this.loadedFiles.length)
+    );
   }
 
   /** 単一ファイル表示中か（マージ表示は折りたたみ非対応で、整形経路も別）。 */
@@ -574,7 +591,10 @@ export class InteractiveViewPanelController implements vscode.Disposable {
     const displayTimezone = readDisplayTimezone();
     const { criteria, errors } = toFilterCriteria(criteriaSnapshot, displayTimezone);
     const maskPatterns = this.compileEnabledMaskPatterns();
-    const warnings = [...errors, ...maskPatterns.errors];
+    // 認識率の警告（issue #186）は入力の不備と違い、読み込んだファイルの性質
+    // として出続けるものなので先頭に置き、後から増える入力エラーで位置が
+    // 動かないようにする。
+    const warnings = [...this.recognitionWarnings, ...errors, ...maskPatterns.errors];
     // マージ表示（2ファイル以上）でも折りたたみが効く（issue #158）。
     const collapsibleSupported = true;
     const formatOptions: BuildInteractivePayloadOptions = {
@@ -675,7 +695,7 @@ export class InteractiveViewPanelController implements vscode.Disposable {
    */
   private async sendState(
     payload: Extract<InteractivePayloadResult, { ok: true }>,
-    errors: readonly string[],
+    warnings: readonly string[],
     collapsibleSupported: boolean,
     criteria: SerializedFilterCriteria,
     revision: number
@@ -713,7 +733,7 @@ export class InteractiveViewPanelController implements vscode.Disposable {
       // ホバー表示用のフルパス（issue #179）。`fileIndex` はこの並びを指す。
       sourceFilePaths: this.loadedFiles.map((file) => file.uri.fsPath),
       lineSources: limited.lineSources,
-      warning: errors.length > 0 ? errors.join(" / ") : undefined,
+      warning: warnings.length > 0 ? warnings.join(" / ") : undefined,
       highlights,
       highlightRules: readHighlightRuleRows(),
       collapsibleSupported,

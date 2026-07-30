@@ -79,6 +79,7 @@ export {
   LOW_RECOGNITION_MIN_LINE_COUNT,
   LOW_RECOGNITION_RATIO_THRESHOLD,
   assessTimestampRecognition,
+  assessTimestampRecognitionByFile,
 } from "./timestampCoverage";
 export type {
   BuildInteractivePayloadOptions,

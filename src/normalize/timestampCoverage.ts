@@ -1,4 +1,5 @@
 import type { LogEntry } from "./types";
+import type { MergedEntry } from "./mergeLogFiles";
 
 /**
  * タイムスタンプ認識率の警告（issue #101）を出す最低行数（空行を除く）。
@@ -106,4 +107,30 @@ export function assessTimestampRecognition(
     hasSuspiciousTimestampSwitch,
     shouldWarn,
   };
+}
+
+/**
+ * マージ済みエントリを由来ファイルごとに割り振り直し、ファイル単位で
+ * {@link assessTimestampRecognition} を行う（issue #186）。マージ結果は
+ * ファイル横断で時系列に並び替えられているため、そのまま評価すると
+ * 「どのファイルの形式が未対応なのか」を言えない。
+ *
+ * 割り振りに `fileName` ではなく `fileIndex` を使うのは、別フォルダの同名
+ * ファイルを1つにまとめないため（issue #137）。戻り値は
+ * {@link mergeLogFiles} へ渡した入力配列と同じ並びで、1行も寄与しなかった
+ * ファイルには空のエントリ列の評価（＝警告なし）が入る。
+ *
+ * 並べ替えで元ファイル内の順序が変わっていても結果は変わらない——未認識行の
+ * 数はエントリ単位で決まり、形式切替の兆候（連続する日時らしい継続行）も
+ * 1エントリの中で完結して数えるため。
+ */
+export function assessTimestampRecognitionByFile(
+  mergedEntries: readonly MergedEntry[],
+  fileCount: number
+): TimestampRecognitionAssessment[] {
+  const entriesByFileIndex: LogEntry[][] = Array.from({ length: fileCount }, () => []);
+  for (const merged of mergedEntries) {
+    entriesByFileIndex[merged.fileIndex]?.push(merged.entry);
+  }
+  return entriesByFileIndex.map((entries) => assessTimestampRecognition(entries));
 }
