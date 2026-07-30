@@ -52,13 +52,6 @@ export type InteractiveDisplayItem =
        * 責務なので、ここでは持たない。
        */
       readonly headerFileIndices?: readonly number[];
-      /**
-       * 見出し行に対応する元ログ上の位置（issue #158）。書き出し
-       * （{@link toCollapsedFormattedLog}）がグループを見出し1行に畳むときに使う。
-       * 表示側では見出しは展開/復元のクリック対象で、ジャンプ対象ではない
-       * （issue #172）ため使わない。
-       */
-      readonly headerLineSource?: LineSource;
     };
 
 /** {@link buildInteractiveCollapsedLines} の挙動を調整するオプション。 */
@@ -369,7 +362,6 @@ export function buildInteractiveMergedCollapsedLines(
         gutterLabelOf(item)
       ),
       headerFileIndices: fileIndices,
-      headerLineSource: groupLines[0]?.lineSource,
       lines: groupLines.map((line) => line.text),
       lineSources: groupLines.map((line) => line.lineSource),
     });
@@ -397,7 +389,11 @@ export function toCollapsedFormattedLog(
       continue;
     }
     lines.push(item.headerText);
-    lineSources.push(item.headerLineSource);
+    // 見出しはグループの範囲の入口、つまり先頭エントリの1行目に対応づける
+    // （`formatCollapsedLogWithLineSources` と同じ扱い）。`lines` と同じ並びの
+    // `lineSources` の先頭がちょうどそれなので、別のフィールドとして重複して
+    // 持たない。
+    lineSources.push(item.lineSources?.[0]);
   }
   return { text: lines.join("\n"), lineSources };
 }
