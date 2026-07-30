@@ -77,7 +77,7 @@ const INTERACTIVE_VIEW_TYPE = "totonoeLog.interactiveView";
 /** Webview側スクリプトのバンドル出力（`scripts/esbuild.js` の第2エントリ）を探すための相対パス。 */
 const WEBVIEW_SCRIPT_RELATIVE_PATH = ["out", "webview", "interactiveView", "main.js"];
 
-/** 折りたたみのしきい値を読み込むVSCode設定のセクション名（`normalizedView.ts` の `Show Collapsed View` と共有）。 */
+/** 折りたたみのしきい値を読み込むVSCode設定のセクション名。 */
 const COLLAPSE_CONFIG_SECTION = "totonoeLog.collapse";
 
 /**
@@ -171,7 +171,7 @@ function collectDisplayLines(limited: LimitedInteractiveDisplay): string[] {
   return lines;
 }
 
-/** `totonoeLog.collapse.threshold` 設定を読む（`normalizedView.ts` の `Show Collapsed View` と同じ読み取り方）。 */
+/** `totonoeLog.collapse.threshold` 設定を読む。 */
 function readCollapseThreshold(): number {
   return vscode.workspace.getConfiguration(COLLAPSE_CONFIG_SECTION).get<number>("threshold", DEFAULT_COLLAPSE_THRESHOLD);
 }

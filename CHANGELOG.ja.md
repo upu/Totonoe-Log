@@ -8,6 +8,18 @@
 
 ## [Unreleased]
 
+### Removed
+
+- **破壊的変更:** `Totonoe Log: Show Collapsed View`
+  （`totonoeLog.showCollapsedView`）を廃止した。`Totonoe Log: Show Interactive
+  View` が同じことを、より広くカバーするため——折りたたみは既定でONなので
+  パネルを開いた時点で折りたたまれた状態が見え、「Export as Virtual Document」で
+  このコマンドと同じ読み取り専用ドキュメントとして書き出せる。#158 以降は
+  マージ表示でも折りたためる（旧コマンドにはできなかった）。キーバインドを
+  設定していた場合は `totonoeLog.showInteractiveView` に付け替えること。
+  `totonoeLog.collapse.threshold` 設定は Interactive View が読むのでそのまま
+  残る（issue #233）。
+
 ### Added
 
 - `Totonoe Log: Show Interactive View` で、マージ表示（2ファイル以上）でも

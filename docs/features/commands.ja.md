@@ -17,7 +17,6 @@ Totonoe Log が提供する全コマンドを、コマンドID・起動導線・
 | Show Interactive View | `totonoeLog.showInteractiveView` | パレット、エクスプローラ右クリック | エクスプローラの選択、無ければアクティブエディタ |
 | Show Normalized View | `totonoeLog.showNormalizedView` | パレット | アクティブエディタ |
 | Show Normalized View Filtered | `totonoeLog.showNormalizedViewFiltered` | パレット | アクティブエディタ |
-| Show Collapsed View | `totonoeLog.showCollapsedView` | パレット | アクティブエディタ |
 | Merge Selected Files | `totonoeLog.mergeSelectedFiles` | エクスプローラ右クリック（パレットにも出る ※） | 選択した2つ以上のファイル |
 | Merge Selected Files Filtered | `totonoeLog.mergeSelectedFilesFiltered` | エクスプローラ右クリック（パレットにも出る ※） | 選択した2つ以上のファイル |
 | Compare Logs | `totonoeLog.compareLogs` | パレット | ダイアログで選ぶ2ファイル |
@@ -50,9 +49,8 @@ Totonoe Log が提供する全コマンドを、コマンドID・起動導線・
 
 ## アクティブエディタを読むコマンド
 
-`Show Normalized View`・`Show Normalized View Filtered`・`Show Collapsed View`・
-`Copy Masked Text`、およびエクスプローラの選択なしで実行した
-`Show Interactive View` は、いずれもアクティブエディタのログを読む（未保存の
+`Show Normalized View`・`Show Normalized View Filtered`・`Copy Masked Text`、
+およびエクスプローラの選択なしで実行した `Show Interactive View` は、いずれもアクティブエディタのログを読む（未保存の
 変更を含む）。Totonoe Log 自身の読み取り専用ビュー上では実行できず警告になる。
 整形済みのビューを再度パースすると誤読するため。
 
@@ -107,20 +105,6 @@ Totonoe Log が提供する全コマンドを、コマンドID・起動導線・
   警告を出して何も開かない
 - **関連設定** — `gap.thresholdSeconds`、および共通の解析・表示設定
 - **詳細** — [ノイズを絞り込みで取り除く](../../README.ja.md#ノイズを絞り込みで取り除く)
-
-### Show Collapsed View
-
-`totonoeLog.showCollapsedView`
-
-- **起動導線** — コマンドパレット
-- **入力** — アクティブエディタ
-- **出力** — 読み取り専用の仮想ドキュメント。タブ名は
-  `<元ファイル名>.collapsed-N.log`。連続する繰り返しが、繰り返し回数と
-  タイムスタンプの範囲を持つ1行にまとめられる
-- **補足** — このビューにはギャップ行は挿入されない。元の全行を確認したい場合は
-  `Show Normalized View` を別途開く
-- **関連設定** — `collapse.threshold`、および共通の解析・表示設定
-- **詳細** — [繰り返しを折りたたむ](../../README.ja.md#繰り返しを折りたたむ)
 
 ### Merge Selected Files
 

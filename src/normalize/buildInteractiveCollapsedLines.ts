@@ -198,9 +198,9 @@ function formatGroupHeaderText(
  * 相当の整形を1パスで行うことで、単一行・グループ内展開行の間でガター幅を
  * 一貫させる。
  *
- * ギャップ検出（`gapThresholdMs`）は扱わない——{@link formatCollapsedLogWithLineSources}
- * （既存の `Show Collapsed View`）も同様にギャップマーカーを省略しており、
- * それに揃える。
+ * ギャップ検出（`gapThresholdMs`）は扱わない——折りたたみは連続した繰り返しを
+ * 1行にまとめる表示なので、まとめた範囲の内側にギャップ行を差し込む位置が
+ * 決まらないため（{@link formatCollapsedLogWithLineSources} も同じ扱い）。
  */
 export function buildInteractiveCollapsedLines(
   entries: readonly LogEntry[],

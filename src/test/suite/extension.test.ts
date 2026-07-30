@@ -26,7 +26,7 @@ suite("Totonoe Log extension", () => {
     );
   });
 
-  test("no longer offers the per-criterion filter commands (#184)", async () => {
+  test("no longer offers the commands the Interactive View replaced (#184, #233)", async () => {
     const extension = vscode.extensions.getExtension("upu.totonoe-log");
     await extension!.activate();
 
@@ -37,6 +37,10 @@ suite("Totonoe Log extension", () => {
       "totonoeLog.showNormalizedViewFilteredByDateRange",
       "totonoeLog.showNormalizedViewFilteredByDateRangeAndSeverity",
       "totonoeLog.showNormalizedViewFilteredByIgnorePattern",
+      // Interactive View の「繰り返しを折りたたむ」＋書き出しに役割が
+      // 吸収されたため廃止（issue #233）。#158 でマージ表示にも折りたたみが
+      // 入り、このコマンドにできて Interactive View にできないことは無くなった。
+      "totonoeLog.showCollapsedView",
     ];
 
     const commands = await vscode.commands.getCommands(true);
@@ -52,6 +56,10 @@ suite("Totonoe Log extension", () => {
     assert.ok(
       contributed.includes("totonoeLog.showNormalizedViewFiltered"),
       "the combined picker command should remain"
+    );
+    assert.ok(
+      contributed.includes("totonoeLog.showInteractiveView"),
+      "the replacement for all of the above should remain"
     );
   });
 });
@@ -826,91 +834,6 @@ suite("Totonoe Log copy masked text", () => {
     } finally {
       await config.update("maskHost", undefined, vscode.ConfigurationTarget.Global);
     }
-  });
-});
-
-suite("Totonoe Log collapsed view", () => {
-  test("registers the showCollapsedView command", async () => {
-    const extension = vscode.extensions.getExtension("upu.totonoe-log");
-    await extension!.activate();
-
-    const commands = await vscode.commands.getCommands(true);
-    assert.ok(
-      commands.includes("totonoeLog.showCollapsedView"),
-      "totonoeLog.showCollapsedView command should be registered"
-    );
-  });
-
-  test("collapses repeated entries into a single line annotated with the repeat count", async () => {
-    const extension = vscode.extensions.getExtension("upu.totonoe-log");
-    await extension!.activate();
-
-    const source = await vscode.workspace.openTextDocument({
-      content: [
-        "2024-01-02T03:04:05Z INFO connect ok",
-        "2024-01-02T03:04:06Z INFO connect ok",
-        "2024-01-02T03:04:07Z INFO connect ok",
-      ].join("\n"),
-      language: "log",
-    });
-    await vscode.window.showTextDocument(source);
-
-    await vscode.commands.executeCommand("totonoeLog.showCollapsedView");
-
-    const activeEditor = vscode.window.activeTextEditor;
-    assert.ok(activeEditor, "a collapsed view editor should be shown");
-    assert.strictEqual(activeEditor!.document.uri.scheme, "totonoe-log-normalized");
-    assert.strictEqual(
-      activeEditor!.document.getText(),
-      "1-3 | 2024-01-02T03:04:05.000Z 〜 2024-01-02T03:04:07.000Z INFO connect ok (×3)"
-    );
-  });
-
-  test("respects the totonoeLog.collapse.threshold setting", async function () {
-    this.timeout(10000);
-    const extension = vscode.extensions.getExtension("upu.totonoe-log");
-    await extension!.activate();
-
-    const config = vscode.workspace.getConfiguration("totonoeLog.collapse");
-    await config.update("threshold", 5, vscode.ConfigurationTarget.Global);
-
-    try {
-      const source = await vscode.workspace.openTextDocument({
-        content: [
-          "2024-01-02T03:04:05Z INFO connect ok",
-          "2024-01-02T03:04:06Z INFO connect ok",
-          "2024-01-02T03:04:07Z INFO connect ok",
-        ].join("\n"),
-        language: "log",
-      });
-      await vscode.window.showTextDocument(source);
-
-      await vscode.commands.executeCommand("totonoeLog.showCollapsedView");
-
-      const activeEditor = vscode.window.activeTextEditor;
-      assert.ok(activeEditor, "a collapsed view editor should be shown");
-      assert.strictEqual(
-        activeEditor!.document.getText(),
-        [
-          "1 | 2024-01-02T03:04:05.000Z INFO connect ok",
-          "2 | 2024-01-02T03:04:06.000Z INFO connect ok",
-          "3 | 2024-01-02T03:04:07.000Z INFO connect ok",
-        ].join("\n")
-      );
-    } finally {
-      await config.update("threshold", undefined, vscode.ConfigurationTarget.Global);
-    }
-  });
-
-  test("shows a warning when there is no active editor to collapse", async () => {
-    const extension = vscode.extensions.getExtension("upu.totonoe-log");
-    await extension!.activate();
-
-    await vscode.commands.executeCommand("workbench.action.closeAllEditors");
-
-    await assert.doesNotReject(async () => {
-      await vscode.commands.executeCommand("totonoeLog.showCollapsedView");
-    });
   });
 });
 
@@ -1904,10 +1827,7 @@ suite("Totonoe Log virtual document guard", () => {
     const normalizedUri = vscode.window.activeTextEditor?.document.uri.toString();
     assert.strictEqual(vscode.window.activeTextEditor?.document.uri.scheme, "totonoe-log-normalized");
 
-    const guardedCommands = [
-      "totonoeLog.showNormalizedViewFiltered",
-      "totonoeLog.showCollapsedView",
-    ];
+    const guardedCommands = ["totonoeLog.showNormalizedViewFiltered"];
 
     const originalShowWarningMessage = vscode.window.showWarningMessage;
     // 絞り込み系コマンドはガードで早期リターンする前提だが、万一ガードが
@@ -1945,7 +1865,7 @@ suite("Totonoe Log virtual document guard", () => {
     }
   });
 
-  test("copyMaskedText warns and leaves the clipboard untouched when a collapsed view is active", async () => {
+  test("copyMaskedText warns and leaves the clipboard untouched when a normalized view is active", async () => {
     const extension = vscode.extensions.getExtension("upu.totonoe-log");
     await extension!.activate();
 
@@ -1960,7 +1880,7 @@ suite("Totonoe Log virtual document guard", () => {
     await vscode.window.showTextDocument(source);
     await vscode.commands.executeCommand("workbench.action.closeOtherEditors");
 
-    await vscode.commands.executeCommand("totonoeLog.showCollapsedView");
+    await vscode.commands.executeCommand("totonoeLog.showNormalizedView");
     assert.strictEqual(vscode.window.activeTextEditor?.document.uri.scheme, "totonoe-log-normalized");
 
     const sentinel = "sentinel-before-guarded-copy";
@@ -1981,7 +1901,7 @@ suite("Totonoe Log virtual document guard", () => {
 
     assert.ok(
       warningMessage?.includes("元のログファイルに対して実行してください"),
-      "a warning should be shown when copying from a collapsed view"
+      "a warning should be shown when copying from a virtual view"
     );
     assert.strictEqual(
       await vscode.env.clipboard.readText(),
@@ -2689,23 +2609,6 @@ suite("Totonoe Log low timestamp recognition warning", () => {
     });
   });
 
-  test("warns via the collapsed view too (derived views share the check)", async () => {
-    const extension = vscode.extensions.getExtension("upu.totonoe-log");
-    await extension!.activate();
-
-    await withTempLogFiles([{ name: "collapsed-source.log", content: UNRECOGNIZED_LOG }], async (uris) => {
-      const source = await vscode.workspace.openTextDocument(uris[0]);
-      await vscode.window.showTextDocument(source);
-
-      const warnings = await collectRecognitionWarningsWhile(async () => {
-        await vscode.commands.executeCommand("totonoeLog.showCollapsedView");
-      });
-
-      assert.strictEqual(warnings.length, 1);
-      assert.ok(warnings[0].includes("collapsed-source.log"));
-    });
-  });
-
   test("warns per file in the merged view, only for files with low recognition", async () => {
     const extension = vscode.extensions.getExtension("upu.totonoe-log");
     await extension!.activate();
@@ -2869,37 +2772,6 @@ suite("Totonoe Log go to source line (#137)", () => {
       await vscode.commands.executeCommand("workbench.action.closeAllEditors");
       await fs.rm(tempDir, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 });
     }
-  });
-
-  test("jumps from a collapsed group header to the range start line", async function () {
-    this.timeout(10000);
-    const extension = vscode.extensions.getExtension("upu.totonoe-log");
-    await extension!.activate();
-
-    const source = await vscode.workspace.openTextDocument({
-      content: [
-        "2024-01-02T03:04:05Z INFO connect ok",
-        "2024-01-02T03:04:06Z INFO connect ok",
-        "2024-01-02T03:04:07Z INFO connect ok",
-        "2024-01-02T03:04:08Z ERROR tail",
-      ].join("\n"),
-      language: "log",
-    });
-    await vscode.window.showTextDocument(source);
-
-    await vscode.commands.executeCommand("totonoeLog.showCollapsedView");
-
-    const viewEditor = vscode.window.activeTextEditor;
-    assert.ok(viewEditor, "a collapsed view editor should be shown");
-    // 表示1行目は「1-3」の折りたたみグループ見出し行＝範囲開始行（物理1行目）へ移動する。
-    viewEditor!.selection = new vscode.Selection(0, 0, 0, 0);
-
-    await vscode.commands.executeCommand("totonoeLog.goToSourceLine");
-
-    const activeEditor = vscode.window.activeTextEditor;
-    assert.ok(activeEditor, "the source editor should be shown");
-    assert.strictEqual(activeEditor!.document.uri.toString(), source.uri.toString());
-    assert.strictEqual(activeEditor!.selection.start.line, 0);
   });
 
   test("stays on the view without navigating when the cursor is on a gap marker line", async function () {

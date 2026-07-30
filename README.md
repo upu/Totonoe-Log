@@ -107,7 +107,7 @@ Logs from servers in different timezones, or from a host whose clock is off, can
 
 ## Collapse repeated lines
 
-`Totonoe Log: Show Collapsed View` folds consecutive repeated patterns into a single line with a repeat count (e.g. "×5"), so repetitive noise stops burying the interesting entries (threshold configurable with `totonoeLog.collapse.threshold`). Each collapsed line also shows the group's timestamp span (start 〜 end), so you can tell a burst that happened in seconds from one spread over hours without expanding the group.
+The Interactive View folds consecutive repeated patterns into a single line with a repeat count (e.g. "×5"), so repetitive noise stops burying the interesting entries (threshold configurable with `totonoeLog.collapse.threshold`). Each collapsed line also shows the group's timestamp span (start 〜 end), so you can tell a burst that happened in seconds from one spread over hours without expanding the group. It is on by default — untick "繰り返しを折りたたむ" to see every line — and it applies to the merged display too, which is where it earns the most. Click a group's header to expand it in place, or use "Export as Virtual Document" to get the folded result as a read-only document you can search and diff.
 
 ## Compare two logs
 
@@ -217,7 +217,7 @@ All settings live under the `totonoeLog` namespace.
 | Setting | Type | Default | Description |
 | --- | --- | --- | --- |
 | `totonoeLog.gap.thresholdSeconds` | number | `30` | Insert a "XX seconds of silence" separator line in `Show Normalized View` and the merged view (`Merge Selected Files` and their filtered variants) when the timestamp gap between consecutive entries is at least this many seconds. `0` disables it. |
-| `totonoeLog.collapse.threshold` | number | `3` | How many consecutive repeats it takes before `Show Collapsed View` folds them into one line. |
+| `totonoeLog.collapse.threshold` | number | `3` | How many consecutive repeats it takes before the Interactive View folds them into one line. |
 | `totonoeLog.interactiveView.maxDisplayLines` | number | `20000` | Maximum number of lines `Show Interactive View` renders at once. Beyond this, only the leading lines are rendered and a notice suggests narrowing the filters or opening the whole log with "Export as Virtual Document". `0` disables the cap. |
 | `totonoeLog.copyMasked.maskTimestamp` | boolean | `true` | Mask timestamps when running `Copy Masked Text`. |
 | `totonoeLog.copyMasked.maskHost` | boolean | `true` | Mask IPv4/IPv6 addresses — and the hostname token of lines recognized as syslog format (not arbitrary hostnames in general) — when running `Copy Masked Text`. |

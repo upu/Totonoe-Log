@@ -107,7 +107,7 @@ Interactive View の **ハイライト ▾** ボタンを押すと、ルール�
 
 ## 繰り返しを折りたたむ
 
-`Totonoe Log: Show Collapsed View` は、連続する繰り返しパターンを繰り返し回数付きの1行（例: 「×5」）に折りたたみ、繰り返しのノイズが肝心のエントリを埋もれさせないようにします（しきい値は `totonoeLog.collapse.threshold` で調整可能）。折りたたんだ各行には、グループの開始〜終了タイムスタンプ（時間スパン）も表示されるため、グループを展開しなくても数秒間のバーストと数時間かけて起きた繰り返しを見分けられます。
+Interactive View は、連続する繰り返しパターンを繰り返し回数付きの1行（例: 「×5」）に折りたたみ、繰り返しのノイズが肝心のエントリを埋もれさせないようにします（しきい値は `totonoeLog.collapse.threshold` で調整可能）。折りたたんだ各行には、グループの開始〜終了タイムスタンプ（時間スパン）も表示されるため、グループを展開しなくても数秒間のバーストと数時間かけて起きた繰り返しを見分けられます。既定でONなので、全ての行を見たいときは「繰り返しを折りたたむ」のチェックを外してください。マージ表示でも効き、むしろそちらが本領です。グループの見出しをクリックすればその場で展開でき、「Export as Virtual Document」で折りたたんだ結果を読み取り専用ドキュメントとして書き出せば、検索や差分比較にも使えます。
 
 ## 2つのログを比較する
 
@@ -215,7 +215,7 @@ code --install-extension totonoe-log.vsix
 | 設定 | 型 | 既定値 | 説明 |
 | --- | --- | --- | --- |
 | `totonoeLog.gap.thresholdSeconds` | number | `30` | `Show Normalized View` とマージビュー（`Merge Selected Files` とそれぞれの絞り込み系コマンド）で、連続するエントリのタイムスタンプ差がこの秒数以上のときに「XX秒の空白」の区切り行を挿入する。`0` で無効化。 |
-| `totonoeLog.collapse.threshold` | number | `3` | `Show Collapsed View` で、何回以上連続で繰り返されたら1行に折りたたむかのしきい値。 |
+| `totonoeLog.collapse.threshold` | number | `3` | Interactive View で、何回以上連続で繰り返されたら1行に折りたたむかのしきい値。 |
 | `totonoeLog.interactiveView.maxDisplayLines` | number | `20000` | `Show Interactive View` が一度に描画する行数の上限。超えた場合は先頭のみを描画し、絞り込むか「Export as Virtual Document」で全体を開くよう案内する。`0` で無効化。 |
 | `totonoeLog.copyMasked.maskTimestamp` | boolean | `true` | `Copy Masked Text` 実行時にタイムスタンプをマスクする。 |
 | `totonoeLog.copyMasked.maskHost` | boolean | `true` | `Copy Masked Text` 実行時に IPv4/IPv6 アドレスと、syslog 形式として認識できた行のホスト名トークンをマスクする（任意の形式のホスト名全般ではない）。 |
