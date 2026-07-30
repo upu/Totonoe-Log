@@ -26,7 +26,7 @@ suite("Totonoe Log extension", () => {
     );
   });
 
-  test("no longer offers the per-criterion filter commands (#184)", async () => {
+  test("no longer offers the commands the Interactive View replaced (#184, #233)", async () => {
     const extension = vscode.extensions.getExtension("upu.totonoe-log");
     await extension!.activate();
 
@@ -56,6 +56,10 @@ suite("Totonoe Log extension", () => {
     assert.ok(
       contributed.includes("totonoeLog.showNormalizedViewFiltered"),
       "the combined picker command should remain"
+    );
+    assert.ok(
+      contributed.includes("totonoeLog.showInteractiveView"),
+      "the replacement for all of the above should remain"
     );
   });
 });
