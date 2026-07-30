@@ -27,6 +27,7 @@ import {
   isFileIndexVisible,
   SINGLE_FILE_INDEX,
   assessTimestampRecognition,
+  assessTimestampRecognitionByFile,
   LOW_RECOGNITION_MIN_LINE_COUNT,
   LOW_RECOGNITION_RATIO_THRESHOLD,
   parseUtcOffsetMinutes,
@@ -3294,6 +3295,60 @@ suite("normalize / assessTimestampRecognition", () => {
     assert.strictEqual(result.unrecognizedLineCount, 0);
     assert.strictEqual(result.unrecognizedRatio, 0);
     assert.strictEqual(result.shouldWarn, false);
+  });
+});
+
+suite("normalize / assessTimestampRecognitionByFile (#186)", () => {
+  /** タイムスタンプを含まないプレーンな行（警告条件を満たす12行）。 */
+  const UNRECOGNIZED_LOG = Array.from({ length: 12 }, (_, i) => `plain line ${i + 1}`).join("\n");
+
+  /** 全行が ISO 8601 タイムスタンプ付きの正常なログ（12行）。 */
+  const RECOGNIZED_LOG = Array.from(
+    { length: 12 },
+    (_, i) => `2024-01-02T03:04:${String(i).padStart(2, "0")}Z INFO line ${i + 1}`
+  ).join("\n");
+
+  test("assesses each source file separately, so only the unrecognized one warns", () => {
+    const merged = mergeLogFiles([
+      { fileName: "bad.log", text: UNRECOGNIZED_LOG },
+      { fileName: "good.log", text: RECOGNIZED_LOG },
+    ]);
+
+    const assessments = assessTimestampRecognitionByFile(merged, 2);
+
+    assert.strictEqual(assessments.length, 2);
+    assert.strictEqual(assessments[0].shouldWarn, true);
+    assert.strictEqual(assessments[0].unrecognizedRatio, 1);
+    assert.strictEqual(assessments[1].shouldWarn, false);
+  });
+
+  test("keeps same-named files in different folders apart (#137 と同じ fileIndex 基準)", () => {
+    const merged = mergeLogFiles([
+      { fileName: "app.log", text: RECOGNIZED_LOG },
+      { fileName: "app.log", text: UNRECOGNIZED_LOG },
+    ]);
+
+    const assessments = assessTimestampRecognitionByFile(merged, 2);
+
+    assert.strictEqual(assessments[0].shouldWarn, false);
+    assert.strictEqual(assessments[1].shouldWarn, true);
+  });
+
+  test("returns a non-warning assessment for a file that contributed no entry", () => {
+    const merged = mergeLogFiles([
+      { fileName: "only.log", text: RECOGNIZED_LOG },
+      { fileName: "empty.log", text: "" },
+    ]);
+
+    const assessments = assessTimestampRecognitionByFile(merged, 2);
+
+    assert.strictEqual(assessments.length, 2);
+    assert.strictEqual(assessments[1].totalLineCount, 0);
+    assert.strictEqual(assessments[1].shouldWarn, false);
+  });
+
+  test("returns an empty list when nothing is loaded", () => {
+    assert.deepStrictEqual(assessTimestampRecognitionByFile([], 0), []);
   });
 });
 

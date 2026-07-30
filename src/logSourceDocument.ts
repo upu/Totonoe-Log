@@ -41,23 +41,25 @@ export function getSourceDocumentOrWarn(actionLabel: string): vscode.TextDocumen
  * まとめる。
  */
 export function parseSourceLog(sourceDocument: vscode.TextDocument): LogEntry[] {
-  return parseLogFileInput(buildLogFileInputFromDocument(sourceDocument), sourceDocument.uri);
+  const entries = parseLogFileEntries(buildLogFileInputFromDocument(sourceDocument));
+  warnIfLowTimestampRecognition(sourceDocument.uri, entries);
+  return entries;
 }
 
 /**
- * {@link parseSourceLog} と同じ手順（設定反映済みフォーマット・ソースオフセット・
- * クロックスキュー補正・認識率の警告）を、既に読み込み済みの
- * {@link LogFileInput} に対して行う（issue #181）。エクスプローラから選んだ
- * ファイルはエディタで開かれていないため `TextDocument` を用意できず、
- * ディスクから読んだ入力をそのままパースする経路が必要になる。
+ * 既に読み込み済みの {@link LogFileInput} を、{@link parseSourceLog} と同じ設定
+ * （設定反映済みフォーマット・ソースオフセット・クロックスキュー補正）で
+ * パースする（issue #181）。エクスプローラから選んだファイルはエディタで
+ * 開かれていないため `TextDocument` を用意できず、ディスクから読んだ入力を
+ * そのままパースする経路が必要になる。
  *
- * `uri` は認識率の警告表示（issue #101）で対象ファイルを示すためだけに使う。
+ * 認識率の警告（issue #101）はここでは出さない——Interactive View は
+ * パネル内の警告行にまとめて出す（issue #186）ため、パース経路で通知まで
+ * 済ませてしまうと同じ内容が二重に伝わる。
  */
-export function parseLogFileInput(input: LogFileInput, uri: vscode.Uri): LogEntry[] {
+export function parseLogFileEntries(input: LogFileInput): LogEntry[] {
   const parsedEntries = parseLogWithConfiguredFormats(input.text, input.sourceUtcOffsetMinutes);
-  const entries = applyClockSkew(parsedEntries, input.clockSkewMs ?? 0);
-  warnIfLowTimestampRecognition(uri, entries);
-  return entries;
+  return applyClockSkew(parsedEntries, input.clockSkewMs ?? 0);
 }
 
 /**

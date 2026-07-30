@@ -22,6 +22,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- `Totonoe Log: Show Interactive View` now reports a low timestamp recognition
+  rate for every loaded file, including the ones added later with
+  **+ Add Files...** — previously only the file the panel was opened with was
+  checked, so adding a log in a format the built-ins don't recognize gave you
+  no hint that it had been folded into one huge entry. The report appears in
+  the panel's warning line rather than as a modal notification, so it stays
+  visible while the file is loaded and disappears once you add a matching
+  `totonoeLog.timestampFormats` entry or drop the file (issue #186).
+
 - `Totonoe Log: Show Interactive View` now collapses repeated entries in the
   merged display too, not just while a single file is loaded — the case where
   it helps most, since merging several servers multiplies a repeated heartbeat

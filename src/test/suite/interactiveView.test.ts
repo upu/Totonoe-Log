@@ -8,7 +8,7 @@ import {
   resolveIncomingCriteria,
   toFilterCriteria,
 } from "../../interactiveViewCriteria";
-import { mergeLogFiles, parseLog } from "../../normalize";
+import { assessTimestampRecognition, mergeLogFiles, parseLog } from "../../normalize";
 import {
   normalizeFileVisibility,
   removeFileVisibilityAt,
@@ -16,6 +16,7 @@ import {
   toVisibleFileIndices,
 } from "../../interactiveViewFiles";
 import { parseWebviewLineSource } from "../../interactiveViewContext";
+import { buildLowTimestampRecognitionWarnings } from "../../timestampRecognitionWarning";
 import { classifyInteractiveViewConfigChange } from "../../interactiveViewConfigWatch";
 import {
   resolveHighlightRulesTarget,
@@ -568,6 +569,94 @@ suite("interactiveViewContext / parseWebviewLineSource (#191)", () => {
       undefined
     );
     assert.strictEqual(parseWebviewLineSource({ lineSource: { fileIndex: "0", line: "1" } }), undefined);
+  });
+});
+
+suite("timestampRecognitionWarning / buildLowTimestampRecognitionWarnings (#186)", () => {
+  /** タイムスタンプを含まないプレーンな行（警告条件を満たす12行）。 */
+  const UNRECOGNIZED_LOG = Array.from({ length: 12 }, (_, i) => `plain line ${i + 1}`).join("\n");
+
+  /** 全行が ISO 8601 タイムスタンプ付きの正常なログ（12行）。 */
+  const RECOGNIZED_LOG = Array.from(
+    { length: 12 },
+    (_, i) => `2024-01-02T03:04:${String(i).padStart(2, "0")}Z INFO line ${i + 1}`
+  ).join("\n");
+
+  /** 認識済みの行の後で未対応形式へ切り替わるログ（形式切替の兆候を満たす）。 */
+  const SWITCHED_FORMAT_LOG = [
+    "2024-01-02T03:04:00Z INFO recognized",
+    ...Array.from(
+      { length: 11 },
+      (_, i) => `02.01.2024 03:04:${String(i).padStart(2, "0")} INFO switched format`
+    ),
+  ].join("\n");
+
+  function assess(text: string) {
+    return assessTimestampRecognition(parseLog(text));
+  }
+
+  test("stays silent when every file's timestamps were recognized", () => {
+    const warnings = buildLowTimestampRecognitionWarnings(
+      ["a.log", "b.log"],
+      [assess(RECOGNIZED_LOG), assess(RECOGNIZED_LOG)]
+    );
+
+    assert.deepStrictEqual(warnings, []);
+  });
+
+  test("names the file, its ratio, and the custom format setting", () => {
+    const warnings = buildLowTimestampRecognitionWarnings(
+      ["bad.log"],
+      [assess(UNRECOGNIZED_LOG)]
+    );
+
+    assert.strictEqual(warnings.length, 1);
+    assert.ok(warnings[0].includes("bad.log"), "the warning should name the file");
+    assert.ok(warnings[0].includes("100%"), "the warning should report the unrecognized ratio");
+    assert.ok(
+      warnings[0].includes("totonoeLog.timestampFormats"),
+      "the warning should point to the custom format setting"
+    );
+  });
+
+  test("warns once per low-recognition file, leaving the recognized ones out", () => {
+    const warnings = buildLowTimestampRecognitionWarnings(
+      ["bad.log", "good.log", "also-bad.log"],
+      [assess(UNRECOGNIZED_LOG), assess(RECOGNIZED_LOG), assess(UNRECOGNIZED_LOG)]
+    );
+
+    assert.strictEqual(warnings.length, 2);
+    assert.ok(warnings[0].includes("bad.log"));
+    assert.ok(warnings[1].includes("also-bad.log"));
+    assert.ok(
+      warnings.every((warning) => !warning.includes("good.log")),
+      "a file whose timestamps were recognized should not appear"
+    );
+  });
+
+  test("uses the format-switch wording when an unsupported format took over", () => {
+    const warnings = buildLowTimestampRecognitionWarnings(
+      ["switched.log"],
+      [assess(SWITCHED_FORMAT_LOG)]
+    );
+
+    assert.strictEqual(warnings.length, 1);
+    assert.ok(warnings[0].includes("switched.log"));
+    assert.ok(
+      warnings[0].includes("未対応のタイムスタンプ形式で始まっている可能性があります"),
+      "the format-switch warning should describe the suspicious lines"
+    );
+  });
+
+  test("is not suppressed after the same file was warned about once (表示状態のため)", () => {
+    // モーダル通知（`warnIfLowTimestampRecognition`）はセッション中1回に抑えるが、
+    // パネル内の警告行は再描画のたびに作り直す表示状態なので、同じファイルでも
+    // 読み込まれている限り出し続ける。
+    const first = buildLowTimestampRecognitionWarnings(["bad.log"], [assess(UNRECOGNIZED_LOG)]);
+    const second = buildLowTimestampRecognitionWarnings(["bad.log"], [assess(UNRECOGNIZED_LOG)]);
+
+    assert.deepStrictEqual(second, first);
+    assert.strictEqual(second.length, 1);
   });
 });
 
