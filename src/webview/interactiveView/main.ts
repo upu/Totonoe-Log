@@ -289,6 +289,19 @@ highlightOptionsButton.addEventListener("click", () => {
   setHighlightPanelExpanded(highlightOptionsButton.getAttribute("aria-expanded") !== "true");
 });
 
+// 編集中に届いて保留したルールを、パネルからフォーカスが抜けた時点で反映する。
+highlightPanel.addEventListener("focusout", (event) => {
+  // パネル内での移動（欄から欄へ）はまだ編集中なので何もしない。
+  if (event.relatedTarget instanceof Node && highlightPanel.contains(event.relatedTarget)) {
+    return;
+  }
+  if (pendingHighlightRules) {
+    const rules = pendingHighlightRules;
+    pendingHighlightRules = undefined;
+    applyHighlightRules(rules);
+  }
+});
+
 // 追加した空の行は、パターンが空なので設定には書かれない（拡張機能側が落とす）。
 // それでも送るのは、他の行の編集で送り直したときに行数が合うようにするため。
 addHighlightRuleButton.addEventListener("click", () => {
@@ -450,9 +463,21 @@ function createHighlightRuleRow(rule: HighlightRuleRow): HTMLElement {
  */
 function renderHighlightRules(rules: readonly HighlightRuleRow[]): void {
   if (highlightPanel.contains(document.activeElement)) {
+    // 届いた内容は覚えておき、フォーカスが外れた時点で反映する。捨ててしまうと
+    // 「合わせ直す」機会が次の state まで来ず、設定に無い行（打ち終えていない
+    // 空行など）が残ったままになる。
+    pendingHighlightRules = rules;
     return;
   }
 
+  pendingHighlightRules = undefined;
+  applyHighlightRules(rules);
+}
+
+/** 直近に届いた、フォーカスが外れてから反映するルール（issue #238）。 */
+let pendingHighlightRules: readonly HighlightRuleRow[] | undefined;
+
+function applyHighlightRules(rules: readonly HighlightRuleRow[]): void {
   const rows = highlightRuleList.querySelectorAll<HTMLElement>(".highlight-rule-row");
 
   if (rows.length !== rules.length) {
