@@ -7,6 +7,7 @@ import { filterMergedEntriesByFileIndex } from "./filterByFile";
 import type { FilterCriteria } from "./filterEntries";
 import { applyMaskPatternsToMergedEntries } from "./maskByPattern";
 import { formatMergedLogWithLineSources } from "./formatMergedLog";
+import { buildInteractiveMergedCollapsedLines } from "./buildInteractiveCollapsedLines";
 
 /** entries の物理行数（メッセージの継続行込み）を数える。 */
 function countPhysicalLines(entries: readonly LogEntry[]): number {
@@ -52,10 +53,21 @@ export async function buildInteractiveMergedPayload(
     mask: options.mask,
   });
 
+  // 折りたたみ表示も単一ファイル側と同じく、展開表示のテキストと併せて返す
+  // （issue #158）。Webview は `items` があればそちらを描く。
+  const items = options.collapseThreshold !== undefined
+    ? buildInteractiveMergedCollapsedLines(masked.entries, {
+        threshold: options.collapseThreshold,
+        displayTimezone: options.displayTimezone,
+        mask: options.mask,
+      })
+    : undefined;
+
   return {
     ok: true,
     text: formatted.text,
     lineSources: formatted.lineSources,
+    items,
     distinctSeverities,
     totalLineCount: countPhysicalLines(mergedEntries.map((merged) => merged.entry)),
     visibleLineCount: countPhysicalLines(filterResult.entries.map((merged) => merged.entry)),

@@ -90,7 +90,13 @@ export type {
   InteractiveDisplayItem,
   BuildInteractiveCollapsedLinesOptions,
 } from "./buildInteractiveCollapsedLines";
-export { buildInteractiveCollapsedLines } from "./buildInteractiveCollapsedLines";
+export {
+  buildInteractiveCollapsedLines,
+  buildInteractiveMergedCollapsedLines,
+  toCollapsedFormattedLog,
+} from "./buildInteractiveCollapsedLines";
+export type { CollapsedMergedItem } from "./collapseMergedEntries";
+export { collapseRepeatedMergedEntries } from "./collapseMergedEntries";
 export type {
   BuildInteractiveExportTextOptions,
   InteractiveExportTextResult,

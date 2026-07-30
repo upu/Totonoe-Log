@@ -1,5 +1,11 @@
 import type { LogEntry } from "./types";
 import type { LineSource } from "./lineSources";
+import type { MergedEntry } from "./mergeLogFiles";
+import { SINGLE_FILE_INDEX } from "./filterByFile";
+import {
+  collapseRepeatedMergedEntries,
+  type CollapsedMergedItem,
+} from "./collapseMergedEntries";
 import { computeMaxLineNumber, formatGutter } from "./gutter";
 import { type DisplayTimezone } from "./timezone";
 import {
@@ -35,6 +41,17 @@ export type InteractiveDisplayItem =
       readonly headerText: string;
       readonly lines: readonly string[];
       readonly lineSources?: readonly LineSource[];
+      /**
+       * グループに含まれる由来ファイル（重複を除いた出現順、issue #158）。
+       * 見出しの列には代表1件しか出せないため、Webview 側がこれをホバー表示の
+       * フルパスへ解決して、展開せずに全ての由来を確かめられるようにする。
+       *
+       * ファイル名ではなくインデックスで持つのは、別フォルダの同名ファイルを
+       * 見分けるため（issue #137 が `fileName` ではなく `fileIndex` を使うのと
+       * 同じ理由）。パスの解決は読み込み済みファイルを知っている拡張機能本体側の
+       * 責務なので、ここでは持たない。
+       */
+      readonly headerFileIndices?: readonly number[];
     };
 
 /** {@link buildInteractiveCollapsedLines} の挙動を調整するオプション。 */
@@ -74,6 +91,18 @@ function computeGutterWidth(entries: readonly LogEntry[], items: readonly Collap
   return width;
 }
 
+/**
+ * 複数ファイルにまたがるグループの見出しガター（issue #158）。
+ *
+ * 行番号の範囲（`rangeLabel`）は使えない——由来ファイルが違えば行番号は同じ
+ * スケールではないため、`8-5` のように逆転した無意味なラベルになりうる。
+ * 代わりに代表1件（先頭エントリ）の行番号を出す。見出しが指す位置
+ * （`headerLineSource`）も先頭エントリなので、そちらとも一致する。
+ */
+function multiFileGroupGutterLabel(entries: readonly LogEntry[]): string {
+  return String(entries[0].startLine);
+}
+
 /** 整形済みの1行と、その行が由来する元ログ上の位置（issue #179）のペア。 */
 interface FormattedEntryLine {
   readonly text: string;
@@ -82,14 +111,19 @@ interface FormattedEntryLine {
 
 /**
  * 1エントリを {@link formatNormalizedLog} と同じ見た目（ガター＋タイムスタンプ
- * ＋severity＋継続行）に整形する。折りたたみ表示は単一ファイル読み込み中しか
- * 使わないため、`fileIndex` は常に 0 でよい。
+ * ＋severity＋継続行）に整形する。
+ *
+ * `fileIndex` と `columnPrefix` は、マージ表示（issue #158）でそれぞれ由来
+ * ファイルと「ファイル名 | 種別 |」の列を与えるためのもの。単一ファイル表示では
+ * `fileIndex` は常に 0、列は無い。
  */
 function formatEntryLines(
   entry: LogEntry,
   gutterWidth: number,
   displayTimezone: DisplayTimezone,
-  mask: DisplayMaskOptions | undefined
+  mask: DisplayMaskOptions | undefined,
+  fileIndex = SINGLE_FILE_INDEX,
+  columnPrefix = ""
 ): FormattedEntryLine[] {
   const messageLines = maskDisplayMessageLines(
     entry.message.split("\n"),
@@ -102,14 +136,14 @@ function formatEntryLines(
 
   const lines: FormattedEntryLine[] = [
     {
-      text: formatGutter(entry.startLine, gutterWidth) + headerText,
-      lineSource: { fileIndex: 0, line: entry.startLine },
+      text: columnPrefix + formatGutter(entry.startLine, gutterWidth) + headerText,
+      lineSource: { fileIndex, line: entry.startLine },
     },
   ];
   for (let i = 1; i < messageLines.length; i++) {
     lines.push({
-      text: formatGutter(entry.startLine + i, gutterWidth) + messageLines[i],
-      lineSource: { fileIndex: 0, line: entry.startLine + i },
+      text: columnPrefix + formatGutter(entry.startLine + i, gutterWidth) + messageLines[i],
+      lineSource: { fileIndex, line: entry.startLine + i },
     });
   }
   return lines;
@@ -137,7 +171,9 @@ function formatGroupHeaderText(
   entries: readonly LogEntry[],
   gutterWidth: number,
   displayTimezone: DisplayTimezone,
-  mask: DisplayMaskOptions | undefined
+  mask: DisplayMaskOptions | undefined,
+  columnPrefix = "",
+  gutterLabel = rangeLabel(entries)
 ): string {
   const first = entries[0];
   const messageLines = maskDisplayMessageLines(
@@ -152,7 +188,7 @@ function formatGroupHeaderText(
     ? `${headerTimestamp} ${first.severity ?? SEVERITY_PLACEHOLDER} ${messageLines[0]}${suffix}`
     : `${messageLines[0]}${suffix}`;
 
-  return formatGutter(rangeLabel(entries), gutterWidth) + headerText;
+  return columnPrefix + formatGutter(gutterLabel, gutterWidth) + headerText;
 }
 
 /**
@@ -194,4 +230,170 @@ export function buildInteractiveCollapsedLines(
     });
   }
   return result;
+}
+
+/** 複数ファイル由来のグループで、代表のファイル名/種別に添える印（issue #158）。 */
+const MULTIPLE_SOURCES_SUFFIX = " 他";
+
+/**
+ * グループの列に出す代表値を決める。代表1件しか出せない以上どれかに寄せる
+ * しかないが、単に先頭をそのまま出すと1ファイルのグループに見えてしまうため、
+ * 複数あるときは「先頭 + 他」にする（全ての由来は `headerFileIndices` から
+ * Webview 側がホバーで見せる）。
+ *
+ * ファイル名列の判定に値の一致ではなく `spansMultipleFiles` を使うのは、
+ * 別フォルダの同名ファイル（`app.log` が2つ等）でも「複数ある」と示すため。
+ * 種別列は値が実際に違うときだけ印を付ける——同じ種別なら「app 他」と書いても
+ * 情報が増えないため。
+ */
+function formatGroupColumnValue(values: readonly string[], spansMultipleFiles: boolean): string {
+  const first = values[0] ?? "";
+  return spansMultipleFiles ? `${first}${MULTIPLE_SOURCES_SUFFIX}` : first;
+}
+
+/** 重複を除いた出現順の一覧。 */
+function distinctInOrder<T>(values: readonly T[]): T[] {
+  return [...new Set(values)];
+}
+
+/**
+ * {@link buildInteractiveCollapsedLines} のマージ版（issue #158）。
+ * 単一ファイル表示と同じ折りたたみを、ファイル名/種別列付きのマージ表示でも
+ * 使えるようにする。
+ *
+ * 列幅はエントリ行だけでなくグループ見出しの代表値（「先頭 + 他」）も含めて
+ * 求める。見出しだけ列がはみ出すと、折りたたみを開いた瞬間に桁がずれるため。
+ *
+ * グルーピングが由来ファイルを区別しない理由は
+ * {@link collapseRepeatedMergedEntries} 参照。
+ */
+export function buildInteractiveMergedCollapsedLines(
+  mergedEntries: readonly MergedEntry[],
+  options: BuildInteractiveCollapsedLinesOptions = {}
+): readonly InteractiveDisplayItem[] {
+  const displayTimezone = options.displayTimezone ?? 0;
+  const items = collapseRepeatedMergedEntries(mergedEntries, {
+    threshold: options.threshold ?? DEFAULT_COLLAPSE_THRESHOLD,
+  });
+
+  // 列に載りうる値（各行の値と、グループ見出しの代表値）を全て集めてから幅を決める。
+  const fileNameCandidates: string[] = mergedEntries.map((merged) => merged.fileName);
+  const kindCandidates: string[] = mergedEntries.map((merged) => merged.kind);
+  for (const item of items) {
+    if (item.kind === "group") {
+      const spansMultipleFiles =
+        distinctInOrder(item.entries.map((merged) => merged.fileIndex)).length > 1;
+      const kinds = item.entries.map((merged) => merged.kind);
+      fileNameCandidates.push(
+        formatGroupColumnValue(item.entries.map((merged) => merged.fileName), spansMultipleFiles)
+      );
+      kindCandidates.push(
+        formatGroupColumnValue(kinds, kinds.some((kind) => kind !== kinds[0]))
+      );
+    }
+  }
+  const fileNameWidth = fileNameCandidates.reduce((max, value) => Math.max(max, value.length), 0);
+  const kindWidth = kindCandidates.reduce((max, value) => Math.max(max, value.length), 0);
+  const columnPrefixOf = (fileName: string, kind: string): string =>
+    `${fileName.padEnd(fileNameWidth)} | ${kind.padEnd(kindWidth)} | `;
+
+  // 見出しガターは、グループが1ファイルに収まっているときだけ行番号の範囲に
+  // できる（複数ファイルにまたがる場合の理由は multiFileGroupGutterLabel 参照）。
+  const gutterLabelOf = (item: Extract<CollapsedMergedItem, { kind: "group" }>): string => {
+    const entries = item.entries.map((merged) => merged.entry);
+    return distinctInOrder(item.entries.map((merged) => merged.fileIndex)).length > 1
+      ? multiFileGroupGutterLabel(entries)
+      : rangeLabel(entries);
+  };
+
+  let gutterWidth = String(
+    computeMaxLineNumber(mergedEntries.map((merged) => merged.entry))
+  ).length;
+  for (const item of items) {
+    if (item.kind === "group") {
+      gutterWidth = Math.max(gutterWidth, gutterLabelOf(item).length);
+    }
+  }
+
+  const result: InteractiveDisplayItem[] = [];
+  for (const item of items) {
+    if (item.kind === "single") {
+      const { entry, fileName, kind, fileIndex } = item.merged;
+      for (const { text, lineSource } of formatEntryLines(
+        entry,
+        gutterWidth,
+        displayTimezone,
+        options.mask,
+        fileIndex,
+        columnPrefixOf(fileName, kind)
+      )) {
+        result.push({ kind: "line", text, lineSource });
+      }
+      continue;
+    }
+
+    const entries = item.entries.map((merged) => merged.entry);
+    const groupLines = item.entries.flatMap((merged) =>
+      formatEntryLines(
+        merged.entry,
+        gutterWidth,
+        displayTimezone,
+        options.mask,
+        merged.fileIndex,
+        columnPrefixOf(merged.fileName, merged.kind)
+      )
+    );
+    const fileIndices = distinctInOrder(item.entries.map((merged) => merged.fileIndex));
+    const kinds = item.entries.map((merged) => merged.kind);
+    result.push({
+      kind: "group",
+      headerText: formatGroupHeaderText(
+        entries,
+        gutterWidth,
+        displayTimezone,
+        options.mask,
+        columnPrefixOf(
+          formatGroupColumnValue(
+            item.entries.map((merged) => merged.fileName),
+            fileIndices.length > 1
+          ),
+          formatGroupColumnValue(kinds, kinds.some((kind) => kind !== kinds[0]))
+        ),
+        gutterLabelOf(item)
+      ),
+      headerFileIndices: fileIndices,
+      lines: groupLines.map((line) => line.text),
+      lineSources: groupLines.map((line) => line.lineSource),
+    });
+  }
+  return result;
+}
+
+/**
+ * 折りたたみ表示の表示単位を、書き出し用のテキストと行対応へ畳む（issue #158）。
+ * グループは見出し1行だけにする——展開状態は Webview 内のローカルな状態
+ * （issue #172）で、書き出しは「折りたたまれた状態」を写すため。
+ *
+ * 表示と同じ組み立てを通すことで、「書き出しは表示の状態を引き継ぐ」
+ * （issue #175）が別実装の食い違いではなく構造として保証される。
+ */
+export function toCollapsedFormattedLog(
+  items: readonly InteractiveDisplayItem[]
+): { readonly text: string; readonly lineSources: readonly (LineSource | undefined)[] } {
+  const lines: string[] = [];
+  const lineSources: (LineSource | undefined)[] = [];
+  for (const item of items) {
+    if (item.kind === "line") {
+      lines.push(item.text);
+      lineSources.push(item.lineSource);
+      continue;
+    }
+    lines.push(item.headerText);
+    // 見出しはグループの範囲の入口、つまり先頭エントリの1行目に対応づける
+    // （`formatCollapsedLogWithLineSources` と同じ扱い）。`lines` と同じ並びの
+    // `lineSources` の先頭がちょうどそれなので、別のフィールドとして重複して
+    // 持たない。
+    lineSources.push(item.lineSources?.[0]);
+  }
+  return { text: lines.join("\n"), lineSources };
 }

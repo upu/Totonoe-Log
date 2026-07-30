@@ -10,6 +10,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- `Totonoe Log: Show Interactive View` now collapses repeated entries in the
+  merged display too, not just while a single file is loaded — the case where
+  it helps most, since merging several servers multiplies a repeated heartbeat
+  by the number of files. Repeats are folded together regardless of which file
+  they came from: after merging, the servers' lines alternate in time order, so
+  grouping per file would find almost nothing consecutive to fold. A group
+  header spanning several files names the first one with a "他" and lists them
+  all on hover. "Export as Virtual Document" carries the collapsed state over,
+  and `Go to Source Line` from a collapsed group still lands in the right file
+  (issue #158).
+
 - A **ハイライト ▾** panel in `Totonoe Log: Show Interactive View` for editing
   the highlight rules without hand-writing JSON: add a row, type a pattern,
   pick a color from a dropdown, reorder with ▲▼ (the order is the overlap

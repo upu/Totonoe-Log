@@ -734,6 +734,16 @@ function appendGroupItem(item: Extract<DisplayItem, { kind: "group" }>): void {
   collapsedRow.className = "collapse-group-header";
   collapsedRow.setAttribute("role", "button");
   collapsedRow.tabIndex = 0;
+  // マージ表示のグループは見出しの列に代表1件しか出せないため、全ての由来を
+  // ホバーで見せる（issue #158）。行のホバー（issue #179）と同じくフルパスに
+  // するのは、別フォルダの同名ファイルを見分けられるようにするため。
+  // 折りたたんだ状態にだけ付けるのは、展開すれば各行にファイル名が並ぶため。
+  const headerFilePaths = item.headerFileIndices
+    ?.map((fileIndex) => sourceFilePaths[fileIndex])
+    .filter((filePath): filePath is string => filePath !== undefined);
+  if (headerFilePaths && headerFilePaths.length > 0) {
+    collapsedRow.title = `由来ファイル:\n${headerFilePaths.join("\n")}`;
+  }
   appendDecoratedText(collapsedRow, item.headerText, COLLAPSED_PREFIX, "\n");
 
   const expandedFirstRow = document.createElement("span");

@@ -575,8 +575,8 @@ export class InteractiveViewPanelController implements vscode.Disposable {
     const { criteria, errors } = toFilterCriteria(criteriaSnapshot, displayTimezone);
     const maskPatterns = this.compileEnabledMaskPatterns();
     const warnings = [...errors, ...maskPatterns.errors];
-    // マージ表示（2ファイル以上）は折りたたみ非対応（issue #172、#158の未解決課題を踏まえた判断）。
-    const collapsibleSupported = this.isSingleFile();
+    // マージ表示（2ファイル以上）でも折りたたみが効く（issue #158）。
+    const collapsibleSupported = true;
     const formatOptions: BuildInteractivePayloadOptions = {
       gapThresholdMs: readGapThresholdMs(),
       displayTimezone,
@@ -792,8 +792,8 @@ export class InteractiveViewPanelController implements vscode.Disposable {
     if (ignoredInputWarning !== undefined) {
       vscode.window.showWarningMessage(`Totonoe Log: ${ignoredInputWarning}`);
     }
-    // マージ表示（2ファイル以上）は折りたたみ非対応（issue #172と同じ判断）。
-    const collapsibleSupported = this.isSingleFile();
+    // 表示側と同じく、マージ表示でも折りたたみが効く（issue #158）。
+    const collapsibleSupported = true;
     const options: BuildInteractiveExportTextOptions = {
       gapThresholdMs: readGapThresholdMs(),
       displayTimezone,

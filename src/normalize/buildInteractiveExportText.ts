@@ -11,6 +11,10 @@ import {
   applyMaskPatternsToMergedEntries,
 } from "./maskByPattern";
 import { formatNormalizedLogWithLineSources } from "./formatNormalizedLog";
+import {
+  buildInteractiveMergedCollapsedLines,
+  toCollapsedFormattedLog,
+} from "./buildInteractiveCollapsedLines";
 import { formatMergedLogWithLineSources } from "./formatMergedLog";
 import { formatCollapsedLogWithLineSources } from "./formatCollapsedLog";
 import { collapseRepeatedEntries } from "./collapseRepeatedEntries";
@@ -113,9 +117,11 @@ export async function buildInteractiveExportText(
 }
 
 /**
- * {@link buildInteractiveExportText} のマージ版（issue #175）。マージ表示
- * （2ファイル以上）は折りたたみ非対応（#158の未解決課題）のため、常に
- * `formatMergedLogWithLineSources` で展開表示のテキストを組み立てる。
+ * {@link buildInteractiveExportText} のマージ版（issue #175）。折りたたみが
+ * 有効なら、表示と同じ組み立て（{@link buildInteractiveMergedCollapsedLines}）を
+ * 通してから見出し1行に畳む（issue #158）——単一ファイル側が
+ * `formatCollapsedLogWithLineSources` を表示と共有しているのと同じ趣旨で、
+ * 「書き出しは表示の状態を引き継ぐ」を別実装の食い違いにしないため。
  */
 export async function buildInteractiveMergedExportText(
   mergedEntries: readonly MergedEntry[],
@@ -134,6 +140,20 @@ export async function buildInteractiveMergedExportText(
   const masked = await applyMaskPatternsToMergedEntries(filterResult.entries, options.maskPatterns, {
     timeoutMs: options.maskPatternTimeoutMs,
   });
+
+  if (options.collapseThreshold !== undefined) {
+    return {
+      ok: true,
+      formatted: toCollapsedFormattedLog(
+        buildInteractiveMergedCollapsedLines(masked.entries, {
+          threshold: options.collapseThreshold,
+          displayTimezone: options.displayTimezone,
+          mask: options.mask,
+        })
+      ),
+      maskPatternFailure: masked.failure,
+    };
+  }
 
   return {
     ok: true,
