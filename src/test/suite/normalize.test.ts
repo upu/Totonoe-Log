@@ -3298,6 +3298,147 @@ suite("normalize / assessTimestampRecognition", () => {
   });
 });
 
+suite("normalize / collapse honors the display mask (#245)", () => {
+  /** syslog 形式で、PID だけが行ごとに違う3行。 */
+  const DIFFERENT_PID_LOG = [
+    "Jan  2 03:04:05 host1 sshd[1234]: connection closed",
+    "Jan  2 03:04:06 host1 sshd[2345]: connection closed",
+    "Jan  2 03:04:07 host1 sshd[3456]: connection closed",
+  ].join("\n");
+
+  /** syslog 形式で、ホスト名だけが行ごとに違う3行。 */
+  const DIFFERENT_HOST_LOG = [
+    "Jan  2 03:04:05 host1 myapp: health check ok",
+    "Jan  2 03:04:06 host2 myapp: health check ok",
+    "Jan  2 03:04:07 host3 myapp: health check ok",
+  ].join("\n");
+
+  function parseSyslog(text: string) {
+    return parseLog(text, { timestampFormats: [createSyslogFormat({ assumedYear: 2024 })] });
+  }
+
+  test("does not collapse lines that differ only by process id when no mask is configured", () => {
+    const items = collapseRepeatedEntries(parseSyslog(DIFFERENT_PID_LOG), { threshold: 2 });
+
+    assert.strictEqual(items.length, 3);
+    assert.ok(items.every((item) => item.kind === "single"));
+  });
+
+  test("collapses lines that differ only by process id once the process id mask is on", () => {
+    const items = collapseRepeatedEntries(parseSyslog(DIFFERENT_PID_LOG), {
+      threshold: 2,
+      mask: { maskProcessId: true },
+    });
+
+    assert.strictEqual(items.length, 1);
+    assert.strictEqual(items[0].kind, "group");
+    if (items[0].kind === "group") {
+      assert.strictEqual(items[0].entries.length, 3);
+    }
+  });
+
+  test("does not collapse lines that differ only by syslog hostname when no mask is configured", () => {
+    const items = collapseRepeatedEntries(parseSyslog(DIFFERENT_HOST_LOG), { threshold: 2 });
+
+    assert.strictEqual(items.length, 3);
+    assert.ok(items.every((item) => item.kind === "single"));
+  });
+
+  test("collapses lines that differ only by syslog hostname once the host mask is on", () => {
+    const items = collapseRepeatedEntries(parseSyslog(DIFFERENT_HOST_LOG), {
+      threshold: 2,
+      mask: { maskHost: true },
+    });
+
+    assert.strictEqual(items.length, 1);
+    assert.strictEqual(items[0].kind, "group");
+  });
+
+  test("keeps masking IP addresses without any mask option, as it always has", () => {
+    const text = [
+      "2024-01-02T03:04:05Z WARNING Connection from 10.0.0.20 refused",
+      "2024-01-02T03:04:06Z WARNING Connection from 10.0.0.21 refused",
+      "2024-01-02T03:04:07Z WARNING Connection from 10.0.0.22 refused",
+    ].join("\n");
+
+    const items = collapseRepeatedEntries(parseLog(text), { threshold: 2 });
+
+    assert.strictEqual(items.length, 1);
+    assert.strictEqual(items[0].kind, "group");
+  });
+
+  test("leaves entries with genuinely different messages apart even with every mask on", () => {
+    const text = [
+      "Jan  2 03:04:05 host1 sshd[1234]: connection closed",
+      "Jan  2 03:04:06 host1 sshd[2345]: session opened",
+      "Jan  2 03:04:07 host1 sshd[3456]: connection closed",
+    ].join("\n");
+
+    const items = collapseRepeatedEntries(parseSyslog(text), {
+      threshold: 2,
+      mask: { maskHost: true, maskProcessId: true, maskTimestamp: true },
+    });
+
+    assert.strictEqual(items.length, 3);
+    assert.ok(items.every((item) => item.kind === "single"));
+  });
+
+  test("groups the display items too, showing the masked text in the header (#172)", () => {
+    const items = buildInteractiveCollapsedLines(parseSyslog(DIFFERENT_PID_LOG), {
+      threshold: 2,
+      mask: { maskProcessId: true },
+    });
+
+    assert.strictEqual(items.length, 1);
+    assert.strictEqual(items[0].kind, "group");
+    if (items[0].kind === "group") {
+      assert.ok(items[0].headerText.includes("<PID>"), "the header should show the masked text");
+      assert.ok(items[0].headerText.includes("(×3)"));
+      assert.strictEqual(items[0].lines.length, 3);
+      assert.ok(
+        items[0].lines.every((line) => line.includes("<PID>")),
+        "the expanded lines should stay masked as they are today"
+      );
+    }
+  });
+
+  test("groups the merged display items across files as well (#158)", () => {
+    const merged = mergeLogFiles(
+      [
+        { fileName: "a.log", text: "Jan  2 03:04:05 host1 sshd[1234]: connection closed" },
+        { fileName: "b.log", text: "Jan  2 03:04:06 host2 sshd[2345]: connection closed" },
+      ],
+      { timestampFormats: [createSyslogFormat({ assumedYear: 2024 })] }
+    );
+
+    const items = buildInteractiveMergedCollapsedLines(merged, {
+      threshold: 2,
+      mask: { maskHost: true, maskProcessId: true },
+    });
+
+    assert.strictEqual(items.length, 1);
+    assert.strictEqual(items[0].kind, "group");
+    if (items[0].kind === "group") {
+      assert.deepStrictEqual(items[0].headerFileIndices, [0, 1]);
+    }
+  });
+
+  test("carries the same grouping into the exported virtual document (#175)", async () => {
+    const result = await buildInteractiveExportText(
+      parseSyslog(DIFFERENT_PID_LOG),
+      {},
+      { collapseThreshold: 2, mask: { maskProcessId: true } }
+    );
+
+    assert.strictEqual(result.ok, true);
+    if (result.ok) {
+      // 折りたたまれていれば見出し1行だけになる（書き出しは折りたたんだ状態を写す）。
+      assert.strictEqual(result.formatted.text.split("\n").length, 1);
+      assert.ok(result.formatted.text.includes("<PID>"));
+    }
+  });
+});
+
 suite("normalize / assessTimestampRecognitionByFile (#186)", () => {
   /** タイムスタンプを含まないプレーンな行（警告条件を満たす12行）。 */
   const UNRECOGNIZED_LOG = Array.from({ length: 12 }, (_, i) => `plain line ${i + 1}`).join("\n");

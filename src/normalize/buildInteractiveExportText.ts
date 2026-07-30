@@ -94,6 +94,9 @@ export async function buildInteractiveExportText(
   if (options.collapseThreshold !== undefined) {
     const items = collapseRepeatedEntries(masked.entries, {
       threshold: options.collapseThreshold,
+      // 書き出しの整形にも同じマスクを渡している以上、グルーピングにも通す
+      // （issue #245）。片方だけだと表示と書き出しで畳まれ方が食い違う。
+      mask: options.mask,
     });
     return {
       ok: true,

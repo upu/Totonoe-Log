@@ -207,7 +207,10 @@ export function buildInteractiveCollapsedLines(
   options: BuildInteractiveCollapsedLinesOptions = {}
 ): readonly InteractiveDisplayItem[] {
   const displayTimezone = options.displayTimezone ?? 0;
-  const items = collapseRepeatedEntries(entries, { threshold: options.threshold ?? DEFAULT_COLLAPSE_THRESHOLD });
+  const items = collapseRepeatedEntries(entries, {
+    threshold: options.threshold ?? DEFAULT_COLLAPSE_THRESHOLD,
+    mask: options.mask,
+  });
   const gutterWidth = computeGutterWidth(entries, items);
 
   const result: InteractiveDisplayItem[] = [];
@@ -274,6 +277,7 @@ export function buildInteractiveMergedCollapsedLines(
   const displayTimezone = options.displayTimezone ?? 0;
   const items = collapseRepeatedMergedEntries(mergedEntries, {
     threshold: options.threshold ?? DEFAULT_COLLAPSE_THRESHOLD,
+    mask: options.mask,
   });
 
   // 列に載りうる値（各行の値と、グループ見出しの代表値）を全て集めてから幅を決める。

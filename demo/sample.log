@@ -10,6 +10,12 @@ java.lang.NullPointerException
 2024-01-02T03:04:10Z INFO Retrying request user=hoge
 2024-01-02T03:04:11+09:00 INFO Request completed in 250ms
 Jan  2 03:04:12 host myapp[1204]: heartbeat ok
+Jan  2 03:04:13 host sshd[2871]: connection closed
+Jan  2 03:04:14 host sshd[2903]: connection closed
+Jan  2 03:04:15 host sshd[2944]: connection closed
+Jan  2 03:04:16 web01 myapp[1204]: health check ok
+Jan  2 03:04:17 web02 myapp[1204]: health check ok
+Jan  2 03:04:18 web03 myapp[1204]: health check ok
 2024-01-02T03:04:20Z WARNING Session expired for user=fuga, worker pid=1204 restarting
 Jan  3 00:14:50 host myapp[1204]: polling queue, 0 messages
 2024-01-03T00:15:00.000Z ERROR Connection to db.internal:5432 timed out

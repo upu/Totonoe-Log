@@ -72,6 +72,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- The Interactive View now folds repeated lines that only look identical
+  because of the mask. Masking host names or process IDs used to apply at
+  formatting time only, so adjacent lines rendered as exactly the same
+  `sshd[<PID>]:` text stayed unfolded — while the mask panel's "キー" and
+  "任意パターン" fields, which rewrite the entries themselves, did fold them.
+  Both now feed the same comparison. Collapsing with the mask off is
+  unchanged, and the export follows the display as before (issue #245).
+
 - `Totonoe Log: Show Normalized View Filtered` and `Totonoe Log: Merge
   Selected Files (Filtered)` no longer hide entries whose timestamp could not
   be recognized when you pick the date range condition but leave both
