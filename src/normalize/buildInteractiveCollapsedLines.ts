@@ -2,7 +2,10 @@ import type { LogEntry } from "./types";
 import type { LineSource } from "./lineSources";
 import type { MergedEntry } from "./mergeLogFiles";
 import { SINGLE_FILE_INDEX } from "./filterByFile";
-import { collapseRepeatedMergedEntries } from "./collapseMergedEntries";
+import {
+  collapseRepeatedMergedEntries,
+  type CollapsedMergedItem,
+} from "./collapseMergedEntries";
 import { computeMaxLineNumber, formatGutter } from "./gutter";
 import { type DisplayTimezone } from "./timezone";
 import {
@@ -95,6 +98,18 @@ function computeGutterWidth(entries: readonly LogEntry[], items: readonly Collap
   return width;
 }
 
+/**
+ * 複数ファイルにまたがるグループの見出しガター（issue #158）。
+ *
+ * 行番号の範囲（`rangeLabel`）は使えない——由来ファイルが違えば行番号は同じ
+ * スケールではないため、`8-5` のように逆転した無意味なラベルになりうる。
+ * 代わりに代表1件（先頭エントリ）の行番号を出す。見出しが指す位置
+ * （`headerLineSource`）も先頭エントリなので、そちらとも一致する。
+ */
+function multiFileGroupGutterLabel(entries: readonly LogEntry[]): string {
+  return String(entries[0].startLine);
+}
+
 /** 整形済みの1行と、その行が由来する元ログ上の位置（issue #179）のペア。 */
 interface FormattedEntryLine {
   readonly text: string;
@@ -164,7 +179,8 @@ function formatGroupHeaderText(
   gutterWidth: number,
   displayTimezone: DisplayTimezone,
   mask: DisplayMaskOptions | undefined,
-  columnPrefix = ""
+  columnPrefix = "",
+  gutterLabel = rangeLabel(entries)
 ): string {
   const first = entries[0];
   const messageLines = maskDisplayMessageLines(
@@ -179,7 +195,7 @@ function formatGroupHeaderText(
     ? `${headerTimestamp} ${first.severity ?? SEVERITY_PLACEHOLDER} ${messageLines[0]}${suffix}`
     : `${messageLines[0]}${suffix}`;
 
-  return columnPrefix + formatGutter(rangeLabel(entries), gutterWidth) + headerText;
+  return columnPrefix + formatGutter(gutterLabel, gutterWidth) + headerText;
 }
 
 /**
@@ -288,14 +304,23 @@ export function buildInteractiveMergedCollapsedLines(
   const columnPrefixOf = (fileName: string, kind: string): string =>
     `${fileName.padEnd(fileNameWidth)} | ${kind.padEnd(kindWidth)} | `;
 
-  const gutterWidth = computeGutterWidth(
-    mergedEntries.map((merged) => merged.entry),
-    items.map((item) =>
-      item.kind === "single"
-        ? { kind: "single", entry: item.merged.entry }
-        : { kind: "group", entries: item.entries.map((merged) => merged.entry) }
-    )
-  );
+  // 見出しガターは、グループが1ファイルに収まっているときだけ行番号の範囲に
+  // できる（複数ファイルにまたがる場合の理由は multiFileGroupGutterLabel 参照）。
+  const gutterLabelOf = (item: Extract<CollapsedMergedItem, { kind: "group" }>): string => {
+    const entries = item.entries.map((merged) => merged.entry);
+    return distinctInOrder(item.entries.map((merged) => merged.fileIndex)).length > 1
+      ? multiFileGroupGutterLabel(entries)
+      : rangeLabel(entries);
+  };
+
+  let gutterWidth = String(
+    computeMaxLineNumber(mergedEntries.map((merged) => merged.entry))
+  ).length;
+  for (const item of items) {
+    if (item.kind === "group") {
+      gutterWidth = Math.max(gutterWidth, gutterLabelOf(item).length);
+    }
+  }
 
   const result: InteractiveDisplayItem[] = [];
   for (const item of items) {
@@ -340,7 +365,8 @@ export function buildInteractiveMergedCollapsedLines(
             fileIndices.length > 1
           ),
           formatGroupColumnValue(kinds, kinds.some((kind) => kind !== kinds[0]))
-        )
+        ),
+        gutterLabelOf(item)
       ),
       headerFileIndices: fileIndices,
       headerLineSource: groupLines[0]?.lineSource,

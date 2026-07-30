@@ -4502,6 +4502,40 @@ suite("normalize / merged collapse (#158)", () => {
     );
   });
 
+  test("does not show a line-number range for a group spanning several files", () => {
+    // 由来ファイルが違えば行番号は同じスケールではないため、範囲表示は意味を
+    // 持たず、先頭より小さい終端（例: 8-5）にもなりうる。代表1件の行番号を出す。
+    const merged = mergeLogFiles([
+      {
+        fileName: "server-a.log",
+        text: [
+          "2024-01-02T03:00:00Z INFO boot",
+          "2024-01-02T03:00:01Z INFO boot",
+          "2024-01-02T03:04:05Z INFO heartbeat ok",
+          "2024-01-02T03:04:15Z INFO heartbeat ok",
+        ].join("\n"),
+      },
+      {
+        fileName: "server-b.log",
+        text: [
+          "2024-01-02T03:04:06Z INFO heartbeat ok",
+          "2024-01-02T03:04:16Z INFO heartbeat ok",
+        ].join("\n"),
+      },
+    ]);
+
+    const items = buildInteractiveMergedCollapsedLines(merged, { threshold: 3 });
+
+    const group = items.find((item) => item.kind === "group");
+    assert.ok(group);
+    if (group?.kind !== "group") {
+      throw new Error("unreachable");
+    }
+    // 先頭は server-a.log の3行目、末尾は server-b.log の2行目。範囲にすると 3-2。
+    assert.doesNotMatch(group.headerText, /3-2/);
+    assert.match(group.headerText, /\| +3 /);
+  });
+
   test("keeps the file / kind columns aligned between the header and the expanded lines", () => {
     // 見出しだけ列がずれると、折りたたみを開いた瞬間に読みにくくなる（#174）。
     const items = buildInteractiveMergedCollapsedLines(interleavedHeartbeats(), { threshold: 3 });
