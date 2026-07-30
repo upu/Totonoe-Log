@@ -162,6 +162,14 @@ export function resolveHighlightRulesTarget(
  * ——ここで自前に再描画を促す必要はない。
  */
 export async function writeHighlightRuleRows(rows: readonly unknown[]): Promise<void> {
+  // 配列でない値が届いたらメッセージ自体が壊れているので、何も書かずに戻る。
+  // ここを通すと「解釈できる行が1つも無い」＝空配列として、ユーザーの既存の
+  // ルールを消してしまう。行を全部消した結果の空配列（正当な編集）とは区別する
+  // 必要があるため、判断はこの入口で行う。
+  if (!Array.isArray(rows)) {
+    return;
+  }
+
   const configuration = vscode.workspace.getConfiguration(HIGHLIGHT_RULES_CONFIG_SECTION);
   const target = resolveHighlightRulesTarget(
     configuration.inspect(HIGHLIGHT_RULES_CONFIG_KEY),
