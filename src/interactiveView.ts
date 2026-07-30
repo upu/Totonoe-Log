@@ -46,7 +46,11 @@ import { readGapThresholdMs } from "./gapThresholdSetting";
 import { readMaxDisplayLines } from "./interactiveViewSettings";
 import { readConfiguredTimestampFormats } from "./timestampFormatSettings";
 import { readMaskOptions } from "./copyMasked";
-import { readHighlightRules } from "./highlightRuleSettings";
+import {
+  readHighlightRuleRows,
+  readHighlightRules,
+  writeHighlightRuleRows,
+} from "./highlightRuleSettings";
 import {
   addNewlyAppearedSeverities,
   buildIgnoredInputWarning,
@@ -363,6 +367,12 @@ export class InteractiveViewPanelController implements vscode.Disposable {
     }
     if (message.type === "revealSourceLine") {
       await this.revealClickedSourceLine(message.lineSource);
+      return;
+    }
+    if (message.type === "highlightRulesChanged") {
+      // 書き戻しは設定変更イベントを起こし、#183 の redisplay 経路で表示へ
+      // 反映されるため、ここで postState は呼ばない（二重描画を避ける）。
+      await writeHighlightRuleRows(message.rules);
       return;
     }
     this.criteria = resolveIncomingCriteria(message.criteria, this.loadedFiles.length);
@@ -705,6 +715,7 @@ export class InteractiveViewPanelController implements vscode.Disposable {
       lineSources: limited.lineSources,
       warning: errors.length > 0 ? errors.join(" / ") : undefined,
       highlights,
+      highlightRules: readHighlightRuleRows(),
       collapsibleSupported,
       items: limited.items,
       displayLimit:
@@ -959,6 +970,58 @@ export class InteractiveViewPanelController implements vscode.Disposable {
     display: flex;
     gap: 1px;
   }
+  /* ハイライトルールのパネル（issue #238）。マスクパネルと同じ、ボタン直下に
+     せり出す作法にする。行の要素が多い（名前・パターン・色・並べ替え・削除）ので
+     幅はマスクパネルより広く取る。 */
+  #highlight-container {
+    position: relative;
+    display: flex;
+  }
+  #highlight-panel {
+    position: absolute;
+    z-index: 1;
+    top: 100%;
+    left: 0;
+    margin-top: 2px;
+    padding: 6px 10px;
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    white-space: nowrap;
+    background-color: var(--vscode-editorWidget-background, var(--vscode-editor-background));
+    border: 1px solid var(--vscode-editorWidget-border, var(--vscode-panel-border));
+  }
+  /* マスクパネルと同じ理由で、閉じた状態を明示する（issue #197）。 */
+  #highlight-panel[hidden] {
+    display: none;
+  }
+  #highlight-panel-hint {
+    margin: 2px 0 0;
+    font-size: 0.9em;
+    opacity: 0.8;
+  }
+  .highlight-rule-row {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+  }
+  .highlight-rule-row .highlight-rule-name {
+    width: 8em;
+  }
+  .highlight-rule-row .highlight-rule-pattern {
+    width: 14em;
+  }
+  /* 並べ替え（▲▼）と削除（✕）は、読み込み済みファイルの取り消しボタンと
+     同じ控えめな見た目に揃える。 */
+  .highlight-rule-row button {
+    background-color: transparent;
+    color: inherit;
+    padding: 0 4px;
+    opacity: 0.7;
+  }
+  .highlight-rule-row button:disabled {
+    opacity: 0.3;
+  }
   /* マスクONの間の見た目は、VSCodeが検索ボックスのオプション（正規表現・
      大文字小文字）のトグルに使っている色に合わせる（issue #197）。ラベルに
      「: ON」「: OFF」と状態を書き込むのはVSCodeの作法から外れているため、
@@ -1144,6 +1207,17 @@ export class InteractiveViewPanelController implements vscode.Disposable {
              先に目に入れてほしいため（issue #212）。 -->
         <label><span class="mask-field-label">キー</span><input type="text" id="mask-keys" placeholder="user, token" title="ここに挙げたキーの値だけを伏せます（user=hoge → user=&lt;MASKED&gt;）。カンマまたは空白区切り。= と : の両方、クォート付きの値にも対応します"></label>
         <label><span class="mask-field-label">任意パターン</span><input type="text" id="mask-pattern" placeholder="正規表現" title="一致した箇所を &lt;MASKED&gt; に置き換えます。キー名を残したいだけなら上の「キー」欄の方が簡単です"></label>
+      </div>
+    </div>
+    <!-- ハイライトルール（issue #238）。マスクと同じ「▾」で開く折りたたみパネルに
+         する。マスクと違いON/OFFボタンは無い——ルールは設定に保存され、あれば
+         常に効く（issue #18）。 -->
+    <div id="highlight-container">
+      <button id="highlight-options-button" type="button" aria-expanded="false" aria-controls="highlight-panel" title="ハイライトするパターンを登録する（設定に保存されます）">ハイライト ▾</button>
+      <div id="highlight-panel" hidden>
+        <div id="highlight-rules" role="group" aria-label="ハイライトルール"></div>
+        <button id="add-highlight-rule" type="button" class="add-pattern" aria-label="ハイライトルールを追加する">+ 追加</button>
+        <p id="highlight-panel-hint">上の行ほど優先されます（範囲が重なったとき）。</p>
       </div>
     </div>
     <span id="loaded-files-label">読み込み済み:</span>

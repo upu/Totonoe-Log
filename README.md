@@ -33,7 +33,9 @@ Very large results are rendered only up to `totonoeLog.interactiveView.maxDispla
 
 Filtering removes what does not match; highlighting leaves everything in place and colors what you are looking for. When you are still working out what went wrong, the lines around a hit are usually what explain it, so the two are separate features.
 
-Register the patterns in `totonoeLog.highlightRules` and every match in the Interactive View is colored, with no panel switch to remember:
+The **ハイライト ▾** button in the Interactive View opens a small editor for these rules — add a row, type a pattern, pick a color from the dropdown, reorder with ▲▼, delete with ✕. There is no separate save step: every edit is written straight back to the `totonoeLog.highlightRules` setting, so the panel and the settings file are always two views of the same thing.
+
+The setting is a plain array, so you can also write it by hand — and commit it to `.vscode/settings.json` to share your project's patterns with the team:
 
 ```json
 "totonoeLog.highlightRules": [
@@ -44,7 +46,7 @@ Register the patterns in `totonoeLog.highlightRules` and every match in the Inte
 
 `pattern` is a case-insensitive regular expression, and every match on a line is colored, not just the first. `color` is one of `red`, `orange`, `yellow`, `green`, `blue`, `purple` — a fixed set rather than free-form color codes, so that a readable value can be used for light and dark themes alike; it defaults to `yellow`. `name` is only there to tell your own rules apart and to name the rule in warnings, and defaults to `highlight-<n>`.
 
-When two rules match overlapping text the rule listed first wins, so put the more specific ones higher. A rule with an invalid regular expression or an unknown color is skipped with a warning naming it, while the remaining rules keep working. Editing the setting recolors an open panel right away.
+When two rules match overlapping text the rule listed first wins, so put the more specific ones higher — that is what ▲▼ are for. A rule with an invalid regular expression or an unknown color is skipped with a warning naming it, while the remaining rules keep working; it still shows up in the panel so you can repair it. Editing the setting by hand recolors an open panel right away, and the panel writes back to wherever the rules are already defined (workspace settings if that is where they live, your user settings otherwise).
 
 ### Masking your own identifiers
 

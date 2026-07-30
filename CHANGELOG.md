@@ -10,6 +10,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- A **ハイライト ▾** panel in `Totonoe Log: Show Interactive View` for editing
+  the highlight rules without hand-writing JSON: add a row, type a pattern,
+  pick a color from a dropdown, reorder with ▲▼ (the order is the overlap
+  precedence), delete with ✕. There is no save step — every edit is written
+  back to `totonoeLog.highlightRules`, to wherever the rules are already
+  defined (workspace settings if that is where they live, user settings
+  otherwise). A rule the extension cannot use, such as one with a broken
+  regular expression, is still listed in the panel so it can be repaired
+  (issue #238).
 - Highlight rules. Register keywords or patterns in the new
   `totonoeLog.highlightRules` setting and `Totonoe Log: Show Interactive View`
   colors every match, leaving the lines themselves in place — the counterpart
