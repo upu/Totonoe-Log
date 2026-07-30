@@ -44,6 +44,18 @@ export function formatMaskableTimestamp(
 }
 
 /**
+ * メッセージ本文を書き換えるマスクが1つでも有効か。タイムスタンプのマスクは
+ * 本文に現れない（{@link formatMaskableTimestamp} が別に受け持つ）ため数えない。
+ *
+ * 「本文が変わらないなら分割・結合ごと省く」判断を呼び出し側でも使えるよう、
+ * 対象の知識をこのモジュールに集約しておく（折りたたみの一致判定は全エントリに
+ * 対して再描画のたびに走るため、既定のマスクOFFで余計な割り当てを増やさない）。
+ */
+export function masksMessageText(mask: DisplayMaskOptions | undefined): boolean {
+  return mask?.maskHost === true || mask?.maskProcessId === true;
+}
+
+/**
  * エントリのメッセージ行（見出し行の本文＋継続行）に、ホスト系・プロセスIDの
  * マスクを掛ける。
  *
@@ -58,11 +70,11 @@ export function maskDisplayMessageLines(
   timestampFormat: string | undefined,
   mask: DisplayMaskOptions | undefined
 ): string[] {
-  const maskHost = mask?.maskHost === true;
-  const maskProcessId = mask?.maskProcessId === true;
-  if (!maskHost && !maskProcessId) {
+  if (!masksMessageText(mask)) {
     return [...messageLines];
   }
+  const maskHost = mask?.maskHost === true;
+  const maskProcessId = mask?.maskProcessId === true;
 
   const masked = messageLines.map((line) => {
     const withHostMasked = maskHost ? maskHostAddresses(line) : line;

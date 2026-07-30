@@ -109,6 +109,8 @@ Logs from servers in different timezones, or from a host whose clock is off, can
 
 The Interactive View folds consecutive repeated patterns into a single line with a repeat count (e.g. "×5"), so repetitive noise stops burying the interesting entries (threshold configurable with `totonoeLog.collapse.threshold`). Each collapsed line also shows the group's timestamp span (start 〜 end), so you can tell a burst that happened in seconds from one spread over hours without expanding the group. It is on by default — untick "繰り返しを折りたたむ" to see every line — and it applies to the merged display too, which is where it earns the most. Click a group's header to expand it in place, or use "Export as Virtual Document" to get the folded result as a read-only document you can search and diff.
 
+Masking feeds into what counts as a repeat: lines that become identical once masked are folded together. IP addresses are always ignored for this comparison, and everything the mask panel hides while it is on — host names, process IDs, and the values you name in the "キー" / "任意パターン" fields — counts too. So a heartbeat that carries a per-server identifier (`heartbeat ok (node=a-01)`) stops collapsing on its own, but turning the mask on and listing `node` in the "キー" field folds every server's copy into one group.
+
 ## Compare two logs
 
 `Totonoe Log: Compare Logs` diffs two logs that differ in dates or hosts — without those differences flooding the diff as noise, so the real differences stand out.
