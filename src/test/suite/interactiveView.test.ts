@@ -17,6 +17,12 @@ import {
 } from "../../interactiveViewFiles";
 import { parseWebviewLineSource } from "../../interactiveViewContext";
 import { classifyInteractiveViewConfigChange } from "../../interactiveViewConfigWatch";
+import {
+  resolveHighlightRulesTarget,
+  toHighlightRuleRows,
+  toHighlightRuleSettings,
+} from "../../highlightRuleSettings";
+import { DEFAULT_HIGHLIGHT_COLOR } from "../../normalize";
 import { reresolveLogFileOffsets } from "../../logFileReading";
 import type {
   SerializedFilterCriteria,
@@ -758,6 +764,154 @@ suite("Totonoe Log interactive view (#166)", () => {
     );
 
     await vscode.commands.executeCommand("workbench.action.closeAllEditors");
+  });
+});
+
+suite("highlightRuleSettings / toHighlightRuleRows (#238)", () => {
+  test("turns each setting entry into an editable row", () => {
+    const rows = toHighlightRuleRows([
+      { name: "OOM", pattern: "OutOfMemory", color: "red" },
+      { name: "timeout", pattern: "timed? ?out", color: "orange" },
+    ]);
+
+    assert.deepStrictEqual(rows, [
+      { name: "OOM", pattern: "OutOfMemory", color: "red" },
+      { name: "timeout", pattern: "timed? ?out", color: "orange" },
+    ]);
+  });
+
+  test("fills in the omitted name and color so every row has something to show", () => {
+    const rows = toHighlightRuleRows([{ pattern: "timeout" }]);
+
+    assert.deepStrictEqual(rows, [
+      { name: "", pattern: "timeout", color: DEFAULT_HIGHLIGHT_COLOR },
+    ]);
+  });
+
+  test("keeps a rule whose pattern is an invalid regex, so it can be repaired in the panel (#238)", () => {
+    // ハイライトとしては compileHighlightRules が弾くが、パネルからは見えて
+    // 直せる必要がある——隠すと「設定したのに一覧に無い」になる。
+    const rows = toHighlightRuleRows([{ name: "broken", pattern: "(unterminated" }]);
+
+    assert.strictEqual(rows.length, 1);
+    assert.strictEqual(rows[0].pattern, "(unterminated");
+  });
+
+  test("falls back to the default color when the configured one is not in the palette", () => {
+    // ドロップダウンに無い値は選択状態を作れないため、既定色に寄せる。
+    const rows = toHighlightRuleRows([{ pattern: "timeout", color: "chartreuse" }]);
+
+    assert.strictEqual(rows[0].color, DEFAULT_HIGHLIGHT_COLOR);
+  });
+
+  test("skips entries that are not objects at all", () => {
+    const rows = toHighlightRuleRows(["nonsense", null, { pattern: "kept" }]);
+
+    assert.deepStrictEqual(
+      rows.map((row) => row.pattern),
+      ["kept"]
+    );
+  });
+
+  test("treats a setting that is not an array as no rules at all", () => {
+    // 設定は手で書けるので、宣言したスキーマ（array）どおりとは限らない。
+    // ここで落ちると、ハイライトの読み取り経路ごと例外になる。
+    assert.deepStrictEqual(toHighlightRuleRows({ pattern: "oops" } as never), []);
+  });
+
+  test("falls back to empty strings when the fields are not strings", () => {
+    const rows = toHighlightRuleRows([{ name: 42, pattern: null, color: 7 }]);
+
+    assert.deepStrictEqual(rows, [
+      { name: "", pattern: "", color: DEFAULT_HIGHLIGHT_COLOR },
+    ]);
+  });
+});
+
+suite("highlightRuleSettings / toHighlightRuleSettings (#238)", () => {
+  test("writes back the pattern, the color and a non-empty name", () => {
+    const settings = toHighlightRuleSettings([
+      { name: "OOM", pattern: "OutOfMemory", color: "red" },
+    ]);
+
+    assert.deepStrictEqual(settings, [{ name: "OOM", pattern: "OutOfMemory", color: "red" }]);
+  });
+
+  test("omits an empty name instead of writing an empty string", () => {
+    // 設定ファイルに `"name": ""` が並ぶのを避ける（省略時は highlight-<番号>）。
+    const settings = toHighlightRuleSettings([
+      { name: "  ", pattern: "timeout", color: "orange" },
+    ]);
+
+    assert.deepStrictEqual(settings, [{ pattern: "timeout", color: "orange" }]);
+  });
+
+  test("drops rows whose pattern is still blank (#238)", () => {
+    // 「+ 追加」を押した直後の行は、まだルールではないので設定に書かない。
+    const settings = toHighlightRuleSettings([
+      { name: "", pattern: "  ", color: "red" },
+      { name: "", pattern: "kept", color: "blue" },
+    ]);
+
+    assert.deepStrictEqual(settings, [{ pattern: "kept", color: "blue" }]);
+  });
+
+  test("survives rows that are not shaped as expected", () => {
+    // Webview からのメッセージは型が保証されないため、壊れた行で設定の
+    // 書き戻しが例外になると表示の更新ごと壊れる。
+    const settings = toHighlightRuleSettings([
+      "nonsense",
+      null,
+      { pattern: 42 },
+      { pattern: "kept", color: "chartreuse" },
+    ]);
+
+    assert.deepStrictEqual(settings, [{ pattern: "kept", color: DEFAULT_HIGHLIGHT_COLOR }]);
+  });
+
+  test("keeps the row order, since it is the overlap precedence (#18)", () => {
+    const settings = toHighlightRuleSettings([
+      { name: "", pattern: "first", color: "red" },
+      { name: "", pattern: "second", color: "blue" },
+    ]);
+
+    assert.deepStrictEqual(
+      settings.map((setting) => setting.pattern),
+      ["first", "second"]
+    );
+  });
+});
+
+suite("highlightRuleSettings / resolveHighlightRulesTarget (#238)", () => {
+  test("writes back to the workspace when the rules are defined there", () => {
+    // チームで共有している設定を、書き戻しでユーザー設定側へ逃がさない。
+    assert.strictEqual(
+      resolveHighlightRulesTarget({ workspaceValue: [] }, true),
+      vscode.ConfigurationTarget.Workspace
+    );
+  });
+
+  test("writes back to the user settings when the rules are defined there", () => {
+    assert.strictEqual(
+      resolveHighlightRulesTarget({ globalValue: [] }, true),
+      vscode.ConfigurationTarget.Global
+    );
+  });
+
+  test("uses the user settings the first time, when the rules are defined nowhere", () => {
+    // 何もしていないのに .vscode/settings.json が生まれて、gitの作業ツリーが
+    // 汚れる驚きを避ける。
+    assert.strictEqual(
+      resolveHighlightRulesTarget({}, true),
+      vscode.ConfigurationTarget.Global
+    );
+  });
+
+  test("falls back to the user settings when no workspace is open to write to", () => {
+    assert.strictEqual(
+      resolveHighlightRulesTarget({ workspaceValue: [] }, false),
+      vscode.ConfigurationTarget.Global
+    );
   });
 });
 

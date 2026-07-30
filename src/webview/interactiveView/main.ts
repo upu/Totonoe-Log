@@ -1,5 +1,6 @@
 import type {
   ExtensionToWebviewMessage,
+  HighlightRuleRow,
   LineHighlight,
   SerializedFilterCriteria,
   SerializedFilterPattern,
@@ -34,6 +35,12 @@ const maskHostToggle = document.getElementById("mask-host") as HTMLInputElement;
 const maskProcessIdToggle = document.getElementById("mask-process-id") as HTMLInputElement;
 const maskKeysInput = document.getElementById("mask-keys") as HTMLInputElement;
 const maskPatternInput = document.getElementById("mask-pattern") as HTMLInputElement;
+const highlightOptionsButton = document.getElementById(
+  "highlight-options-button"
+) as HTMLButtonElement;
+const highlightPanel = document.getElementById("highlight-panel") as HTMLDivElement;
+const highlightRuleList = document.getElementById("highlight-rules") as HTMLDivElement;
+const addHighlightRuleButton = document.getElementById("add-highlight-rule") as HTMLButtonElement;
 const loadedFilesElement = document.getElementById("loaded-files") as HTMLDivElement;
 const severitiesContainer = document.getElementById("severities") as HTMLDivElement;
 const dateStartInput = document.getElementById("date-start") as HTMLInputElement;
@@ -271,6 +278,38 @@ maskOptionsButton.addEventListener("click", () => {
   setMaskPanelExpanded(maskOptionsButton.getAttribute("aria-expanded") !== "true");
 });
 
+/** ハイライトルールのパネルの開閉。閉じてもルールは設定に残り、効いたまま。 */
+function setHighlightPanelExpanded(expanded: boolean): void {
+  highlightPanel.hidden = !expanded;
+  highlightOptionsButton.setAttribute("aria-expanded", String(expanded));
+  highlightOptionsButton.textContent = expanded ? "ハイライト ▴" : "ハイライト ▾";
+}
+
+highlightOptionsButton.addEventListener("click", () => {
+  setHighlightPanelExpanded(highlightOptionsButton.getAttribute("aria-expanded") !== "true");
+});
+
+// 編集中に届いて保留したルールを、パネルからフォーカスが抜けた時点で反映する。
+highlightPanel.addEventListener("focusout", (event) => {
+  // パネル内での移動（欄から欄へ）はまだ編集中なので何もしない。
+  if (event.relatedTarget instanceof Node && highlightPanel.contains(event.relatedTarget)) {
+    return;
+  }
+  if (pendingHighlightRules) {
+    const rules = pendingHighlightRules;
+    pendingHighlightRules = undefined;
+    applyHighlightRules(rules);
+  }
+});
+
+// 追加した空の行は、パターンが空なので設定には書かれない（拡張機能側が落とす）。
+// それでも送るのは、他の行の編集で送り直したときに行数が合うようにするため。
+addHighlightRuleButton.addEventListener("click", () => {
+  const row = createHighlightRuleRow({ name: "", pattern: "", color: "yellow" });
+  highlightRuleList.appendChild(row);
+  row.querySelector<HTMLInputElement>(".highlight-rule-pattern")?.focus();
+});
+
 maskTimestampToggle.addEventListener("change", postFilterChanged);
 maskHostToggle.addEventListener("change", postFilterChanged);
 maskProcessIdToggle.addEventListener("change", postFilterChanged);
@@ -278,6 +317,193 @@ maskProcessIdToggle.addEventListener("change", postFilterChanged);
 // 絞り込みのパターン欄と同じくデバウンスする。
 maskKeysInput.addEventListener("input", postFilterChangedDebounced);
 maskPatternInput.addEventListener("input", postFilterChangedDebounced);
+
+/** ハイライトルールで選べる色（`normalize` の `HIGHLIGHT_COLORS` と同じ並び）。 */
+const HIGHLIGHT_COLORS: readonly HighlightRuleRow["color"][] = [
+  "red",
+  "orange",
+  "yellow",
+  "green",
+  "blue",
+  "purple",
+];
+
+/** ハイライトルール編集パネル（issue #238）の現在の行を集める。 */
+function collectHighlightRules(): HighlightRuleRow[] {
+  return Array.from(
+    highlightRuleList.querySelectorAll<HTMLElement>(".highlight-rule-row"),
+    (row) => ({
+      name: row.querySelector<HTMLInputElement>(".highlight-rule-name")?.value ?? "",
+      pattern: row.querySelector<HTMLInputElement>(".highlight-rule-pattern")?.value ?? "",
+      color: (row.querySelector<HTMLSelectElement>(".highlight-rule-color")?.value ??
+        "yellow") as HighlightRuleRow["color"],
+    })
+  );
+}
+
+/**
+ * ルールを設定へ書き戻す。書き戻した結果は設定変更として戻ってくる（#183）ので、
+ * 描画はそちらに任せてここでは送るだけにする。
+ */
+function postHighlightRulesChanged(): void {
+  vscodeApi.postMessage({ type: "highlightRulesChanged", rules: collectHighlightRules() });
+}
+
+// パターン名・パターンはテキスト入力なので、絞り込みの各欄と同じくデバウンス
+// する。設定ファイルへの書き込みを伴うぶん、往復はより重い。
+const postHighlightRulesChangedDebounced = debounce(postHighlightRulesChanged, 300);
+
+/** 並べ替え（▲▼）は、DOM上で行を入れ替えてから現在の状態を送り直す。 */
+function moveHighlightRuleRow(row: HTMLElement, direction: -1 | 1): void {
+  const sibling =
+    direction === -1 ? row.previousElementSibling : row.nextElementSibling;
+  if (!sibling) {
+    return;
+  }
+  if (direction === -1) {
+    highlightRuleList.insertBefore(row, sibling);
+  } else {
+    highlightRuleList.insertBefore(sibling, row);
+  }
+  postHighlightRulesChanged();
+}
+
+/**
+ * ハイライトルール1行分を作る（issue #238）。色を選ぶと、その色をパターン欄の
+ * 文字色にも反映して結果が見えるようにする——`option` 自体への着色は環境差が
+ * 大きいため頼らない。
+ */
+function createHighlightRuleRow(rule: HighlightRuleRow): HTMLElement {
+  const row = document.createElement("div");
+  row.className = "highlight-rule-row";
+
+  const nameInput = document.createElement("input");
+  nameInput.type = "text";
+  nameInput.className = "highlight-rule-name";
+  nameInput.value = rule.name;
+  nameInput.placeholder = "名前（任意）";
+  nameInput.setAttribute("aria-label", "ルール名（任意）");
+  nameInput.addEventListener("input", postHighlightRulesChangedDebounced);
+
+  const patternInput = document.createElement("input");
+  patternInput.type = "text";
+  patternInput.className = "highlight-rule-pattern";
+  patternInput.value = rule.pattern;
+  patternInput.placeholder = "正規表現";
+  patternInput.setAttribute("aria-label", "ハイライトするパターン（正規表現）");
+  patternInput.addEventListener("input", postHighlightRulesChangedDebounced);
+
+  const colorSelect = document.createElement("select");
+  colorSelect.className = "highlight-rule-color";
+  colorSelect.setAttribute("aria-label", "色");
+  for (const color of HIGHLIGHT_COLORS) {
+    const option = document.createElement("option");
+    option.value = color;
+    option.textContent = color;
+    colorSelect.appendChild(option);
+  }
+  colorSelect.value = rule.color;
+  const applyColorPreview = (): void => {
+    patternInput.className = `highlight-rule-pattern highlight-${colorSelect.value}`;
+  };
+  applyColorPreview();
+  colorSelect.addEventListener("change", () => {
+    applyColorPreview();
+    postHighlightRulesChanged();
+  });
+
+  const moveUpButton = document.createElement("button");
+  moveUpButton.type = "button";
+  moveUpButton.textContent = "▲";
+  moveUpButton.title = "優先度を上げる";
+  moveUpButton.setAttribute("aria-label", "このルールの優先度を上げる");
+  moveUpButton.addEventListener("click", () => {
+    moveHighlightRuleRow(row, -1);
+  });
+
+  const moveDownButton = document.createElement("button");
+  moveDownButton.type = "button";
+  moveDownButton.textContent = "▼";
+  moveDownButton.title = "優先度を下げる";
+  moveDownButton.setAttribute("aria-label", "このルールの優先度を下げる");
+  moveDownButton.addEventListener("click", () => {
+    moveHighlightRuleRow(row, 1);
+  });
+
+  const removeButton = document.createElement("button");
+  removeButton.type = "button";
+  removeButton.textContent = "✕";
+  removeButton.title = "このルールを削除する";
+  removeButton.setAttribute("aria-label", "このハイライトルールを削除する");
+  removeButton.addEventListener("click", () => {
+    row.remove();
+    postHighlightRulesChanged();
+  });
+
+  row.append(
+    nameInput,
+    patternInput,
+    colorSelect,
+    moveUpButton,
+    moveDownButton,
+    removeButton
+  );
+  return row;
+}
+
+/**
+ * 届いたルールにパネルの行を合わせる。絞り込みのパターン欄（issue #206）と同じく
+ * 行数が変わったときだけ作り直し、同じなら値だけ差し替える——設定への書き戻しが
+ * 設定変更として戻ってくるため、入力のたびに作り直すとカーソル位置が飛ぶ。
+ *
+ * パネル内にフォーカスがある間は一切触らない。パターン欄を一度空にしてから
+ * 打ち直すと、空の行は設定に書かれない（＝戻ってくる行数が減る）ため、
+ * 上の行数比較だけでは編集中の行ごと作り直してしまう。編集中はパネルの側を
+ * 正とし、フォーカスが外れてから設定の内容に合わせ直す。
+ */
+function renderHighlightRules(rules: readonly HighlightRuleRow[]): void {
+  if (highlightPanel.contains(document.activeElement)) {
+    // 届いた内容は覚えておき、フォーカスが外れた時点で反映する。捨ててしまうと
+    // 「合わせ直す」機会が次の state まで来ず、設定に無い行（打ち終えていない
+    // 空行など）が残ったままになる。
+    pendingHighlightRules = rules;
+    return;
+  }
+
+  pendingHighlightRules = undefined;
+  applyHighlightRules(rules);
+}
+
+/** 直近に届いた、フォーカスが外れてから反映するルール（issue #238）。 */
+let pendingHighlightRules: readonly HighlightRuleRow[] | undefined;
+
+function applyHighlightRules(rules: readonly HighlightRuleRow[]): void {
+  const rows = highlightRuleList.querySelectorAll<HTMLElement>(".highlight-rule-row");
+
+  if (rows.length !== rules.length) {
+    highlightRuleList.textContent = "";
+    for (const rule of rules) {
+      highlightRuleList.appendChild(createHighlightRuleRow(rule));
+    }
+    return;
+  }
+
+  rows.forEach((row, index) => {
+    const nameInput = row.querySelector<HTMLInputElement>(".highlight-rule-name");
+    const patternInput = row.querySelector<HTMLInputElement>(".highlight-rule-pattern");
+    const colorSelect = row.querySelector<HTMLSelectElement>(".highlight-rule-color");
+    if (nameInput) {
+      syncTextInputIfNotFocused(nameInput, rules[index].name);
+    }
+    if (patternInput) {
+      syncTextInputIfNotFocused(patternInput, rules[index].pattern);
+      patternInput.className = `highlight-rule-pattern highlight-${rules[index].color}`;
+    }
+    if (colorSelect) {
+      colorSelect.value = rules[index].color;
+    }
+  });
+}
 
 function renderSeverities(distinctSeverities: readonly string[], checked: readonly string[]): void {
   const checkedSet = new Set(checked);
@@ -604,6 +830,7 @@ function renderState(state: ExtensionToWebviewMessage): void {
   // 組の配列から作り直す（issue #18）。プレーンなオブジェクトで受け取ると
   // ログ本文がキーになる都合上 `__proto__` 等と衝突しうるため、`Map` にする。
   lineHighlights = new Map(state.highlights ?? []);
+  renderHighlightRules(state.highlightRules);
   renderLoadedFiles(state.loadedFileNames, state.sourceFilePaths, state.criteria.visibleFiles);
   renderSeverities(state.distinctSeverities, state.criteria.severities);
   syncTextInputIfNotFocused(dateStartInput, state.criteria.dateRangeStart);

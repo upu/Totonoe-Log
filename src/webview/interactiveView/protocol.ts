@@ -44,6 +44,21 @@ export type InteractiveDisplayItem =
  */
 export type HighlightColor = "red" | "orange" | "yellow" | "green" | "blue" | "purple";
 
+/**
+ * ハイライトルール編集パネル（issue #238）の1行。`totonoeLog.highlightRules`
+ * 設定の1項目に対応するが、こちらは**編集中の状態**なので、設定として不正な値
+ * （空のパターン・正規表現として壊れたパターン）も取りうる。
+ *
+ * 設定側で省略できる `name` と `color` も、フォームの状態としては常に値が
+ * 決まっているため必須にする（`SerializedMaskCriteria` が設定より厳しい形に
+ * なっているのと同じ理由）。
+ */
+export interface HighlightRuleRow {
+  readonly name: string;
+  readonly pattern: string;
+  readonly color: HighlightColor;
+}
+
 /** 1行の中でハイライトする範囲（行内のUTF-16オフセット。`end` は含まない）。 */
 export interface LineHighlight {
   readonly start: number;
@@ -178,7 +193,14 @@ export type WebviewToExtensionMessage =
       readonly criteria: SerializedFilterCriteria;
     }
   /** 行のダブルクリックで、対応する元ログファイルの行を開く要求（issue #179、#191）。 */
-  | { readonly type: "revealSourceLine"; readonly lineSource: LineSource };
+  | { readonly type: "revealSourceLine"; readonly lineSource: LineSource }
+  /**
+   * ハイライトルール編集パネル（issue #238）の内容を設定へ書き戻す要求。
+   * 絞り込みと違い、こちらの状態の置き場は Webview ではなく
+   * `totonoeLog.highlightRules` 設定そのもの——書き戻した結果は設定変更として
+   * 戻ってきて（#183）、表示に反映される。
+   */
+  | { readonly type: "highlightRulesChanged"; readonly rules: readonly HighlightRuleRow[] };
 
 /**
  * 拡張機能本体 → Webview のメッセージ。`criteria` は絞り込み条件の解析結果
@@ -214,6 +236,12 @@ export interface ExtensionToWebviewMessage {
    * ハイライトの成否に依らず成立させる）。
    */
   readonly highlights?: LineHighlights;
+  /**
+   * ハイライトルール編集パネル（issue #238）に表示する行。`totonoeLog.highlightRules`
+   * 設定そのものを写したもので、絞り込み条件と違い Webview 側では保持しない
+   * ——設定が唯一の置き場なので、設定を直接編集した場合もこの経路で反映される。
+   */
+  readonly highlightRules: readonly HighlightRuleRow[];
   /**
    * 折りたたみトグルを表示できるか（issue #172）。単一ファイル表示中のみ
    * true。マージ表示（2ファイル以上）は #158 の設計課題が未解決のため
