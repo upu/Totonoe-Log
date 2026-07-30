@@ -167,5 +167,15 @@ export async function writeHighlightRuleRows(rows: readonly unknown[]): Promise<
     configuration.inspect(HIGHLIGHT_RULES_CONFIG_KEY),
     (vscode.workspace.workspaceFolders?.length ?? 0) > 0
   );
-  await configuration.update(HIGHLIGHT_RULES_CONFIG_KEY, toHighlightRuleSettings(rows), target);
+  try {
+    await configuration.update(HIGHLIGHT_RULES_CONFIG_KEY, toHighlightRuleSettings(rows), target);
+  } catch (error) {
+    // 設定ファイルが読み取り専用・書き込み権限が無い等。黙って失敗すると、
+    // パネルには編集が残っているのに保存されていない状態になり、パネルを
+    // 開き直した時点で編集が消えたように見える。
+    const reason = error instanceof Error ? error.message : String(error);
+    vscode.window.showWarningMessage(
+      `Totonoe Log: ハイライトルールを設定に保存できませんでした（${reason}）`
+    );
+  }
 }
