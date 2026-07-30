@@ -1,6 +1,10 @@
 import type { LogEntry } from "./types";
 import { maskHostAddresses } from "./maskForCompare";
-import { maskDisplayMessageLines, type DisplayMaskOptions } from "./displayMask";
+import {
+  maskDisplayMessageLines,
+  masksMessageText,
+  type DisplayMaskOptions,
+} from "./displayMask";
 
 /** 折りたたみ判定のしきい値の既定値。この回数以上連続で繰り返されたら折りたたむ。 */
 export const DEFAULT_COLLAPSE_THRESHOLD = 3;
@@ -54,11 +58,12 @@ export type CollapsedItem =
  * 従来の挙動を保つ。プレースホルダーへの再適用は何も起きない）。
  */
 function groupingKey(entry: LogEntry, mask: DisplayMaskOptions | undefined): string {
-  const message = maskDisplayMessageLines(
-    entry.message.split("\n"),
-    entry.timestampFormat,
-    mask
-  ).join("\n");
+  // 本文に効くマスクが無いとき（既定のマスクOFF、タイムスタンプだけのマスク）は
+  // 分割・結合ごと省いて元の本文を使う——この関数は全エントリに対して再描画の
+  // たびに走るため。
+  const message = masksMessageText(mask)
+    ? maskDisplayMessageLines(entry.message.split("\n"), entry.timestampFormat, mask).join("\n")
+    : entry.message;
   return JSON.stringify([entry.matched, entry.severity ?? "", maskHostAddresses(message)]);
 }
 
