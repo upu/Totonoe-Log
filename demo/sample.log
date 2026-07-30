@@ -16,6 +16,7 @@ Jan  3 00:14:50 host myapp[1204]: polling queue, 0 messages
 2024-01-03T00:15:10.000Z ERROR Payment gateway rejected transaction txn=8842
 2024-01-03T00:15:30.000Z INFO Reconnected to database
 2024-01-03T12:00:00.000Z WARNING Memory usage at 90%
+2024-01-03T12:30:00.000Z ERROR java.lang.OutOfMemoryError: Java heap space
 2024-01-04T06:45:00.000Z INFO Nightly batch job started
 2024-01-04T07:10:00.000Z INFO Nightly batch job completed
 2024-01-05T21:59:59.000Z ERROR Disk full, cannot write logs

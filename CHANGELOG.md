@@ -10,6 +10,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- Highlight rules. Register keywords or patterns in the new
+  `totonoeLog.highlightRules` setting and `Totonoe Log: Show Interactive View`
+  colors every match, leaving the lines themselves in place — the counterpart
+  to filtering, for when the lines around a hit are what explain it. Each rule
+  takes a case-insensitive regular expression and one of six colors (`red`,
+  `orange`, `yellow`, `green`, `blue`, `purple`) that stay readable in light
+  and dark themes alike. Where two rules overlap the one listed first wins,
+  and a rule with an invalid pattern or an unknown color is skipped with a
+  warning naming it while the rest keep working (issue #18).
+
 - `Totonoe Log: Show Interactive View` now takes any number of match patterns
   and ignore patterns instead of one each. Add a row with **+ 追加**, remove
   one with **✕**, or untick a row to set that pattern aside without losing

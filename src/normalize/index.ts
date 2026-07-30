@@ -107,3 +107,20 @@ export {
   DEFAULT_MAX_DISPLAY_LINES,
   limitInteractiveDisplay,
 } from "./limitInteractiveDisplay";
+export type {
+  CompileHighlightRulesResult,
+  HighlightColor,
+  HighlightRule,
+  HighlightRuleSetting,
+} from "./highlightRules";
+export {
+  compileHighlightRules,
+  DEFAULT_HIGHLIGHT_COLOR,
+  HIGHLIGHT_COLORS,
+} from "./highlightRules";
+export type {
+  HighlightDisplayLinesOptions,
+  HighlightDisplayLinesResult,
+  LineHighlight,
+} from "./highlightDisplayLines";
+export { highlightDisplayLines } from "./highlightDisplayLines";

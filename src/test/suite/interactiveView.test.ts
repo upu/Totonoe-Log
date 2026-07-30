@@ -789,6 +789,8 @@ suite("interactiveViewConfigWatch / classifyInteractiveViewConfigChange (#183)",
       "totonoeLog.gap.thresholdSeconds",
       "totonoeLog.collapse.threshold",
       "totonoeLog.interactiveView.maxDisplayLines",
+      // ハイライトルール（issue #18）は描画にだけ効くので送り直すだけでよい。
+      "totonoeLog.highlightRules",
     ]) {
       assert.strictEqual(
         classifyInteractiveViewConfigChange(changed(section)),

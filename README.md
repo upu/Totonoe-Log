@@ -29,6 +29,23 @@ For a lookup-style list of every command — command IDs, where each one can be 
 
 Very large results are rendered only up to `totonoeLog.interactiveView.maxDisplayLines` lines, with a notice pointing at narrowing the filters or opening the whole thing with "Export as Virtual Document". Changing any of the `totonoeLog.*` settings below updates an open panel right away: settings that change how the log is parsed (`timestampFormats`, `timezone.sourceOffset`, `timezone.fileOffsets`, `clockSkew.fileOffsets`) re-parse the loaded files first, and the rest just redraw them.
 
+### Highlight rules
+
+Filtering removes what does not match; highlighting leaves everything in place and colors what you are looking for. When you are still working out what went wrong, the lines around a hit are usually what explain it, so the two are separate features.
+
+Register the patterns in `totonoeLog.highlightRules` and every match in the Interactive View is colored, with no panel switch to remember:
+
+```json
+"totonoeLog.highlightRules": [
+  { "name": "OOM", "pattern": "OutOfMemory", "color": "red" },
+  { "name": "timeout", "pattern": "timed? ?out", "color": "orange" }
+]
+```
+
+`pattern` is a case-insensitive regular expression, and every match on a line is colored, not just the first. `color` is one of `red`, `orange`, `yellow`, `green`, `blue`, `purple` — a fixed set rather than free-form color codes, so that a readable value can be used for light and dark themes alike; it defaults to `yellow`. `name` is only there to tell your own rules apart and to name the rule in warnings, and defaults to `highlight-<n>`.
+
+When two rules match overlapping text the rule listed first wins, so put the more specific ones higher. A rule with an invalid regular expression or an unknown color is skipped with a warning naming it, while the remaining rules keep working. Editing the setting recolors an open panel right away.
+
 ### Masking your own identifiers
 
 No general rule can recognize in-house identifiers — user names, tokens, contract IDs — so the mask panel has two fields for them.
@@ -208,6 +225,7 @@ All settings live under the `totonoeLog` namespace.
 | `totonoeLog.timezone.display` | string | `"UTC"` | The timezone every view renders timestamps in: `UTC`, `local` (this machine's timezone), or a UTC offset like `+09:00` (rendered as `2024-01-02T12:04:05.000+09:00`). |
 | `totonoeLog.clockSkew.fileOffsets` | array | `[]` | Shift the timestamps of logs from hosts with skewed clocks by ±N seconds, per file-name pattern. Applies to all recognized timestamps regardless of timezone notation; merged and normalized views use the corrected times. The first matching rule wins. See [Clock skew correction](#clock-skew-correction). |
 | `totonoeLog.timestampFormats` | array | `[]` | Add timestamp formats the built-ins don't recognize, as regular expressions with named capture groups. Tried before the built-in formats. See [Custom timestamp formats](#custom-timestamp-formats). |
+| `totonoeLog.highlightRules` | array | `[]` | Color the keywords/patterns you are looking for in `Show Interactive View`. Only the matched text is colored — no lines are removed. See [Highlight rules](#highlight-rules). |
 
 ## The Totonoe series
 

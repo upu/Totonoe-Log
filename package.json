@@ -227,6 +227,40 @@
               }
             }
           }
+        },
+        "totonoeLog.highlightRules": {
+          "type": "array",
+          "default": [],
+          "markdownDescription": "Interactive View で目立たせたいキーワード/パターンを登録する。一致した箇所だけに色が付き、行は消えない（絞り込みとは別）。パターンは正規表現として解釈され、大文字小文字は区別しない。詳細は README の「Highlight rules」参照。",
+          "items": {
+            "type": "object",
+            "required": [
+              "pattern"
+            ],
+            "properties": {
+              "name": {
+                "type": "string",
+                "description": "このルールの表示名。設定を見分けるためと、警告文言に使う。省略時は highlight-<連番>。"
+              },
+              "pattern": {
+                "type": "string",
+                "description": "色を付ける箇所にマッチする正規表現（大文字小文字は区別しない）。1行の中の一致箇所はすべて色が付く。"
+              },
+              "color": {
+                "type": "string",
+                "enum": [
+                  "red",
+                  "orange",
+                  "yellow",
+                  "green",
+                  "blue",
+                  "purple"
+                ],
+                "default": "yellow",
+                "description": "色。明るいテーマ・暗いテーマそれぞれで読める値が使われる。省略時は yellow。"
+              }
+            }
+          }
         }
       }
     }

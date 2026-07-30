@@ -39,6 +39,29 @@ export type InteractiveDisplayItem =
     };
 
 /**
+ * ハイライトの色名（`normalize` の `HighlightColor` と同じ）。{@link LineSource}
+ * と同じ理由で再定義する。実際の色は Webview 側のCSS（`.highlight-<色名>`）が持つ。
+ */
+export type HighlightColor = "red" | "orange" | "yellow" | "green" | "blue" | "purple";
+
+/** 1行の中でハイライトする範囲（行内のUTF-16オフセット。`end` は含まない）。 */
+export interface LineHighlight {
+  readonly start: number;
+  readonly end: number;
+  readonly color: HighlightColor;
+}
+
+/**
+ * ハイライト範囲を「行のテキスト → その行の範囲」の組で運ぶ（issue #18）。
+ * `Map` はJSON化できないため、そのまま `new Map(...)` に渡せる組の配列で送る。
+ *
+ * 行番号ではなくテキストで引ける形にしているのは、ハイライトが行の内容だけで
+ * 決まるため——プレーンテキストの1行・折りたたみの見出し・展開後の各行という
+ * 3つの描画経路が、どれも同じ対応表を引くだけで済む。
+ */
+export type LineHighlights = readonly (readonly [string, readonly LineHighlight[]])[];
+
+/**
  * マスクパネル（issue #194）のチェックボックスの状態。`normalize` の
  * `DisplayMaskOptions` と同じフィールド名にして、拡張機能本体側で整形
  * オプションへそのまま渡せるようにする（あちらは省略可、こちらはUIの状態
@@ -185,6 +208,12 @@ export interface ExtensionToWebviewMessage {
   readonly lineSources?: readonly (LineSource | undefined)[];
   /** 無視パターンのタイムアウト・構文エラー等、絞り込み条件の一部を無視した場合の警告文。 */
   readonly warning?: string;
+  /**
+   * ハイライトルール（issue #18）に一致した箇所。ルールが未設定、または評価が
+   * 失敗したときは省略し、Webview側は色を付けずに描画する（本文の表示自体は
+   * ハイライトの成否に依らず成立させる）。
+   */
+  readonly highlights?: LineHighlights;
   /**
    * 折りたたみトグルを表示できるか（issue #172）。単一ファイル表示中のみ
    * true。マージ表示（2ファイル以上）は #158 の設計課題が未解決のため
