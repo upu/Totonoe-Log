@@ -17,7 +17,7 @@ import { readConfiguredTimestampFormats } from "./timestampFormatSettings";
 import { readDisplayTimezone } from "./timezoneSettings";
 import { warnIfLowTimestampRecognition } from "./timestampRecognitionWarning";
 import { readGapThresholdMs } from "./gapThresholdSetting";
-import { readLogFiles, resolveExplorerSelectionUris } from "./logFileReading";
+import { readLogFiles } from "./logFileReading";
 
 // スキーム定義は virtualDocumentContentProvider.ts に集約している
 // （既存の import 元を変えずに済むよう、ここから再エクスポートする）。
@@ -223,7 +223,7 @@ function warnLowTimestampRecognitionPerFile(
  * どちらのコマンドからも共通で使う本体処理。ファイルごとの日時フォーマットが
  * 違っても、正規化エンジンが共通のタイムスタンプに変換するため正しく時系列に並ぶ。
  */
-async function openMergedView(
+export async function openMergedView(
   provider: MergedViewContentProvider,
   fileUris: readonly vscode.Uri[]
 ): Promise<void> {
@@ -273,50 +273,6 @@ export function createMergedFilterSource(
         visibleEntries: filterResult.entries.map((merged) => merged.entry),
       };
     },
-  };
-}
-
-/**
- * エクスプローラのコンテキストメニューコマンドが渡す `(クリックされた項目,
- * 選択項目全体の配列)` から、フォルダを除いた対象ファイルのURI一覧を解決する。
- * `selectedUris` を優先して使い、単一クリック時のフォールバックとして
- * `clickedUri` を使う。選択が2つ未満（フォルダを除いた後）の場合は警告を
- * 表示して `undefined` を返す。`mergeSelectedFiles` / `mergeSelectedFilesFiltered`
- * の両方が共有する（issue #151）。
- */
-async function resolveSelectedLogFileUris(
-  clickedUri: vscode.Uri,
-  selectedUris: vscode.Uri[] | undefined
-): Promise<vscode.Uri[] | undefined> {
-  const fileUris = await resolveExplorerSelectionUris(clickedUri, selectedUris);
-
-  if (fileUris.length < 2) {
-    await vscode.window.showWarningMessage(
-      "マージするには2つ以上のログファイルを選択してください。"
-    );
-    return undefined;
-  }
-
-  return fileUris;
-}
-
-/**
- * エクスプローラで複数選択したログファイルを、ファイル選択ダイアログを
- * 経由せずに直接マージするコマンドの本体。
- */
-export function createMergeSelectedFilesCommand(
-  provider: MergedViewContentProvider
-): (clickedUri: vscode.Uri, selectedUris?: vscode.Uri[]) => Promise<void> {
-  return async function mergeSelectedFiles(
-    clickedUri: vscode.Uri,
-    selectedUris?: vscode.Uri[]
-  ): Promise<void> {
-    const fileUris = await resolveSelectedLogFileUris(clickedUri, selectedUris);
-    if (!fileUris) {
-      return;
-    }
-
-    await openMergedView(provider, fileUris);
   };
 }
 

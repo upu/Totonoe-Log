@@ -10,6 +10,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Removed
 
+- **Breaking:** `Totonoe Log: Show Normalized View`
+  (`totonoeLog.showNormalizedView`) and `Totonoe Log: Merge Selected Files`
+  (`totonoeLog.mergeSelectedFiles`) were removed. They differed only in whether
+  the input was one file or several, which is not something you should have to
+  pick a command for — selecting a single file and running `Merge Selected
+  Files` just told you to select two or more. Use the new `Totonoe Log: Open in
+  Virtual Document` for both. If you had keybindings for either, point them at
+  `totonoeLog.openVirtualDocument` (issue #249).
 - **Breaking:** `Totonoe Log: Show Normalized View Filtered`
   (`totonoeLog.showNormalizedViewFiltered`) and `Totonoe Log: Merge Selected
   Files Filtered` (`totonoeLog.mergeSelectedFilesFiltered`) were removed. Both
@@ -26,6 +34,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- `Totonoe Log: Open in Virtual Document` (`totonoeLog.openVirtualDocument`)
+  opens whatever you picked as a read-only virtual document, whether that is one
+  file or several: one gives the normalized view, two or more give the merged
+  view. It resolves its input exactly like `Show Interactive View` — the
+  Explorer selection when there is one, the active editor otherwise — so the two
+  now differ only in where the result goes. The Explorer context menu entry
+  appears for a single selected file too, which the merge command never did
+  (issue #249).
 - `Totonoe Log: Set Filter` (`totonoeLog.setViewFilter`) sets, changes, and
   clears the filter on a normalized or merged view you already have open, from
   the Command Palette or the editor context menu. It rewrites the current tab in

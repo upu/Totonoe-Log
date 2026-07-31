@@ -15,17 +15,17 @@ Totonoe Log が提供する全コマンドを、コマンドID・起動導線・
 | コマンド | ID | 起動導線 | 対象 |
 | --- | --- | --- | --- |
 | Show Interactive View | `totonoeLog.showInteractiveView` | パレット、エクスプローラ右クリック | エクスプローラの選択、無ければアクティブエディタ |
-| Show Normalized View | `totonoeLog.showNormalizedView` | パレット | アクティブエディタ |
+| Open in Virtual Document | `totonoeLog.openVirtualDocument` | パレット、エクスプローラ右クリック | エクスプローラの選択、無ければアクティブエディタ |
 | Set Filter | `totonoeLog.setViewFilter` | パレット、エディタ右クリック | 正規化ビュー／マージビューのアクティブなタブ |
-| Merge Selected Files | `totonoeLog.mergeSelectedFiles` | エクスプローラ右クリック（パレットにも出る ※） | 選択した2つ以上のファイル |
 | Compare Logs | `totonoeLog.compareLogs` | パレット | ダイアログで選ぶ2ファイル |
 | Copy Masked Text | `totonoeLog.copyMaskedText` | パレット | アクティブエディタの選択範囲、無ければ全体 |
 | Go to Source Line | `totonoeLog.goToSourceLine` | パレット、エディタ右クリック | 正規化ビュー／マージビューのカーソル行 |
 | Go to Source Line | `totonoeLog.goToSourceLineFromInteractiveView` | Interactive View の右クリックのみ | パネル上で右クリックした行 |
 
-※ `Merge Selected Files` も他と同じくコマンドパレットに登録されているため
-パレットには並ぶ。ただしパレット経由では対象となるエクスプローラの選択が渡らず、
-警告が出るだけで終わる。実行する導線はエクスプローラ右クリックだと考えてよい。
+`Show Interactive View` と `Open in Virtual Document` は入力の解決規則がまったく
+同じで、違いは出力先（Webview パネルか、読み取り専用の仮想ドキュメントか）だけ。
+どちらも選択が2つ以上ならマージ表示に切り替わるので、**選択の数でコマンドを
+選び分ける必要は無い**。
 
 **Go to Source Line** という同じタイトルのコマンドが2つあるのは、同じ操作を別の
 場所で提供しているため。Interactive View 用のほうはコマンドパレットから隠して
@@ -34,10 +34,9 @@ Totonoe Log が提供する全コマンドを、コマンドID・起動導線・
 ## どこに出るか
 
 - **コマンドパレット** — `totonoeLog.goToSourceLineFromInteractiveView` 以外の
-  すべて。`Merge Selected Files` については上の ※ のとおり
-- **エクスプローラ右クリック** — 複数選択時（`listMultiSelection`）に
-  `Merge Selected Files`、フォルダ以外（`!explorerResourceIsFolder`）に
-  `Show Interactive View`
+  すべて
+- **エクスプローラ右クリック** — フォルダ以外（`!explorerResourceIsFolder`）に
+  `Open in Virtual Document` と `Show Interactive View`。単一選択でも出る
 - **エディタ右クリック** — `Go to Source Line` と `Set Filter`。どちらも
   Totonoe Log が生成する読み取り専用ビュー（`totonoe-log-normalized` /
   `totonoe-log-merged`）の上でのみ出る
@@ -49,10 +48,15 @@ Totonoe Log が提供する全コマンドを、コマンドID・起動導線・
 
 ## アクティブエディタを読むコマンド
 
-`Show Normalized View`・`Copy Masked Text`、およびエクスプローラの選択なしで
-実行した `Show Interactive View` は、いずれもアクティブエディタのログを読む
-（未保存の変更を含む）。Totonoe Log 自身の読み取り専用ビュー上では実行できず
-警告になる。整形済みのビューを再度パースすると誤読するため。
+`Copy Masked Text`、およびエクスプローラの選択なしで実行した
+`Open in Virtual Document` / `Show Interactive View` は、いずれもアクティブ
+エディタのログを読む（未保存の変更を含む）。Totonoe Log 自身の読み取り専用
+ビュー上では実行できず警告になる。整形済みのビューを再度パースすると誤読するため。
+
+**同じファイルでも経路によって読み取り元が変わる**点に注意。エクスプローラの
+選択から実行した場合はディスクの内容を読むため、そのファイルをエディタで編集中
+でも未保存の変更は反映されない。未保存の変更ごと見たいときは、そのエディタを
+アクティブにしてコマンドパレットから実行する。
 
 `Set Filter` はこの逆で、**Totonoe Log 自身のビューの上でしか実行できない**。
 元ログを読み直すのではなく、そのビューが保持している絞り込み前のエントリに
@@ -80,17 +84,34 @@ Totonoe Log が提供する全コマンドを、コマンドID・起動導線・
   パネルへ即座に反映される
 - **詳細** — [Interactive View](../../README.ja.md#interactive-view)
 
-### Show Normalized View
+### Open in Virtual Document
 
-`totonoeLog.showNormalizedView`
+`totonoeLog.openVirtualDocument`
 
-- **起動導線** — コマンドパレット
-- **入力** — アクティブエディタ
-- **出力** — 読み取り専用の仮想ドキュメント（`totonoe-log-normalized` スキーム）。
-  タブ名は `<元ファイル名>.normalized-N.log`。`N` は実行のたびに増えるため、
-  同じファイルに対して繰り返し実行しても既存タブと衝突しない
-- **関連設定** — `gap.thresholdSeconds`、および共通の解析・表示設定
-- **詳細** — [1本のタイムラインに正規化する](../../README.ja.md#1本のタイムラインに正規化する)
+- **起動導線** — コマンドパレット、またはフォルダ以外の項目（複数可）に対する
+  エクスプローラ右クリック
+- **入力** — エクスプローラで選択がある場合はその選択（フォルダは除外）、
+  無ければアクティブエディタ。選択がフォルダだけで対象が残らない場合は警告を
+  出して終わる——アクティブエディタへは落とさない（選んだつもりの対象と
+  関係ないログが開くのを避けるため）
+- **出力** — 対象が1ファイルなら正規化ビュー（`totonoe-log-normalized` スキーム、
+  タブ名 `<元ファイル名>.normalized-N.log`）、2ファイル以上ならマージビュー
+  （`totonoe-log-merged` スキーム、タブ名 `merged-N.log`）。マージビューには
+  元ファイル名と「種類」の列が付き、ファイル名列をホバーすると元ファイルの
+  フルパスが出る。`N` は実行のたびに増えるため、繰り返し実行しても既存タブと
+  衝突しない
+- **補足** — エクスプローラ経由では各ファイルをディスクから読み、VS Code の
+  リソーススコープの `files.encoding` でデコードする。選択はフォルダをまたいで
+  よい。マージ結果が 50 MiB 以上になる場合は拡張機能の一時ストレージへ書き出し、
+  通常のテキストタブとして開く（VS Code のドキュメント同期上限を避けるため）。
+  その一時コピーを編集しても元ログは変わらず、タブを閉じると削除される。この
+  大容量結果では `Go to Source Line` と `Set Filter` は使えない。必要な情報は
+  仮想ドキュメントに対してのみ登録されるため
+- **関連設定** — `gap.thresholdSeconds`、および共通の解析・表示設定。複数ファイルを
+  マージするときは `timezone.fileOffsets` と `clockSkew.fileOffsets` が効いてくる。
+  サーバごとに異なるログを正しい時系列順でマージするための設定であるため
+- **詳細** — [1本のタイムラインに正規化する](../../README.ja.md#1本のタイムラインに正規化する)、
+  [複数ファイルをマージする](../../README.ja.md#複数ファイルをマージする)
 
 ### Set Filter
 
@@ -115,28 +136,6 @@ Totonoe Log が提供する全コマンドを、コマンドID・起動導線・
   50 MiB 超で通常のファイルタブとして開いたマージ結果。いずれも警告が出る
 - **関連設定** — `gap.thresholdSeconds`、および共通の解析・表示設定
 - **詳細** — [ノイズを絞り込みで取り除く](../../README.ja.md#ノイズを絞り込みで取り除く)
-
-### Merge Selected Files
-
-`totonoeLog.mergeSelectedFiles`
-
-- **起動導線** — 複数選択に対するエクスプローラ右クリック。コマンドパレットにも
-  並ぶが、そちらには対象の選択が無いため警告が出るだけになる
-- **入力** — 選択したファイル（フォルダは除外）。フォルダを除いて2つ未満の場合は
-  警告を出して終わる。選択はフォルダをまたいでよい。各ファイルはディスクから
-  読み、VS Code のリソーススコープの `files.encoding` でデコードする
-- **出力** — 読み取り専用の仮想ドキュメント（`totonoe-log-merged` スキーム）。
-  タブ名は `merged-N.log`。元ファイル名と「種類」の列が付き、ファイル名列を
-  ホバーすると元ファイルのフルパスが出る
-- **補足** — 50 MiB 以上の結果は拡張機能の一時ストレージへ書き出し、通常のテキスト
-  タブとして開く（VS Code のドキュメント同期上限を避けるため）。その一時コピーを
-  編集しても元ログは変わらず、タブを閉じると削除される。この大容量結果では
-  `Go to Source Line` は使えない。必要な行対応情報は仮想ドキュメントに対してのみ
-  登録されるため
-- **関連設定** — `gap.thresholdSeconds`、および共通の解析・表示設定。特に
-  `timezone.fileOffsets` と `clockSkew.fileOffsets` はこのコマンドで効いてくる。
-  サーバごとに異なるログを正しい時系列順でマージするための設定であるため
-- **詳細** — [複数ファイルをマージする](../../README.ja.md#複数ファイルをマージする)
 
 ### Compare Logs
 

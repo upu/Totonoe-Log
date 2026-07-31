@@ -25,7 +25,7 @@ async function waitForDocumentText(
 }
 
 suite("Totonoe Log extension", () => {
-  test("activates and registers the mergeSelectedFiles command", async () => {
+  test("activates and registers the openVirtualDocument command", async () => {
     const extension = vscode.extensions.getExtension("upu.totonoe-log");
     assert.ok(extension, "extension should be discoverable by id");
 
@@ -33,19 +33,8 @@ suite("Totonoe Log extension", () => {
 
     const commands = await vscode.commands.getCommands(true);
     assert.ok(
-      commands.includes("totonoeLog.mergeSelectedFiles"),
-      "totonoeLog.mergeSelectedFiles command should be registered"
-    );
-  });
-
-  test("registers the showNormalizedView command", async () => {
-    const extension = vscode.extensions.getExtension("upu.totonoe-log");
-    await extension!.activate();
-
-    const commands = await vscode.commands.getCommands(true);
-    assert.ok(
-      commands.includes("totonoeLog.showNormalizedView"),
-      "totonoeLog.showNormalizedView command should be registered"
+      commands.includes("totonoeLog.openVirtualDocument"),
+      "totonoeLog.openVirtualDocument command should be registered"
     );
   });
 
@@ -101,7 +90,7 @@ suite("Totonoe Log normalized view", () => {
     });
     await vscode.window.showTextDocument(source);
 
-    await vscode.commands.executeCommand("totonoeLog.showNormalizedView");
+    await vscode.commands.executeCommand("totonoeLog.openVirtualDocument");
 
     const activeEditor = vscode.window.activeTextEditor;
     assert.ok(activeEditor, "a normalized view editor should be shown");
@@ -128,7 +117,7 @@ suite("Totonoe Log normalized view", () => {
       const source = await vscode.workspace.openTextDocument(vscode.Uri.file(tempFilePath));
       await vscode.window.showTextDocument(source);
 
-      await vscode.commands.executeCommand("totonoeLog.showNormalizedView");
+      await vscode.commands.executeCommand("totonoeLog.openVirtualDocument");
 
       const activeEditor = vscode.window.activeTextEditor;
       assert.ok(activeEditor, "a normalized view editor should be shown");
@@ -160,7 +149,7 @@ suite("Totonoe Log normalized view", () => {
       const source = await vscode.workspace.openTextDocument(vscode.Uri.file(tempFilePath));
       await vscode.window.showTextDocument(source);
 
-      await vscode.commands.executeCommand("totonoeLog.showNormalizedView");
+      await vscode.commands.executeCommand("totonoeLog.openVirtualDocument");
 
       const activeEditor = vscode.window.activeTextEditor;
       assert.ok(activeEditor, "a normalized view editor should be shown");
@@ -238,7 +227,7 @@ suite("Totonoe Log normalized view", () => {
     // コマンドが例外を投げずに完了することのみを確認する（警告メッセージの
     // 表示自体は vscode.window.showWarningMessage をモックしない限り検証できない）。
     await assert.doesNotReject(async () => {
-      await vscode.commands.executeCommand("totonoeLog.showNormalizedView");
+      await vscode.commands.executeCommand("totonoeLog.openVirtualDocument");
     });
   });
 });
@@ -279,7 +268,7 @@ suite("Totonoe Log set filter on the normalized view (#248)", () => {
 
     const source = await vscode.workspace.openTextDocument({ content, language: "log" });
     await vscode.window.showTextDocument(source);
-    await vscode.commands.executeCommand("totonoeLog.showNormalizedView");
+    await vscode.commands.executeCommand("totonoeLog.openVirtualDocument");
 
     const document = vscode.window.activeTextEditor!.document;
     assert.strictEqual(document.uri.scheme, "totonoe-log-normalized");
@@ -912,7 +901,7 @@ suite("Totonoe Log merged view", () => {
 
       const appLogUri = vscode.Uri.file(appLogPath);
       const dbLogUri = vscode.Uri.file(dbLogPath);
-      await vscode.commands.executeCommand("totonoeLog.mergeSelectedFiles", appLogUri, [
+      await vscode.commands.executeCommand("totonoeLog.openVirtualDocument", appLogUri, [
         appLogUri,
         dbLogUri,
       ]);
@@ -960,7 +949,7 @@ suite("Totonoe Log merged view", () => {
 
       const shiftJisLogUri = vscode.Uri.file(shiftJisLogPath);
       const utf8LogUri = vscode.Uri.file(utf8LogPath);
-      await vscode.commands.executeCommand("totonoeLog.mergeSelectedFiles", shiftJisLogUri, [
+      await vscode.commands.executeCommand("totonoeLog.openVirtualDocument", shiftJisLogUri, [
         shiftJisLogUri,
         utf8LogUri,
       ]);
@@ -1014,7 +1003,7 @@ suite("Totonoe Log merged view", () => {
 
       const logUri = vscode.Uri.file(logPath);
       try {
-        await vscode.commands.executeCommand("totonoeLog.mergeSelectedFiles", logUri, [
+        await vscode.commands.executeCommand("totonoeLog.openVirtualDocument", logUri, [
           logUri,
           logUri,
         ]);
@@ -1060,7 +1049,7 @@ suite("Totonoe Log merged view", () => {
       );
 
       const bigLogUri = vscode.Uri.file(bigLogPath);
-      await vscode.commands.executeCommand("totonoeLog.mergeSelectedFiles", bigLogUri, [
+      await vscode.commands.executeCommand("totonoeLog.openVirtualDocument", bigLogUri, [
         bigLogUri,
         bigLogUri,
       ]);
@@ -1185,7 +1174,7 @@ suite("Totonoe Log merged view filename hover (#150)", () => {
       const uriA = vscode.Uri.file(appAPath);
       const uriB = vscode.Uri.file(appBPath);
 
-      await vscode.commands.executeCommand("totonoeLog.mergeSelectedFiles", uriA, [uriA, uriB]);
+      await vscode.commands.executeCommand("totonoeLog.openVirtualDocument", uriA, [uriA, uriB]);
 
       const viewEditor = vscode.window.activeTextEditor;
       assert.ok(viewEditor, "a merged view editor should be shown");
@@ -1229,7 +1218,7 @@ suite("Totonoe Log merged view filename hover (#150)", () => {
       await fs.writeFile(appPath, "2024-01-02T03:04:05Z INFO hello");
       const uri = vscode.Uri.file(appPath);
 
-      await vscode.commands.executeCommand("totonoeLog.mergeSelectedFiles", uri, [
+      await vscode.commands.executeCommand("totonoeLog.openVirtualDocument", uri, [
         uri,
         uri,
       ]);
@@ -1308,7 +1297,7 @@ suite("Totonoe Log set filter on the merged view (#248)", () => {
 
   /** 指定したファイル群をマージして開き、そのビューのドキュメントを返す。 */
   async function openMergedView(fileUris: readonly vscode.Uri[]): Promise<vscode.TextDocument> {
-    await vscode.commands.executeCommand("totonoeLog.mergeSelectedFiles", fileUris[0], [
+    await vscode.commands.executeCommand("totonoeLog.openVirtualDocument", fileUris[0], [
       ...fileUris,
     ]);
     const document = vscode.window.activeTextEditor!.document;
@@ -1509,18 +1498,7 @@ suite("Totonoe Log set filter on the merged view (#248)", () => {
   });
 });
 
-suite("Totonoe Log merge selected files (explorer context menu)", () => {
-  test("registers the mergeSelectedFiles command", async () => {
-    const extension = vscode.extensions.getExtension("upu.totonoe-log");
-    await extension!.activate();
-
-    const commands = await vscode.commands.getCommands(true);
-    assert.ok(
-      commands.includes("totonoeLog.mergeSelectedFiles"),
-      "totonoeLog.mergeSelectedFiles command should be registered"
-    );
-  });
-
+suite("Totonoe Log merge from the explorer context menu", () => {
   test("merges the files passed as the explorer multi-selection, without prompting a file picker", async () => {
     const extension = vscode.extensions.getExtension("upu.totonoe-log");
     await extension!.activate();
@@ -1548,7 +1526,7 @@ suite("Totonoe Log merge selected files (explorer context menu)", () => {
       try {
         // エクスプローラのコンテキストメニューは (クリックされた項目, 選択項目全体の配列) を渡す。
         await vscode.commands.executeCommand(
-          "totonoeLog.mergeSelectedFiles",
+          "totonoeLog.openVirtualDocument",
           appUri,
           [appUri, dbUri]
         );
@@ -1575,7 +1553,7 @@ suite("Totonoe Log merge selected files (explorer context menu)", () => {
     }
   });
 
-  test("shows a warning and does nothing when fewer than two files are selected", async () => {
+  test("opens a single selected file as a normalized view instead of warning (#249)", async () => {
     const extension = vscode.extensions.getExtension("upu.totonoe-log");
     await extension!.activate();
 
@@ -1589,34 +1567,18 @@ suite("Totonoe Log merge selected files (explorer context menu)", () => {
       await fs.writeFile(appLogPath, "2024-01-02T03:04:05Z INFO hello");
       const appUri = vscode.Uri.file(appLogPath);
 
-      const source = await vscode.workspace.openTextDocument({
-        content: "2024-01-02T03:04:05Z INFO starting",
-        language: "log",
-      });
-      await vscode.window.showTextDocument(source);
-      await vscode.commands.executeCommand("workbench.action.closeOtherEditors");
+      // 以前は「マージするには2つ以上のログファイルを選択してください。」と
+      // 断っていたが、これは1コマンドに統合する前の分割の副作用でしかない。
+      await vscode.commands.executeCommand("totonoeLog.openVirtualDocument", appUri, [appUri]);
 
-      const originalShowWarningMessage = vscode.window.showWarningMessage;
-      let warningMessage: string | undefined;
-      (vscode.window as any).showWarningMessage = async (message: string) => {
-        warningMessage = message;
-        return undefined;
-      };
-
-      try {
-        await vscode.commands.executeCommand("totonoeLog.mergeSelectedFiles", appUri, [appUri]);
-      } finally {
-        (vscode.window as any).showWarningMessage = originalShowWarningMessage;
-      }
-
-      assert.ok(
-        warningMessage?.includes("2つ以上"),
-        "a warning should explain that at least two files are required"
-      );
       const activeEditor = vscode.window.activeTextEditor;
-      assert.ok(activeEditor, "the original editor should remain active");
-      assert.notStrictEqual(activeEditor!.document.uri.scheme, "totonoe-log-merged");
+      assert.strictEqual(activeEditor!.document.uri.scheme, "totonoe-log-normalized");
+      assert.strictEqual(
+        activeEditor!.document.getText(),
+        "1 | 2024-01-02T03:04:05.000Z INFO hello"
+      );
     } finally {
+      await vscode.commands.executeCommand("workbench.action.closeAllEditors");
       await fs.rm(tempDir, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 });
     }
   });
@@ -1642,7 +1604,7 @@ suite("Totonoe Log merge selected files (explorer context menu)", () => {
       const dbUri = vscode.Uri.file(dbLogPath);
       const subDirUri = vscode.Uri.file(subDirPath);
 
-      await vscode.commands.executeCommand("totonoeLog.mergeSelectedFiles", subDirUri, [
+      await vscode.commands.executeCommand("totonoeLog.openVirtualDocument", subDirUri, [
         subDirUri,
         appUri,
         dbUri,
@@ -1724,7 +1686,7 @@ suite("Totonoe Log virtual document guard", () => {
     await vscode.window.showTextDocument(source);
     await vscode.commands.executeCommand("workbench.action.closeOtherEditors");
 
-    await vscode.commands.executeCommand("totonoeLog.showNormalizedView");
+    await vscode.commands.executeCommand("totonoeLog.openVirtualDocument");
     const normalizedUri = vscode.window.activeTextEditor?.document.uri.toString();
     assert.strictEqual(vscode.window.activeTextEditor?.document.uri.scheme, "totonoe-log-normalized");
 
@@ -1736,7 +1698,7 @@ suite("Totonoe Log virtual document guard", () => {
     };
 
     try {
-      await vscode.commands.executeCommand("totonoeLog.showNormalizedView");
+      await vscode.commands.executeCommand("totonoeLog.openVirtualDocument");
     } finally {
       (vscode.window as any).showWarningMessage = originalShowWarningMessage;
     }
@@ -1773,7 +1735,7 @@ suite("Totonoe Log virtual document guard", () => {
     await vscode.window.showTextDocument(source);
     await vscode.commands.executeCommand("workbench.action.closeOtherEditors");
 
-    await vscode.commands.executeCommand("totonoeLog.showNormalizedView");
+    await vscode.commands.executeCommand("totonoeLog.openVirtualDocument");
     assert.strictEqual(vscode.window.activeTextEditor?.document.uri.scheme, "totonoe-log-normalized");
 
     const sentinel = "sentinel-before-guarded-copy";
@@ -1820,7 +1782,7 @@ suite("Totonoe Log virtual document guard", () => {
 
       const appLogUri = vscode.Uri.file(appLogPath);
       const dbLogUri = vscode.Uri.file(dbLogPath);
-      await vscode.commands.executeCommand("totonoeLog.mergeSelectedFiles", appLogUri, [
+      await vscode.commands.executeCommand("totonoeLog.openVirtualDocument", appLogUri, [
         appLogUri,
         dbLogUri,
       ]);
@@ -1836,7 +1798,7 @@ suite("Totonoe Log virtual document guard", () => {
       };
 
       try {
-        await vscode.commands.executeCommand("totonoeLog.showNormalizedView");
+        await vscode.commands.executeCommand("totonoeLog.openVirtualDocument");
       } finally {
         (vscode.window as any).showWarningMessage = originalShowWarningMessage;
       }
@@ -1937,7 +1899,7 @@ suite("Totonoe Log virtual document guard", () => {
     };
 
     try {
-      await vscode.commands.executeCommand("totonoeLog.showNormalizedView");
+      await vscode.commands.executeCommand("totonoeLog.openVirtualDocument");
     } finally {
       (vscode.window as any).showWarningMessage = originalShowWarningMessage;
     }
@@ -1973,7 +1935,7 @@ suite("Totonoe Log custom timestamp formats", () => {
       });
       await vscode.window.showTextDocument(source);
 
-      await vscode.commands.executeCommand("totonoeLog.showNormalizedView");
+      await vscode.commands.executeCommand("totonoeLog.openVirtualDocument");
 
       const activeEditor = vscode.window.activeTextEditor;
       assert.ok(activeEditor, "a normalized view editor should be shown");
@@ -2012,7 +1974,7 @@ suite("Totonoe Log custom timestamp formats", () => {
       });
       await vscode.window.showTextDocument(source);
 
-      await vscode.commands.executeCommand("totonoeLog.showNormalizedView");
+      await vscode.commands.executeCommand("totonoeLog.openVirtualDocument");
 
       assert.ok(
         warningMessage?.includes("timestampFormats"),
@@ -2046,7 +2008,7 @@ suite("Totonoe Log timezone settings (#13)", () => {
       });
       await vscode.window.showTextDocument(source);
 
-      await vscode.commands.executeCommand("totonoeLog.showNormalizedView");
+      await vscode.commands.executeCommand("totonoeLog.openVirtualDocument");
 
       const activeEditor = vscode.window.activeTextEditor;
       assert.ok(activeEditor, "a normalized view editor should be shown");
@@ -2091,7 +2053,7 @@ suite("Totonoe Log timezone settings (#13)", () => {
     };
 
     try {
-      await vscode.commands.executeCommand("totonoeLog.showNormalizedView");
+      await vscode.commands.executeCommand("totonoeLog.openVirtualDocument");
       const document = vscode.window.activeTextEditor!.document;
       await vscode.commands.executeCommand("totonoeLog.setViewFilter");
 
@@ -2126,7 +2088,7 @@ suite("Totonoe Log timezone settings (#13)", () => {
       });
       await vscode.window.showTextDocument(source);
 
-      await vscode.commands.executeCommand("totonoeLog.showNormalizedView");
+      await vscode.commands.executeCommand("totonoeLog.openVirtualDocument");
 
       const activeEditor = vscode.window.activeTextEditor;
       assert.ok(activeEditor, "a normalized view editor should be shown");
@@ -2167,7 +2129,7 @@ suite("Totonoe Log timezone settings (#13)", () => {
 
       const tokyoLogUri = vscode.Uri.file(tokyoLogPath);
       const utcLogUri = vscode.Uri.file(utcLogPath);
-      await vscode.commands.executeCommand("totonoeLog.mergeSelectedFiles", tokyoLogUri, [
+      await vscode.commands.executeCommand("totonoeLog.openVirtualDocument", tokyoLogUri, [
         tokyoLogUri,
         utcLogUri,
       ]);
@@ -2212,7 +2174,7 @@ suite("Totonoe Log timezone settings (#13)", () => {
       });
       await vscode.window.showTextDocument(source);
 
-      await vscode.commands.executeCommand("totonoeLog.showNormalizedView");
+      await vscode.commands.executeCommand("totonoeLog.openVirtualDocument");
 
       assert.ok(
         warningMessage?.includes("timezone"),
@@ -2257,7 +2219,7 @@ suite("Totonoe Log clock skew settings (#15)", () => {
       const source = await vscode.workspace.openTextDocument(vscode.Uri.file(skewedLogPath));
       await vscode.window.showTextDocument(source);
 
-      await vscode.commands.executeCommand("totonoeLog.showNormalizedView");
+      await vscode.commands.executeCommand("totonoeLog.openVirtualDocument");
 
       const activeEditor = vscode.window.activeTextEditor;
       assert.ok(activeEditor, "a normalized view editor should be shown");
@@ -2299,7 +2261,7 @@ suite("Totonoe Log clock skew settings (#15)", () => {
 
       const fastLogUri = vscode.Uri.file(fastLogPath);
       const steadyLogUri = vscode.Uri.file(steadyLogPath);
-      await vscode.commands.executeCommand("totonoeLog.mergeSelectedFiles", fastLogUri, [
+      await vscode.commands.executeCommand("totonoeLog.openVirtualDocument", fastLogUri, [
         fastLogUri,
         steadyLogUri,
       ]);
@@ -2344,7 +2306,7 @@ suite("Totonoe Log clock skew settings (#15)", () => {
       });
       await vscode.window.showTextDocument(source);
 
-      await vscode.commands.executeCommand("totonoeLog.showNormalizedView");
+      await vscode.commands.executeCommand("totonoeLog.openVirtualDocument");
 
       assert.ok(
         warningMessage?.includes("clockSkew"),
@@ -2429,7 +2391,7 @@ suite("Totonoe Log low timestamp recognition warning", () => {
       await vscode.window.showTextDocument(source);
 
       const warnings = await collectRecognitionWarningsWhile(async () => {
-        await vscode.commands.executeCommand("totonoeLog.showNormalizedView");
+        await vscode.commands.executeCommand("totonoeLog.openVirtualDocument");
       });
 
       assert.strictEqual(warnings.length, 1, "exactly one recognition warning should be shown");
@@ -2460,7 +2422,7 @@ suite("Totonoe Log low timestamp recognition warning", () => {
       await vscode.window.showTextDocument(source);
 
       const warnings = await collectRecognitionWarningsWhile(async () => {
-        await vscode.commands.executeCommand("totonoeLog.showNormalizedView");
+        await vscode.commands.executeCommand("totonoeLog.openVirtualDocument");
       });
 
       assert.strictEqual(warnings.length, 1);
@@ -2478,13 +2440,13 @@ suite("Totonoe Log low timestamp recognition warning", () => {
       await vscode.window.showTextDocument(source);
 
       const firstRun = await collectRecognitionWarningsWhile(async () => {
-        await vscode.commands.executeCommand("totonoeLog.showNormalizedView");
+        await vscode.commands.executeCommand("totonoeLog.openVirtualDocument");
       });
       assert.strictEqual(firstRun.length, 1, "the first run should warn");
 
       await vscode.window.showTextDocument(source);
       const secondRun = await collectRecognitionWarningsWhile(async () => {
-        await vscode.commands.executeCommand("totonoeLog.showNormalizedView");
+        await vscode.commands.executeCommand("totonoeLog.openVirtualDocument");
       });
       assert.strictEqual(secondRun.length, 0, "the second run on the same file should not warn again");
     });
@@ -2499,7 +2461,7 @@ suite("Totonoe Log low timestamp recognition warning", () => {
       await vscode.window.showTextDocument(source);
 
       const warnings = await collectRecognitionWarningsWhile(async () => {
-        await vscode.commands.executeCommand("totonoeLog.showNormalizedView");
+        await vscode.commands.executeCommand("totonoeLog.openVirtualDocument");
       });
 
       assert.strictEqual(warnings.length, 0);
@@ -2517,7 +2479,7 @@ suite("Totonoe Log low timestamp recognition warning", () => {
       ],
       async (uris) => {
         const warnings = await collectRecognitionWarningsWhile(async () => {
-          await vscode.commands.executeCommand("totonoeLog.mergeSelectedFiles", uris[0], uris);
+          await vscode.commands.executeCommand("totonoeLog.openVirtualDocument", uris[0], uris);
         });
 
         assert.strictEqual(warnings.length, 1, "only the unrecognized file should warn");
@@ -2591,7 +2553,7 @@ suite("Totonoe Log go to source line (#137)", () => {
     });
     await vscode.window.showTextDocument(source);
 
-    await vscode.commands.executeCommand("totonoeLog.showNormalizedView");
+    await vscode.commands.executeCommand("totonoeLog.openVirtualDocument");
 
     const viewEditor = vscode.window.activeTextEditor;
     assert.ok(viewEditor, "a normalized view editor should be shown");
@@ -2627,7 +2589,7 @@ suite("Totonoe Log go to source line (#137)", () => {
     (vscode.window as any).showQuickPick = async (items: vscode.QuickPickItem[]) =>
       items.filter((item) => item.label === "セベリティ" || item.label === "ERROR");
 
-    await vscode.commands.executeCommand("totonoeLog.showNormalizedView");
+    await vscode.commands.executeCommand("totonoeLog.openVirtualDocument");
     const view = vscode.window.activeTextEditor!.document;
     try {
       await vscode.commands.executeCommand("totonoeLog.setViewFilter");
@@ -2672,7 +2634,7 @@ suite("Totonoe Log go to source line (#137)", () => {
       const uriA = vscode.Uri.file(appAPath);
       const uriB = vscode.Uri.file(appBPath);
 
-      await vscode.commands.executeCommand("totonoeLog.mergeSelectedFiles", uriA, [uriA, uriB]);
+      await vscode.commands.executeCommand("totonoeLog.openVirtualDocument", uriA, [uriA, uriB]);
 
       const viewEditor = vscode.window.activeTextEditor;
       assert.ok(viewEditor, "a merged view editor should be shown");
@@ -2709,7 +2671,7 @@ suite("Totonoe Log go to source line (#137)", () => {
       });
       await vscode.window.showTextDocument(source);
 
-      await vscode.commands.executeCommand("totonoeLog.showNormalizedView");
+      await vscode.commands.executeCommand("totonoeLog.openVirtualDocument");
 
       const viewEditor = vscode.window.activeTextEditor;
       assert.ok(viewEditor, "a normalized view editor should be shown");
@@ -2777,7 +2739,7 @@ suite("Totonoe Log go to source line (#137)", () => {
       // マージビューは vscode.workspace.fs.readFile で元ファイルを読むため
       // （openTextDocument を経由しない）、この時点では VSCode 側に元ファイルの
       // ドキュメントキャッシュが残らず、削除後の openTextDocument が確実に失敗する。
-      await vscode.commands.executeCommand("totonoeLog.mergeSelectedFiles", keptUri, [
+      await vscode.commands.executeCommand("totonoeLog.openVirtualDocument", keptUri, [
         keptUri,
         deletedUri,
       ]);
@@ -2934,5 +2896,268 @@ suite("logFileReading / explorer selection helpers (#181)", () => {
         ]
       );
     });
+  });
+});
+
+suite("Totonoe Log open in virtual document (#249)", () => {
+  async function withTempLogFiles<T>(
+    files: Record<string, string>,
+    run: (paths: Record<string, string>) => Promise<T>
+  ): Promise<T> {
+    const fs = await import("node:fs/promises");
+    const os = await import("node:os");
+    const path = await import("node:path");
+
+    const tempDir = await fs.mkdtemp(path.join(os.tmpdir(), "totonoe-log-"));
+    try {
+      const paths: Record<string, string> = {};
+      for (const [name, content] of Object.entries(files)) {
+        const filePath = path.join(tempDir, name);
+        await fs.mkdir(path.dirname(filePath), { recursive: true });
+        await fs.writeFile(filePath, content);
+        paths[name] = filePath;
+      }
+      return await run(paths);
+    } finally {
+      await vscode.commands.executeCommand("workbench.action.closeAllEditors");
+      await fs.rm(tempDir, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 });
+    }
+  }
+
+  test("registers the openVirtualDocument command and drops the two it replaces", async () => {
+    const extension = vscode.extensions.getExtension("upu.totonoe-log");
+    await extension!.activate();
+
+    const commands = await vscode.commands.getCommands(true);
+    const contributed = (
+      extension!.packageJSON.contributes.commands as Array<{ command: string }>
+    ).map((item) => item.command);
+
+    assert.ok(
+      commands.includes("totonoeLog.openVirtualDocument"),
+      "totonoeLog.openVirtualDocument command should be registered"
+    );
+    for (const removed of ["totonoeLog.showNormalizedView", "totonoeLog.mergeSelectedFiles"]) {
+      assert.ok(!commands.includes(removed), `${removed} should no longer be registered`);
+      assert.ok(!contributed.includes(removed), `${removed} should no longer be contributed`);
+    }
+  });
+
+  test("shows the explorer entry for any non-folder, not just multi-selections", async () => {
+    const extension = vscode.extensions.getExtension("upu.totonoe-log");
+    await extension!.activate();
+
+    const explorerContext = extension!.packageJSON.contributes.menus["explorer/context"] as Array<{
+      command: string;
+      when: string;
+    }>;
+    const entry = explorerContext.find(
+      (item) => item.command === "totonoeLog.openVirtualDocument"
+    );
+    assert.ok(entry, "openVirtualDocument should appear in the explorer context menu");
+    assert.strictEqual(
+      entry!.when,
+      "!explorerResourceIsFolder",
+      "a single selected file must be enough to offer the command"
+    );
+  });
+
+  test("opens a normalized view for a single file selected in the explorer", async () => {
+    const extension = vscode.extensions.getExtension("upu.totonoe-log");
+    await extension!.activate();
+
+    await withTempLogFiles({ "app.log": "2024-01-02T03:04:05Z ERROR boom" }, async (paths) => {
+      const appLogUri = vscode.Uri.file(paths["app.log"]);
+
+      await vscode.commands.executeCommand("totonoeLog.openVirtualDocument", appLogUri, [
+        appLogUri,
+      ]);
+
+      const activeEditor = vscode.window.activeTextEditor;
+      assert.strictEqual(activeEditor!.document.uri.scheme, "totonoe-log-normalized");
+      // 単一ファイルなのでファイル名/種類列は付かない。
+      assert.strictEqual(
+        activeEditor!.document.getText(),
+        "1 | 2024-01-02T03:04:05.000Z ERROR boom"
+      );
+    });
+  });
+
+  test("opens a merged view for two or more files, spanning folders", async () => {
+    const extension = vscode.extensions.getExtension("upu.totonoe-log");
+    await extension!.activate();
+
+    await withTempLogFiles(
+      {
+        "app.log": "2024-01-02T03:04:05Z INFO starting",
+        "sub/db.log": "2024-01-02T03:04:06Z ERROR boom",
+      },
+      async (paths) => {
+        const appLogUri = vscode.Uri.file(paths["app.log"]);
+        const dbLogUri = vscode.Uri.file(paths["sub/db.log"]);
+
+        await vscode.commands.executeCommand("totonoeLog.openVirtualDocument", appLogUri, [
+          appLogUri,
+          dbLogUri,
+        ]);
+
+        const activeEditor = vscode.window.activeTextEditor;
+        assert.strictEqual(activeEditor!.document.uri.scheme, "totonoe-log-merged");
+        const text = activeEditor!.document.getText();
+        assert.ok(text.includes("app.log"), "the merged view should carry the file name column");
+        assert.ok(text.includes("db.log"), "a file from another folder should be merged in");
+      }
+    );
+  });
+
+  test("falls back to the active editor when run from the palette, unsaved changes included", async () => {
+    const extension = vscode.extensions.getExtension("upu.totonoe-log");
+    await extension!.activate();
+
+    const source = await vscode.workspace.openTextDocument({
+      content: "2024-01-02T03:04:05Z ERROR unsaved edit",
+      language: "log",
+    });
+    await vscode.window.showTextDocument(source);
+
+    await vscode.commands.executeCommand("totonoeLog.openVirtualDocument");
+
+    const activeEditor = vscode.window.activeTextEditor;
+    assert.strictEqual(activeEditor!.document.uri.scheme, "totonoe-log-normalized");
+    assert.strictEqual(
+      activeEditor!.document.getText(),
+      "1 | 2024-01-02T03:04:05.000Z ERROR unsaved edit"
+    );
+
+    await vscode.commands.executeCommand("workbench.action.closeAllEditors");
+  });
+
+  test("warns instead of opening when the selection holds only folders", async () => {
+    const extension = vscode.extensions.getExtension("upu.totonoe-log");
+    await extension!.activate();
+
+    await withTempLogFiles({ "sub/app.log": "2024-01-02T03:04:05Z INFO starting" }, async (paths) => {
+      const path = await import("node:path");
+      const subDirUri = vscode.Uri.file(path.dirname(paths["sub/app.log"]));
+
+      const source = await vscode.workspace.openTextDocument({
+        content: "2024-01-02T03:04:05Z INFO starting",
+        language: "log",
+      });
+      await vscode.window.showTextDocument(source);
+      await vscode.commands.executeCommand("workbench.action.closeOtherEditors");
+
+      const originalShowWarningMessage = vscode.window.showWarningMessage;
+      let warningMessage: string | undefined;
+      (vscode.window as any).showWarningMessage = async (message: string) => {
+        warningMessage = message;
+        return undefined;
+      };
+
+      try {
+        // フォルダだけを選んだ場合、フォルダは除外されて対象が残らない。
+        // アクティブエディタへは落とさない——エクスプローラで選んだつもりの
+        // 対象と、たまたま開いていたログが食い違うため。
+        await vscode.commands.executeCommand("totonoeLog.openVirtualDocument", subDirUri, [
+          subDirUri,
+        ]);
+      } finally {
+        (vscode.window as any).showWarningMessage = originalShowWarningMessage;
+      }
+
+      assert.ok(warningMessage, "a warning should explain that no log file was selected");
+      assert.notStrictEqual(
+        vscode.window.activeTextEditor!.document.uri.scheme,
+        "totonoe-log-normalized"
+      );
+      assert.notStrictEqual(
+        vscode.window.activeTextEditor!.document.uri.scheme,
+        "totonoe-log-merged"
+      );
+    });
+  });
+
+  test("keeps Go to Source Line working from both the single-file and merged results", async () => {
+    const extension = vscode.extensions.getExtension("upu.totonoe-log");
+    await extension!.activate();
+
+    await withTempLogFiles(
+      {
+        "app.log": "2024-01-02T03:04:05Z INFO starting",
+        "db.log": "2024-01-02T03:04:06Z ERROR boom",
+      },
+      async (paths) => {
+        const appLogUri = vscode.Uri.file(paths["app.log"]);
+        const dbLogUri = vscode.Uri.file(paths["db.log"]);
+
+        await vscode.commands.executeCommand("totonoeLog.openVirtualDocument", dbLogUri, [
+          dbLogUri,
+        ]);
+        vscode.window.activeTextEditor!.selection = new vscode.Selection(0, 0, 0, 0);
+        await vscode.commands.executeCommand("totonoeLog.goToSourceLine");
+        assert.strictEqual(
+          vscode.window.activeTextEditor!.document.uri.fsPath,
+          dbLogUri.fsPath,
+          "the single-file result should map back to its source"
+        );
+
+        await vscode.commands.executeCommand("totonoeLog.openVirtualDocument", appLogUri, [
+          appLogUri,
+          dbLogUri,
+        ]);
+        assert.strictEqual(
+          vscode.window.activeTextEditor!.document.uri.scheme,
+          "totonoe-log-merged"
+        );
+        vscode.window.activeTextEditor!.selection = new vscode.Selection(0, 0, 0, 0);
+        await vscode.commands.executeCommand("totonoeLog.goToSourceLine");
+        assert.strictEqual(
+          vscode.window.activeTextEditor!.document.uri.fsPath,
+          appLogUri.fsPath,
+          "the merged result should map back to the first entry's source"
+        );
+      }
+    );
+  });
+
+  test("can be filtered afterwards in both shapes (#248 keeps working)", async () => {
+    const extension = vscode.extensions.getExtension("upu.totonoe-log");
+    await extension!.activate();
+
+    await withTempLogFiles(
+      {
+        "app.log": "2024-01-02T03:04:05Z INFO starting",
+        "db.log": "2024-01-02T03:04:06Z ERROR boom",
+      },
+      async (paths) => {
+        const appLogUri = vscode.Uri.file(paths["app.log"]);
+        const dbLogUri = vscode.Uri.file(paths["db.log"]);
+
+        const originalShowQuickPick = vscode.window.showQuickPick;
+        (vscode.window as any).showQuickPick = async (items: vscode.QuickPickItem[]) => {
+          const isKindPicker = items.some((item) => item.label === "セベリティ");
+          return isKindPicker
+            ? items.filter((item) => item.label === "セベリティ")
+            : items.filter((item) => item.label === "ERROR");
+        };
+
+        try {
+          await vscode.commands.executeCommand("totonoeLog.openVirtualDocument", appLogUri, [
+            appLogUri,
+            dbLogUri,
+          ]);
+          const merged = vscode.window.activeTextEditor!.document;
+          await vscode.commands.executeCommand("totonoeLog.setViewFilter");
+          assert.ok(
+            !(await waitForDocumentText(merged, (text) => !text.includes("INFO starting"))).includes(
+              "INFO starting"
+            ),
+            "the merged result opened by the unified command should be filterable"
+          );
+        } finally {
+          (vscode.window as any).showQuickPick = originalShowQuickPick;
+        }
+      }
+    );
   });
 });

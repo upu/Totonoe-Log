@@ -11,9 +11,11 @@ import {
   NORMALIZED_VIEW_SCHEME,
   type FilterableViewSource,
 } from "./virtualDocumentContentProvider";
-import { getSourceDocumentOrWarn, parseSourceLog } from "./logSourceDocument";
+import { parseLogFileEntries, parseSourceLog } from "./logSourceDocument";
 import { readDisplayTimezone } from "./timezoneSettings";
 import { readGapThresholdMs } from "./gapThresholdSetting";
+import { loadLogFiles } from "./logFileReading";
+import { warnIfLowTimestampRecognition } from "./timestampRecognitionWarning";
 
 // スキーム定義は virtualDocumentContentProvider.ts に集約している
 // （既存の import 元を変えずに済むよう、ここから再エクスポートする）。
@@ -125,30 +127,50 @@ export function createNormalizedFilterSource(
 
 /**
  * アクティブなエディタの内容を正規化し、読み取り専用の仮想ドキュメントとして
- * 開くコマンドの本体。VSCode 標準の検索・コピー・diff エディタがそのまま
- * 使える仮想ドキュメント方式（`TextDocumentContentProvider`）を採用する。
+ * 開く。VSCode 標準の検索・コピー・diff エディタがそのまま使える仮想
+ * ドキュメント方式（`TextDocumentContentProvider`）を採用する。
  *
  * 絞り込みはここでは尋ねない。開いたビューに対する `Set Filter`
  * （`setViewFilter.ts`、issue #248）で後からいつでも設定・変更・解除する。
  */
-export function createShowNormalizedViewCommand(
-  provider: NormalizedViewContentProvider
-): () => Promise<void> {
-  return async function showNormalizedView(): Promise<void> {
-    const sourceDocument = getSourceDocumentOrWarn("正規化する");
-    if (!sourceDocument) {
-      return;
-    }
+export async function openNormalizedViewForDocument(
+  provider: NormalizedViewContentProvider,
+  sourceDocument: vscode.TextDocument
+): Promise<void> {
+  const entries = parseSourceLog(sourceDocument);
+  const formatted = formatNormalizedWithGap(entries);
 
-    const entries = parseSourceLog(sourceDocument);
-    const formatted = formatNormalizedWithGap(entries);
+  await openVirtualNormalizedDocument(
+    provider,
+    sourceDocument.uri,
+    formatted,
+    "normalized",
+    createNormalizedFilterSource(entries)
+  );
+}
 
-    await openVirtualNormalizedDocument(
-      provider,
-      sourceDocument.uri,
-      formatted,
-      "normalized",
-      createNormalizedFilterSource(entries)
-    );
-  };
+/**
+ * ディスク上のログファイル1件を正規化して開く（issue #249）。エクスプローラ
+ * で選んだファイルはエディタで開かれているとは限らないため、`TextDocument`
+ * ではなく URI を起点にする経路が要る。
+ *
+ * 認識率の警告（issue #101）は {@link parseLogFileEntries} が出さないので、
+ * エディタ起点の経路（{@link parseSourceLog}）と揃うようここで出す。
+ */
+export async function openNormalizedViewForFile(
+  provider: NormalizedViewContentProvider,
+  fileUri: vscode.Uri
+): Promise<void> {
+  const [file] = await loadLogFiles([fileUri]);
+  const entries = parseLogFileEntries(file.input);
+  warnIfLowTimestampRecognition(fileUri, entries);
+  const formatted = formatNormalizedWithGap(entries);
+
+  await openVirtualNormalizedDocument(
+    provider,
+    fileUri,
+    formatted,
+    "normalized",
+    createNormalizedFilterSource(entries)
+  );
 }

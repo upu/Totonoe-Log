@@ -17,18 +17,18 @@ All commands are prefixed with `Totonoe Log:` in the Command Palette
 | Command | ID | Runs from | Operates on |
 | --- | --- | --- | --- |
 | Show Interactive View | `totonoeLog.showInteractiveView` | Palette, Explorer right-click | Explorer selection, otherwise the active editor |
-| Show Normalized View | `totonoeLog.showNormalizedView` | Palette | Active editor |
+| Open in Virtual Document | `totonoeLog.openVirtualDocument` | Palette, Explorer right-click | Explorer selection, otherwise the active editor |
 | Set Filter | `totonoeLog.setViewFilter` | Palette, editor right-click | The active normalized / merged view tab |
-| Merge Selected Files | `totonoeLog.mergeSelectedFiles` | Explorer right-click (also palette \*) | Two or more selected files |
 | Compare Logs | `totonoeLog.compareLogs` | Palette | Two files picked from a dialog |
 | Copy Masked Text | `totonoeLog.copyMaskedText` | Palette | Active editor's selection, or the whole file |
 | Go to Source Line | `totonoeLog.goToSourceLine` | Palette, editor right-click | Cursor line of a normalized / merged view |
 | Go to Source Line | `totonoeLog.goToSourceLineFromInteractiveView` | Interactive View right-click only | Right-clicked line of the panel |
 
-\* `Merge Selected Files` is contributed to the Command Palette like the rest,
-so it is listed there — but the palette gives it no Explorer selection to work
-with, so running it that way only produces a warning. Treat Explorer
-right-click as the way to run it.
+`Show Interactive View` and `Open in Virtual Document` resolve their input by
+exactly the same rules; the only difference is where the result goes (a Webview
+panel or a read-only virtual document). Both switch to the merged display for
+two or more files, so **you never have to pick a command based on how many
+files you selected**.
 
 Two commands share the title **Go to Source Line** because they are the same
 action in two different surfaces. The Interactive View one is hidden from the
@@ -37,11 +37,10 @@ Command Palette (`when: false`), so only the other appears there.
 ## Where commands appear
 
 - **Command Palette** — every command except
-  `totonoeLog.goToSourceLineFromInteractiveView`, with the
-  `Merge Selected Files` caveat noted above.
-- **Explorer right-click** — `Merge Selected Files` on a multi-file selection
-  (`listMultiSelection`), and `Show Interactive View` on anything that is not a
-  folder (`!explorerResourceIsFolder`).
+  `totonoeLog.goToSourceLineFromInteractiveView`.
+- **Explorer right-click** — `Open in Virtual Document` and
+  `Show Interactive View` on anything that is not a folder
+  (`!explorerResourceIsFolder`). A single selected file is enough.
 - **Editor right-click** — `Go to Source Line` and `Set Filter`, both only on
   the read-only views Totonoe Log produces (`totonoe-log-normalized` and
   `totonoe-log-merged`).
@@ -53,10 +52,16 @@ from the table above in **Preferences: Open Keyboard Shortcuts (JSON)**.
 
 ## Commands that read the active editor
 
-`Show Normalized View`, `Copy Masked Text`, and `Show Interactive View` (when
-run without an Explorer selection) all read the log from the active editor,
-unsaved changes included. They refuse to run on Totonoe Log's own read-only
-views and warn instead — re-parsing an already formatted view would misread it.
+`Copy Masked Text`, and `Open in Virtual Document` / `Show Interactive View`
+when run without an Explorer selection, all read the log from the active
+editor, unsaved changes included. They refuse to run on Totonoe Log's own
+read-only views and warn instead — re-parsing an already formatted view would
+misread it.
+
+Note that **the same file is read differently depending on the route**: run
+from an Explorer selection, the content comes from disk, so unsaved edits in an
+open editor for that file are not reflected. To include them, focus that editor
+and run the command from the Command Palette.
 
 `Set Filter` is the mirror image: it runs **only** on Totonoe Log's own views.
 Rather than re-reading the source log, it re-applies conditions to the
@@ -86,18 +91,36 @@ unfiltered entries the view kept hold of.
   Changing any of them updates an open panel right away.
 - **Details** — [Interactive View](../../README.md#interactive-view).
 
-### Show Normalized View
+### Open in Virtual Document
 
-`totonoeLog.showNormalizedView`
+`totonoeLog.openVirtualDocument`
 
-- **Runs from** — Command Palette.
-- **Input** — the active editor.
-- **Output** — a read-only virtual document (`totonoe-log-normalized` scheme),
-  opened as a tab named `<source>.normalized-N.log`. `N` increments so repeated
-  runs on the same file never collide with an existing tab.
+- **Runs from** — Command Palette, or Explorer right-click on any non-folder
+  item (one or many).
+- **Input** — the Explorer selection when there is one (folders excluded),
+  otherwise the active editor. A selection holding only folders leaves nothing
+  to open and warns rather than falling back to the active editor, which would
+  open a log unrelated to what you selected.
+- **Output** — one file gives a normalized view (`totonoe-log-normalized`
+  scheme, tab named `<source>.normalized-N.log`); two or more give a merged
+  view (`totonoe-log-merged` scheme, tab named `merged-N.log`) with source file
+  name and file "kind" columns, where hovering the file name column shows the
+  full source path. `N` increments so repeated runs never collide with an
+  existing tab.
+- **Notes** — via the Explorer, each file is read from disk and decoded with VS
+  Code's resource-scoped `files.encoding`, and the selection may span folders.
+  Merged results of 50 MiB or more are written to extension-managed temporary
+  storage and opened as a regular text tab instead, which bypasses VS Code's
+  document synchronization limit. Editing that copy never touches the source
+  logs, and it is deleted once the tab closes. `Go to Source Line` and
+  `Set Filter` do not work on those large results, because the information they
+  need is only registered for virtual documents.
 - **Settings** — `gap.thresholdSeconds`, plus the common parsing and display
-  settings.
-- **Details** — [Normalize into one timeline](../../README.md#normalize-into-one-timeline).
+  settings. When merging several files, `timezone.fileOffsets` and
+  `clockSkew.fileOffsets` matter most, since they are what make logs from
+  different servers merge into true chronological order.
+- **Details** — [Normalize into one timeline](../../README.md#normalize-into-one-timeline),
+  [Merge multiple files](../../README.md#merge-multiple-files).
 
 ### Set Filter
 
@@ -127,32 +150,6 @@ unfiltered entries the view kept hold of.
 - **Settings** — `gap.thresholdSeconds`, plus the common parsing and display
   settings.
 - **Details** — [Filter out the noise](../../README.md#filter-out-the-noise).
-
-### Merge Selected Files
-
-`totonoeLog.mergeSelectedFiles`
-
-- **Runs from** — Explorer right-click on a multi-file selection. The command
-  is also listed in the Command Palette, but it has no selection to work with
-  there and only warns.
-- **Input** — the selected files, folders excluded. Fewer than two files left
-  after excluding folders produces a warning and nothing else. The selection may
-  span folders. Each file is read from disk and decoded with VS Code's
-  resource-scoped `files.encoding`.
-- **Output** — a read-only virtual document (`totonoe-log-merged` scheme) named
-  `merged-N.log`, with source file name and file "kind" columns. Hovering the
-  file name column shows the full source path.
-- **Notes** — results of 50 MiB or more are written to extension-managed
-  temporary storage and opened as a regular text tab instead, which bypasses VS
-  Code's document synchronization limit. Editing that copy never touches the
-  source logs, and it is deleted once the tab closes. `Go to Source Line` does
-  not work on those large results, because the line mapping it needs is only
-  registered for virtual documents.
-- **Settings** — `gap.thresholdSeconds`, plus the common parsing and display
-  settings. `timezone.fileOffsets` and `clockSkew.fileOffsets` matter most here,
-  since they are what make logs from different servers merge into true
-  chronological order.
-- **Details** — [Merge multiple files](../../README.md#merge-multiple-files).
 
 ### Compare Logs
 
