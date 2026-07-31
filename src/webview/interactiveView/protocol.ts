@@ -254,11 +254,7 @@ export interface ExtensionToWebviewMessage {
    * ——設定が唯一の置き場なので、設定を直接編集した場合もこの経路で反映される。
    */
   readonly highlightRules: readonly HighlightRuleRow[];
-  /**
-   * 折りたたみトグルを表示できるか（issue #172）。単一ファイル表示中のみ
-   * true。マージ表示（2ファイル以上）は #158 の設計課題が未解決のため
-   * 対象外とし、false のときWebview側はトグルを無効化して `text` を描画する。
-   */
+  /** #158 以降は、単一ファイルとマージ表示のどちらも折りたたみに対応する。 */
   readonly collapsibleSupported: boolean;
   /**
    * 折りたたみ表示用の構造化データ。`collapsibleSupported && criteria.collapseEnabled`

@@ -16,6 +16,7 @@ out/**
 out-tsc/**
 out-tsc-webview/**
 node_modules/**
+openwiki/**
 .gitignore
 tsconfig.json
 tsconfig.webview.json
