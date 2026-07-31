@@ -52,11 +52,14 @@ from the table above in **Preferences: Open Keyboard Shortcuts (JSON)**.
 
 ## Commands that read the active editor
 
-`Copy Masked Text`, and `Open in Virtual Document` / `Show Interactive View`
-when run without an Explorer selection, all read the log from the active
-editor, unsaved changes included. They refuse to run on Totonoe Log's own
-read-only views and warn instead — re-parsing an already formatted view would
-misread it.
+These commands read the log from the active editor, unsaved changes included:
+
+- `Copy Masked Text`
+- `Open in Virtual Document`, when run without an Explorer selection
+- `Show Interactive View`, when run without an Explorer selection
+
+They refuse to run on Totonoe Log's own read-only views and warn instead —
+re-parsing an already formatted view would misread it.
 
 Note that **the same file is read differently depending on the route**: run
 from an Explorer selection, the content comes from disk, so unsaved edits in an
