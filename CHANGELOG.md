@@ -51,6 +51,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   clears the filter. Filtering is now a display state you can change at any
   time, the same model the Interactive View already uses (issue #248).
 
+### Changed
+
+- The severity column is now padded to the widest severity on display, so the
+  message text lines up vertically instead of shifting between `INFO` and
+  `ERROR` rows. The gutter and the timestamp were already fixed-width; severity
+  was the one column that moved (issue #174).
+- A collapsed group's end timestamp moved from `start 〜 end` next to the start
+  time into the trailing `(×5, 〜03:04:09.000Z)`, so the group header lines up
+  with ordinary rows instead of being the one line pushed out of column. The end
+  time is shortened to just the time when the group stays within one day, and
+  spelled out in full when it crosses a date boundary. Compare Logs is
+  deliberately left unpadded — the two sides can contain different severities,
+  and a differing column width would turn identical lines into diff noise.
+
 ### Fixed
 
 - In a multi-root workspace, editing highlight rules in the Interactive View

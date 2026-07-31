@@ -605,7 +605,7 @@ suite("normalize / formatNormalizedLog", () => {
         "1 | 2024-01-02T03:04:05.000Z ERROR Unhandled exception",
         "2 | java.lang.NullPointerException",
         "3 |     at com.example.Foo.bar(Foo.java:42)",
-        "4 | 2024-01-02T03:04:06.000Z INFO recovered",
+        "4 | 2024-01-02T03:04:06.000Z INFO  recovered",
       ].join("\n")
     );
   });
@@ -1713,7 +1713,7 @@ suite("normalize / buildInteractiveCollapsedLines (#172)", () => {
     }
     assert.strictEqual(
       items[1].headerText,
-      "2-4 | 2024-01-02T03:04:05.000Z 〜 2024-01-02T03:04:07.000Z INFO ok (×3)"
+      "2-4 | 2024-01-02T03:04:05.000Z INFO ok (×3, 〜03:04:07.000Z)"
     );
     // グループ内の展開行も、範囲ラベル("2-4"、3桁)に合わせた幅のガターで揃う。
     assert.deepStrictEqual(items[1].lines, [
@@ -2054,7 +2054,7 @@ suite("normalize / display mask (#194)", () => {
     // であることは残す）。
     assert.strictEqual(
       items[0].headerText,
-      "1-3 | <TIMESTAMP> 〜 <TIMESTAMP> INFO connect to <HOST> ok (×3)"
+      "1-3 | <TIMESTAMP> INFO connect to <HOST> ok (×3)"
     );
     assert.deepStrictEqual(items[0].lines, [
       "  1 | <TIMESTAMP> INFO connect to <HOST> ok",
@@ -2079,11 +2079,11 @@ suite("normalize / display mask (#194)", () => {
     }
     assert.strictEqual(
       result.text,
-      ["1 | <TIMESTAMP> INFO connect to <HOST> ok", "2 | <TIMESTAMP> ERROR boom"].join("\n")
+      ["1 | <TIMESTAMP> INFO  connect to <HOST> ok", "2 | <TIMESTAMP> ERROR boom"].join("\n")
     );
     assert.deepStrictEqual(
       result.items?.map((item) => (item.kind === "line" ? item.text : item.headerText)),
-      ["1 | <TIMESTAMP> INFO connect to <HOST> ok", "2 | <TIMESTAMP> ERROR boom"]
+      ["1 | <TIMESTAMP> INFO  connect to <HOST> ok", "2 | <TIMESTAMP> ERROR boom"]
     );
   });
 
@@ -2642,7 +2642,7 @@ suite("normalize / formatCollapsedLog", () => {
 
     assert.strictEqual(
       formatCollapsedLog(entries, items),
-      "1-3 | 2024-01-02T03:04:05.000Z 〜 2024-01-02T03:04:07.000Z INFO connect ok (×3)"
+      "1-3 | 2024-01-02T03:04:05.000Z INFO connect ok (×3, 〜03:04:07.000Z)"
     );
   });
 
@@ -2672,7 +2672,7 @@ suite("normalize / formatCollapsedLog", () => {
 
     assert.strictEqual(
       formatCollapsedLog(entries, items, { displayTimezone: 540 }),
-      "1-3 | 2024-01-02T12:04:05.000+09:00 〜 2024-01-02T12:04:07.000+09:00 INFO connect ok (×3)"
+      "1-3 | 2024-01-02T12:04:05.000+09:00 INFO connect ok (×3, 〜12:04:07.000+09:00)"
     );
   });
 
@@ -2697,7 +2697,7 @@ suite("normalize / formatCollapsedLog", () => {
       formatCollapsedLog(entries, items),
       [
         "  1 | ==== banner ====",
-        "2-4 | 2024-01-02T03:04:05.000Z 〜 2024-01-02T03:04:07.000Z INFO ok (×3)",
+        "2-4 | 2024-01-02T03:04:05.000Z INFO ok (×3, 〜03:04:07.000Z)",
       ].join("\n")
     );
   });
@@ -2717,7 +2717,7 @@ suite("normalize / formatCollapsedLog", () => {
     assert.strictEqual(
       formatCollapsedLog(entries, items),
       [
-        "1-6 | 2024-01-02T03:04:05.000Z 〜 2024-01-02T03:04:07.000Z ERROR boom (×3)",
+        "1-6 | 2024-01-02T03:04:05.000Z ERROR boom (×3, 〜03:04:07.000Z)",
         "  2 |   detail",
       ].join("\n")
     );
@@ -2878,7 +2878,7 @@ suite("normalize / formatMergedLog", () => {
     const kindWidth = "database".length;
     const expected = [
       `${"database_20240101.log".padEnd(fileNameWidth)} | ${"database".padEnd(kindWidth)} | 1 | 2024-01-02T03:04:04.000Z ERROR boom`,
-      `${"app.log".padEnd(fileNameWidth)} | ${"app".padEnd(kindWidth)} | 1 | 2024-01-02T03:04:05.000Z INFO hello`,
+      `${"app.log".padEnd(fileNameWidth)} | ${"app".padEnd(kindWidth)} | 1 | 2024-01-02T03:04:05.000Z INFO  hello`,
     ].join("\n");
 
     assert.strictEqual(output, expected);
@@ -2930,7 +2930,7 @@ suite("normalize / formatMergedLog", () => {
     const fileNameWidth = "database.log".length;
     const kindWidth = "database".length;
     const expected = [
-      `${"app.log".padEnd(fileNameWidth)} | ${"app".padEnd(kindWidth)} | 1 | 2024-01-02T03:04:05.000Z INFO before`,
+      `${"app.log".padEnd(fileNameWidth)} | ${"app".padEnd(kindWidth)} | 1 | 2024-01-02T03:04:05.000Z INFO  before`,
       `${" ".repeat(fileNameWidth)} | ${" ".repeat(kindWidth)} | ... | 30秒の空白`,
       `${"database.log".padEnd(fileNameWidth)} | ${"database".padEnd(kindWidth)} | 1 | 2024-01-02T03:04:35.000Z ERROR after`,
     ].join("\n");
@@ -3393,7 +3393,7 @@ suite("normalize / collapse honors the display mask (#245)", () => {
     assert.strictEqual(items[0].kind, "group");
     if (items[0].kind === "group") {
       assert.ok(items[0].headerText.includes("<PID>"), "the header should show the masked text");
-      assert.ok(items[0].headerText.includes("(×3)"));
+      assert.ok(items[0].headerText.includes("(×3"));
       assert.strictEqual(items[0].lines.length, 3);
       assert.ok(
         items[0].lines.every((line) => line.includes("<PID>")),
@@ -4626,7 +4626,7 @@ suite("normalize / merged collapse (#158)", () => {
       throw new Error("unreachable");
     }
     assert.match(items[0].headerText, /server-a\.log 他/);
-    assert.match(items[0].headerText, /\(×4\)/);
+    assert.match(items[0].headerText, /\(×4[,)]/);
   });
 
   test("reports every source file of the group, de-duplicated and in order", () => {
@@ -4782,7 +4782,7 @@ suite("normalize / merged collapse (#158)", () => {
       throw new Error("unreachable");
     }
     assert.strictEqual(result.formatted.text.split("\n").length, 1);
-    assert.match(result.formatted.text, /\(×4\)/);
+    assert.match(result.formatted.text, /\(×4[,)]/);
     assert.match(result.formatted.text, /server-a\.log 他/);
   });
 
@@ -4795,5 +4795,144 @@ suite("normalize / merged collapse (#158)", () => {
       throw new Error("unreachable");
     }
     assert.deepStrictEqual(result.formatted.lineSources, [{ fileIndex: 0, line: 1 }]);
+  });
+});
+
+suite("normalize / column alignment (#174)", () => {
+  test("pads the severity column so every message starts at the same column", () => {
+    const text = [
+      "2024-01-02T03:04:05Z INFO starting",
+      "2024-01-02T03:04:06Z ERROR boom",
+      "2024-01-02T03:04:07Z WARN slow",
+    ].join("\n");
+
+    assert.strictEqual(
+      formatNormalizedLog(parseLog(text)),
+      [
+        "1 | 2024-01-02T03:04:05.000Z INFO  starting",
+        "2 | 2024-01-02T03:04:06.000Z ERROR boom",
+        "3 | 2024-01-02T03:04:07.000Z WARN  slow",
+      ].join("\n")
+    );
+  });
+
+  test("uses the widest severity actually displayed, not a fixed width", () => {
+    // INFO しか出ないなら詰める余白は要らない。
+    const text = [
+      "2024-01-02T03:04:05Z INFO starting",
+      "2024-01-02T03:04:06Z INFO done",
+    ].join("\n");
+
+    assert.strictEqual(
+      formatNormalizedLog(parseLog(text)),
+      [
+        "1 | 2024-01-02T03:04:05.000Z INFO starting",
+        "2 | 2024-01-02T03:04:06.000Z INFO done",
+      ].join("\n")
+    );
+  });
+
+  test("counts the placeholder of an unrecognized severity in the column width", () => {
+    const text = [
+      "2024-01-02T03:04:05Z ERROR boom",
+      "2024-01-02T03:04:06Z something without a severity",
+    ].join("\n");
+
+    assert.strictEqual(
+      formatNormalizedLog(parseLog(text)),
+      [
+        "1 | 2024-01-02T03:04:05.000Z ERROR boom",
+        "2 | 2024-01-02T03:04:06.000Z -     something without a severity",
+      ].join("\n")
+    );
+  });
+
+  test("leaves entries without a recognized timestamp untouched", () => {
+    // タイムスタンプもセベリティも出ない行は列そのものが無いので詰めない。
+    const text = ["2024-01-02T03:04:05Z ERROR boom", "no timestamp here"].join("\n");
+
+    assert.strictEqual(
+      formatNormalizedLog(parseLog(text)),
+      ["1 | 2024-01-02T03:04:05.000Z ERROR boom", "2 | no timestamp here"].join("\n")
+    );
+  });
+
+  test("aligns the severity column in the merged view too", () => {
+    const merged = mergeLogFiles([
+      { fileName: "app.log", text: "2024-01-02T03:04:05Z INFO starting" },
+      { fileName: "db.log", text: "2024-01-02T03:04:06Z ERROR boom" },
+    ]);
+
+    assert.strictEqual(
+      formatMergedLog(merged),
+      [
+        "app.log | app | 1 | 2024-01-02T03:04:05.000Z INFO  starting",
+        "db.log  | db  | 1 | 2024-01-02T03:04:06.000Z ERROR boom",
+      ].join("\n")
+    );
+  });
+
+  test("keeps the compare view unpadded so severity sets cannot desynchronize the diff", () => {
+    // 左右で登場するセベリティが違うと列幅も変わり、本文が同じ行まで差分に
+    // なってしまう。比較ビューだけは揃えない。
+    const text = ["2024-01-02T03:04:05Z INFO starting", "2024-01-02T03:04:06Z ERROR boom"].join(
+      "\n"
+    );
+
+    assert.strictEqual(
+      formatMaskedLogForCompare(parseLog(text)),
+      ["1 | <TIMESTAMP> INFO starting", "2 | <TIMESTAMP> ERROR boom"].join("\n")
+    );
+  });
+
+  test("moves the group's end timestamp to the suffix so the header lines up with normal rows", () => {
+    const text = [
+      "2024-01-02T03:04:05Z INFO connect ok",
+      "2024-01-02T03:04:06Z INFO connect ok",
+      "2024-01-02T03:04:07Z INFO connect ok",
+      "2024-01-02T03:04:10Z ERROR boom",
+    ].join("\n");
+    const entries = parseLog(text);
+    const items = collapseRepeatedEntries(entries, { threshold: 3 });
+
+    assert.strictEqual(
+      formatCollapsedLog(entries, items),
+      [
+        "1-3 | 2024-01-02T03:04:05.000Z INFO  connect ok (×3, 〜03:04:07.000Z)",
+        "  4 | 2024-01-02T03:04:10.000Z ERROR boom",
+      ].join("\n")
+    );
+  });
+
+  test("spells the end timestamp out in full when the group crosses a date boundary", () => {
+    const text = [
+      "2024-01-02T23:59:58Z INFO connect ok",
+      "2024-01-02T23:59:59Z INFO connect ok",
+      "2024-01-03T00:00:01Z INFO connect ok",
+    ].join("\n");
+    const entries = parseLog(text);
+    const items = collapseRepeatedEntries(entries, { threshold: 3 });
+
+    assert.strictEqual(
+      formatCollapsedLog(entries, items),
+      "1-3 | 2024-01-02T23:59:58.000Z INFO connect ok (×3, 〜2024-01-03T00:00:01.000Z)"
+    );
+  });
+
+  test("drops the span entirely when masking makes both ends render the same", () => {
+    const text = [
+      "2024-01-02T03:04:05Z INFO connect to 10.0.0.1 ok",
+      "2024-01-02T03:04:06Z INFO connect to 10.0.0.2 ok",
+      "2024-01-02T03:04:07Z INFO connect to 10.0.0.3 ok",
+    ].join("\n");
+    const entries = parseLog(text);
+    const items = collapseRepeatedEntries(entries, { threshold: 3 });
+
+    assert.strictEqual(
+      formatCollapsedLog(entries, items, {
+        mask: { maskTimestamp: true, maskHost: true },
+      }),
+      "1-3 | <TIMESTAMP> INFO connect to <HOST> ok (×3)"
+    );
   });
 });

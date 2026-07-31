@@ -411,7 +411,7 @@ suite("Totonoe Log set filter on the normalized view (#248)", () => {
 
   test("clears the filter when no kind is selected (but the picker is not dismissed)", async () => {
     const everyLine = [
-      "1 | 2024-01-02T03:04:05.000Z INFO starting",
+      "1 | 2024-01-02T03:04:05.000Z INFO  starting",
       "2 | 2024-01-02T03:04:06.000Z ERROR boom",
     ].join("\n");
     const document = await openNormalizedView(
@@ -916,7 +916,7 @@ suite("Totonoe Log merged view", () => {
         activeEditor!.document.getText(),
         [
           `${"database_20240101.log".padEnd(fileNameWidth)} | ${"database".padEnd(kindWidth)} | 1 | 2024-01-02T03:04:04.000Z ERROR boom`,
-          `${"app.log".padEnd(fileNameWidth)} | ${"app".padEnd(kindWidth)} | 1 | 2024-01-02T03:04:05.000Z INFO hello`,
+          `${"app.log".padEnd(fileNameWidth)} | ${"app".padEnd(kindWidth)} | 1 | 2024-01-02T03:04:05.000Z INFO  hello`,
         ].join("\n")
       );
     } finally {
@@ -1425,7 +1425,7 @@ suite("Totonoe Log set filter on the merged view (#248)", () => {
         const fileNameWidth = "app.log".length;
         const kindWidth = "app".length;
         const everyLine = [
-          `${"app.log".padEnd(fileNameWidth)} | ${"app".padEnd(kindWidth)} | 1 | 2024-01-02T03:04:05.000Z INFO starting`,
+          `${"app.log".padEnd(fileNameWidth)} | ${"app".padEnd(kindWidth)} | 1 | 2024-01-02T03:04:05.000Z INFO  starting`,
           `${"db.log".padEnd(fileNameWidth)} | ${"db".padEnd(kindWidth)} | 1 | 2024-01-02T03:04:06.000Z ERROR boom`,
         ].join("\n");
         assert.strictEqual(
@@ -1544,7 +1544,7 @@ suite("Totonoe Log merge from the explorer context menu", () => {
         activeEditor!.document.getText(),
         [
           `${"database_20240101.log".padEnd(fileNameWidth)} | ${"database".padEnd(kindWidth)} | 1 | 2024-01-02T03:04:04.000Z ERROR boom`,
-          `${"app.log".padEnd(fileNameWidth)} | ${"app".padEnd(kindWidth)} | 1 | 2024-01-02T03:04:05.000Z INFO hello`,
+          `${"app.log".padEnd(fileNameWidth)} | ${"app".padEnd(kindWidth)} | 1 | 2024-01-02T03:04:05.000Z INFO  hello`,
         ].join("\n")
       );
     } finally {
@@ -1620,7 +1620,7 @@ suite("Totonoe Log merge from the explorer context menu", () => {
         activeEditor!.document.getText(),
         [
           `${"database_20240101.log".padEnd(fileNameWidth)} | ${"database".padEnd(kindWidth)} | 1 | 2024-01-02T03:04:04.000Z ERROR boom`,
-          `${"app.log".padEnd(fileNameWidth)} | ${"app".padEnd(kindWidth)} | 1 | 2024-01-02T03:04:05.000Z INFO hello`,
+          `${"app.log".padEnd(fileNameWidth)} | ${"app".padEnd(kindWidth)} | 1 | 2024-01-02T03:04:05.000Z INFO  hello`,
         ].join("\n")
       );
     } finally {

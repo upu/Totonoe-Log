@@ -9,11 +9,8 @@ import {
   type DisplayMaskOptions,
 } from "./displayMask";
 
-/** タイムスタンプの開始〜終了を結ぶ区切り文字（issue #99）。 */
-const TIMESTAMP_SPAN_SEPARATOR = " 〜 ";
-
-/** セベリティが認識できなかったエントリの見出しに表示するプレースホルダー。 */
-const SEVERITY_PLACEHOLDER = "-";
+import { computeSeverityWidth, formatSeverity } from "./severityColumn";
+import { formatGroupSuffix } from "./groupSuffix";
 
 /** {@link formatCollapsedLog} の挙動を調整するオプション。 */
 export interface FormatCollapsedLogOptions {
@@ -56,34 +53,33 @@ function computeGutterWidth(entries: readonly LogEntry[], items: readonly Collap
 }
 
 /**
- * 見出し行に表示するタイムスタンプ文字列を組み立てる。`single` は代表
- * エントリ1件のタイムスタンプのみ、`group` は先頭エントリのタイムスタンプに
- * 加え、末尾エントリのタイムスタンプが先頭と異なる場合のみ区切り文字で
- * つないだ終了時刻を付け加える（同一タイムスタンプの繰り返し（バーストが
- * 一瞬で起きた場合等）では終了時刻を重複表示しても情報が増えないため、
- * issue #99 の設計メモに従い省略する）。認識できなかったエントリ
- * （`matched: false`）では `undefined` を返し、タイムスタンプ表示自体を
- * 省略させる。
+ * 見出し行に表示する開始・終了のタイムスタンプ文字列を組み立てる。通常行と
+ * 同じ位置に置くのは開始側だけで、終了側は {@link formatGroupSuffix} が末尾へ
+ * 回す（issue #174）。認識できなかったエントリ（`matched: false`）では
+ * `undefined` を返し、タイムスタンプ表示自体を省略させる。
  */
-function formatHeaderTimestamp(
+function formatHeaderTimestamps(
   item: CollapsedItem,
   displayTimezone: DisplayTimezone,
   mask: DisplayMaskOptions | undefined
-): string | undefined {
+): { readonly startText: string; readonly endText?: string } | undefined {
   const first = item.kind === "single" ? item.entry : item.entries[0];
   if (!first.matched || first.timestampMs === undefined) {
     return undefined;
   }
   const startText = formatMaskableTimestamp(first.timestampMs, displayTimezone, mask);
   if (item.kind === "single") {
-    return startText;
+    return { startText };
   }
 
   const last = item.entries[item.entries.length - 1];
-  if (last.timestampMs === undefined || last.timestampMs === first.timestampMs) {
-    return startText;
+  if (last.timestampMs === undefined) {
+    return { startText };
   }
-  return `${startText}${TIMESTAMP_SPAN_SEPARATOR}${formatMaskableTimestamp(last.timestampMs, displayTimezone, mask)}`;
+  return {
+    startText,
+    endText: formatMaskableTimestamp(last.timestampMs, displayTimezone, mask),
+  };
 }
 
 /**
@@ -119,6 +115,10 @@ export function formatCollapsedLogWithLineSources(
 ): FormattedLogWithLineSources {
   const displayTimezone = options.displayTimezone ?? 0;
   const gutterWidth = computeGutterWidth(entries, items);
+  // グループ化のキーにセベリティが含まれる（`collapseRepeatedEntries`）ため、
+  // 同じグループのエントリは必ず同じセベリティ。全件から求めても、代表だけから
+  // 求めても結果は同じになる。
+  const severityWidth = computeSeverityWidth(entries);
   const outputLines: string[] = [];
   const lineSources: (LineSource | undefined)[] = [];
 
@@ -129,11 +129,13 @@ export function formatCollapsedLogWithLineSources(
       representative.timestampFormat,
       options.mask
     );
-    const suffix = item.kind === "group" ? ` (×${item.entries.length})` : "";
-
-    const headerTimestamp = formatHeaderTimestamp(item, displayTimezone, options.mask);
-    const headerText = headerTimestamp !== undefined
-      ? `${headerTimestamp} ${representative.severity ?? SEVERITY_PLACEHOLDER} ${messageLines[0]}${suffix}`
+    const timestamps = formatHeaderTimestamps(item, displayTimezone, options.mask);
+    const suffix =
+      item.kind === "group"
+        ? formatGroupSuffix(item.entries.length, timestamps?.startText, timestamps?.endText)
+        : "";
+    const headerText = timestamps !== undefined
+      ? `${timestamps.startText} ${formatSeverity(representative.severity, severityWidth)} ${messageLines[0]}${suffix}`
       : `${messageLines[0]}${suffix}`;
     const gutterLabel = item.kind === "single" ? representative.startLine : rangeLabel(item.entries);
     outputLines.push(formatGutter(gutterLabel, gutterWidth) + headerText);
