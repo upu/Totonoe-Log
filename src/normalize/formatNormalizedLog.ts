@@ -8,9 +8,7 @@ import {
   maskDisplayMessageLines,
   type DisplayMaskOptions,
 } from "./displayMask";
-
-/** セベリティが認識できなかったエントリの見出しに表示するプレースホルダー。 */
-const SEVERITY_PLACEHOLDER = "-";
+import { computeSeverityWidth, formatSeverity } from "./severityColumn";
 
 /** {@link formatNormalizedLog} の挙動を調整するオプション。 */
 export interface FormatNormalizedLogOptions {
@@ -73,6 +71,7 @@ export function formatNormalizedLogWithLineSources(
   options: FormatNormalizedLogOptions = {}
 ): FormattedLogWithLineSources {
   const gutterWidth = String(computeMaxLineNumber(entries)).length;
+  const severityWidth = computeSeverityWidth(entries);
   const outputLines: string[] = [];
   const lineSources: (LineSource | undefined)[] = [];
   const gapThresholdMs = options.gapThresholdMs;
@@ -96,7 +95,7 @@ export function formatNormalizedLogWithLineSources(
     );
 
     const headerText = entry.matched && entry.timestampMs !== undefined
-      ? `${formatMaskableTimestamp(entry.timestampMs, displayTimezone, options.mask)} ${entry.severity ?? SEVERITY_PLACEHOLDER} ${messageLines[0]}`
+      ? `${formatMaskableTimestamp(entry.timestampMs, displayTimezone, options.mask)} ${formatSeverity(entry.severity, severityWidth)} ${messageLines[0]}`
       : messageLines[0];
     outputLines.push(formatGutter(entry.startLine, gutterWidth) + headerText);
     lineSources.push({ fileIndex: 0, line: entry.startLine });

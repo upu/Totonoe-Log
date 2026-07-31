@@ -1,9 +1,10 @@
 import { isIPv6 } from "node:net";
 import type { LogEntry } from "./types";
 import { computeMaxLineNumber, formatGutter } from "./gutter";
-
-/** セベリティが認識できなかったエントリの見出しに表示するプレースホルダー。 */
-const SEVERITY_PLACEHOLDER = "-";
+// 比較ビューは桁を揃えない（左右でセベリティの顔ぶれが違うと列幅も変わり、
+// 本文が同じ行まで差分になるため、issue #174）。ただしプレースホルダーの
+// 表記だけは他のビューと同じものを使う。
+import { SEVERITY_PLACEHOLDER } from "./severityColumn";
 /** マスクしたタイムスタンプの表示に使うプレースホルダー。 */
 export const TIMESTAMP_PLACEHOLDER = "<TIMESTAMP>";
 /** マスクしたホスト名/IPアドレスの表示に使うプレースホルダー。 */

@@ -8,9 +8,7 @@ import {
   maskDisplayMessageLines,
   type DisplayMaskOptions,
 } from "./displayMask";
-
-/** セベリティが認識できなかったエントリの見出しに表示するプレースホルダー。 */
-const SEVERITY_PLACEHOLDER = "-";
+import { computeSeverityWidth, formatSeverity } from "./severityColumn";
 
 /** {@link formatMergedLog} の挙動を調整するオプション。 */
 export interface FormatMergedLogOptions {
@@ -87,6 +85,7 @@ export function formatMergedLogWithLineSources(
     computeMaxLineNumber(mergedEntries.map((m) => m.entry))
   ).length;
   const blankPrefix = `${" ".repeat(fileNameWidth)} | ${" ".repeat(kindWidth)} | `;
+  const severityWidth = computeSeverityWidth(mergedEntries.map((merged) => merged.entry));
 
   const outputLines: string[] = [];
   const lineSources: (LineSource | undefined)[] = [];
@@ -116,7 +115,7 @@ export function formatMergedLogWithLineSources(
     const headerPrefix = `${fileName.padEnd(fileNameWidth)} | ${kind.padEnd(kindWidth)} | `;
 
     const headerText = entry.matched && entry.timestampMs !== undefined
-      ? `${formatMaskableTimestamp(entry.timestampMs, displayTimezone, options.mask)} ${entry.severity ?? SEVERITY_PLACEHOLDER} ${messageLines[0]}`
+      ? `${formatMaskableTimestamp(entry.timestampMs, displayTimezone, options.mask)} ${formatSeverity(entry.severity, severityWidth)} ${messageLines[0]}`
       : messageLines[0];
     outputLines.push(headerPrefix + formatGutter(entry.startLine, gutterWidth) + headerText);
     lineSources.push({ fileIndex, line: entry.startLine });

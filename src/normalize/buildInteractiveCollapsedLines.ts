@@ -14,12 +14,8 @@ import {
   type DisplayMaskOptions,
 } from "./displayMask";
 import { collapseRepeatedEntries, DEFAULT_COLLAPSE_THRESHOLD, type CollapsedItem } from "./collapseRepeatedEntries";
-
-/** セベリティが認識できなかったエントリの見出しに表示するプレースホルダー。 */
-const SEVERITY_PLACEHOLDER = "-";
-
-/** タイムスタンプの開始〜終了を結ぶ区切り文字（{@link formatCollapsedLog} と同じ表記）。 */
-const TIMESTAMP_SPAN_SEPARATOR = " 〜 ";
+import { computeSeverityWidth, formatSeverity } from "./severityColumn";
+import { formatGroupSuffix } from "./groupSuffix";
 
 /**
  * Interactive View の折りたたみ表示（issue #172）が1件分として扱う
@@ -120,6 +116,7 @@ interface FormattedEntryLine {
 function formatEntryLines(
   entry: LogEntry,
   gutterWidth: number,
+  severityWidth: number,
   displayTimezone: DisplayTimezone,
   mask: DisplayMaskOptions | undefined,
   fileIndex = SINGLE_FILE_INDEX,
@@ -131,7 +128,7 @@ function formatEntryLines(
     mask
   );
   const headerText = entry.matched && entry.timestampMs !== undefined
-    ? `${formatMaskableTimestamp(entry.timestampMs, displayTimezone, mask)} ${entry.severity ?? SEVERITY_PLACEHOLDER} ${messageLines[0]}`
+    ? `${formatMaskableTimestamp(entry.timestampMs, displayTimezone, mask)} ${formatSeverity(entry.severity, severityWidth)} ${messageLines[0]}`
     : messageLines[0];
 
   const lines: FormattedEntryLine[] = [
@@ -149,27 +146,31 @@ function formatEntryLines(
   return lines;
 }
 
-/** グループ見出しのタイムスタンプ表示。開始・終了が異なる場合のみスパン表示する（{@link formatCollapsedLogWithLineSources} と同じ判定）。 */
-function formatHeaderTimestamp(
+/** グループ見出しの開始・終了タイムスタンプ（{@link formatCollapsedLogWithLineSources} と同じ判定）。 */
+function formatHeaderTimestamps(
   entries: readonly LogEntry[],
   displayTimezone: DisplayTimezone,
   mask: DisplayMaskOptions | undefined
-): string | undefined {
+): { readonly startText: string; readonly endText?: string } | undefined {
   const first = entries[0];
   if (!first.matched || first.timestampMs === undefined) {
     return undefined;
   }
   const startText = formatMaskableTimestamp(first.timestampMs, displayTimezone, mask);
   const last = entries[entries.length - 1];
-  if (last.timestampMs === undefined || last.timestampMs === first.timestampMs) {
-    return startText;
+  if (last.timestampMs === undefined) {
+    return { startText };
   }
-  return `${startText}${TIMESTAMP_SPAN_SEPARATOR}${formatMaskableTimestamp(last.timestampMs, displayTimezone, mask)}`;
+  return {
+    startText,
+    endText: formatMaskableTimestamp(last.timestampMs, displayTimezone, mask),
+  };
 }
 
 function formatGroupHeaderText(
   entries: readonly LogEntry[],
   gutterWidth: number,
+  severityWidth: number,
   displayTimezone: DisplayTimezone,
   mask: DisplayMaskOptions | undefined,
   columnPrefix = "",
@@ -181,11 +182,11 @@ function formatGroupHeaderText(
     first.timestampFormat,
     mask
   );
-  const suffix = ` (×${entries.length})`;
 
-  const headerTimestamp = formatHeaderTimestamp(entries, displayTimezone, mask);
-  const headerText = headerTimestamp !== undefined
-    ? `${headerTimestamp} ${first.severity ?? SEVERITY_PLACEHOLDER} ${messageLines[0]}${suffix}`
+  const timestamps = formatHeaderTimestamps(entries, displayTimezone, mask);
+  const suffix = formatGroupSuffix(entries.length, timestamps?.startText, timestamps?.endText);
+  const headerText = timestamps !== undefined
+    ? `${timestamps.startText} ${formatSeverity(first.severity, severityWidth)} ${messageLines[0]}${suffix}`
     : `${messageLines[0]}${suffix}`;
 
   return columnPrefix + formatGutter(gutterLabel, gutterWidth) + headerText;
@@ -212,22 +213,24 @@ export function buildInteractiveCollapsedLines(
     mask: options.mask,
   });
   const gutterWidth = computeGutterWidth(entries, items);
+  // 展開したグループ内の行も同じ幅で描くので、代表だけでなく全件から求める。
+  const severityWidth = computeSeverityWidth(entries);
 
   const result: InteractiveDisplayItem[] = [];
   for (const item of items) {
     if (item.kind === "single") {
-      for (const { text, lineSource } of formatEntryLines(item.entry, gutterWidth, displayTimezone, options.mask)) {
+      for (const { text, lineSource } of formatEntryLines(item.entry, gutterWidth, severityWidth, displayTimezone, options.mask)) {
         result.push({ kind: "line", text, lineSource });
       }
       continue;
     }
 
     const groupLines = item.entries.flatMap((entry) =>
-      formatEntryLines(entry, gutterWidth, displayTimezone, options.mask)
+      formatEntryLines(entry, gutterWidth, severityWidth, displayTimezone, options.mask)
     );
     result.push({
       kind: "group",
-      headerText: formatGroupHeaderText(item.entries, gutterWidth, displayTimezone, options.mask),
+      headerText: formatGroupHeaderText(item.entries, gutterWidth, severityWidth, displayTimezone, options.mask),
       lines: groupLines.map((line) => line.text),
       lineSources: groupLines.map((line) => line.lineSource),
     });
@@ -313,6 +316,7 @@ export function buildInteractiveMergedCollapsedLines(
   let gutterWidth = String(
     computeMaxLineNumber(mergedEntries.map((merged) => merged.entry))
   ).length;
+  const severityWidth = computeSeverityWidth(mergedEntries.map((merged) => merged.entry));
   for (const item of items) {
     if (item.kind === "group") {
       gutterWidth = Math.max(gutterWidth, gutterLabelOf(item).length);
@@ -326,6 +330,7 @@ export function buildInteractiveMergedCollapsedLines(
       for (const { text, lineSource } of formatEntryLines(
         entry,
         gutterWidth,
+        severityWidth,
         displayTimezone,
         options.mask,
         fileIndex,
@@ -341,6 +346,7 @@ export function buildInteractiveMergedCollapsedLines(
       formatEntryLines(
         merged.entry,
         gutterWidth,
+        severityWidth,
         displayTimezone,
         options.mask,
         merged.fileIndex,
@@ -354,6 +360,7 @@ export function buildInteractiveMergedCollapsedLines(
       headerText: formatGroupHeaderText(
         entries,
         gutterWidth,
+        severityWidth,
         displayTimezone,
         options.mask,
         columnPrefixOf(
