@@ -57,7 +57,7 @@ npm run check:package
 - コマンド・メニューを変える場合は `package.json` と `docs/features/commands.md` / `commands.ja.md` を同時更新する。
 - マスク、フィルタ、折りたたみ等のログ本文パターンを変える場合は `demo/` に確認用行を加える。
 - パッケージ同梱物を変える場合は `.vscodeignore` と `scripts/check-package-contents.js` の `EXPECTED` を揃える。
-- 作業開始時に `git status` を確認する。初期Wiki作成時点では `AGENTS.md` とOpenWiki関連ファイルに既存の未コミット変更があり、生成Wiki以外を上書きしてはならない。
+- 作業開始時に `git status` を確認し、生成物以外の意図しない変更を巻き込んだり上書きしたりしない。
 
 ## 最近の発展
 
@@ -68,4 +68,3 @@ v0.9.0前後ではInteractive Viewを中心に、複数パターン、ハイラ�
 - **アクセシビリティとWebview DOM詳細** — `src/webview/interactiveView/main.ts`。初期ページでは実行境界とプロトコルを優先し、個々のDOMイベントとCSSは未整理。
 - **全設定キーのリファレンス** — `package.json` の `contributes.configuration`。既存の `README.ja.md` に一覧があるため重複を避け、Wikiでは設計上重要な設定群のみ扱う。
 - **タイムスタンプ形式ごとの完全仕様** — `src/normalize/timestampFormats.ts`, `customTimestampFormats.ts`。ドメイン上の優先順位と不変条件は記載したが、全形式の例は既存READMEとテストを正本とする。
-�

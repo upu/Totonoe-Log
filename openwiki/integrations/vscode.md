@@ -44,7 +44,7 @@ protocol変更時は次を同時に確認する。
 3. `tsconfig.json` と `tsconfig.webview.json` の両型検査。
 4. `interactiveView.test.ts` と必要なら`normalize.test.ts`。
 
-現在の `collapsibleSupported` コメントは単一ファイル限定と記すが、実装はマージcollapseに対応済みである。コメントを仕様として扱わず、controllerとpayload builderを確認する。
+`src/interactiveView.ts` は単一ファイルとマージ表示のどちらでも `collapsibleSupported` を有効にし、両方の折りたたみに対応する。仕様を変更する場合は、共有protocol、controller、payload builder、Webview UIを同時に確認する。
 
 ## 設定統合
 
