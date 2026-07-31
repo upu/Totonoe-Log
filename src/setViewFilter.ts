@@ -98,6 +98,10 @@ async function applyFilterToView(
  * 絞り込みで非表示にした行数を通知として表示する。表示前後の行数をそれぞれ
  * 1回だけ数え、通知本文（非表示行数と「表示中/全体」の分母・分子）の算出で
  * 重複計算しないようにする。
+ *
+ * 1行も減らなかった場合は文面を分ける。条件を1つも選ばずに確定した解除操作
+ * でも同じ経路を通るため、そのまま数えると「条件に合わない 0 行を非表示に
+ * しました」という、解除したのに絞り込んだかのような通知になる。
  */
 function reportHiddenLineCount(
   totalEntries: readonly LogEntry[],
@@ -107,6 +111,8 @@ function reportHiddenLineCount(
   const visibleLineCount = countLines(visibleEntries);
   const hiddenLineCount = totalLineCount - visibleLineCount;
   vscode.window.showInformationMessage(
-    `Totonoe Log: 条件に合わない ${hiddenLineCount} 行を非表示にしました（${visibleLineCount}/${totalLineCount} 行を表示）。`
+    hiddenLineCount === 0
+      ? `Totonoe Log: 非表示になった行はありません（全 ${totalLineCount} 行を表示）。`
+      : `Totonoe Log: 条件に合わない ${hiddenLineCount} 行を非表示にしました（${visibleLineCount}/${totalLineCount} 行を表示）。`
   );
 }

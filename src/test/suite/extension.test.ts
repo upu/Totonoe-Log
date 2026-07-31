@@ -439,15 +439,27 @@ suite("Totonoe Log set filter on the normalized view (#248)", () => {
 
     const originalShowQuickPick = vscode.window.showQuickPick;
     (vscode.window as any).showQuickPick = async () => [];
+    const originalShowInformationMessage = vscode.window.showInformationMessage;
+    let infoMessage: string | undefined;
+    (vscode.window as any).showInformationMessage = async (message: string) => {
+      infoMessage = message;
+      return undefined;
+    };
     try {
       await vscode.commands.executeCommand("totonoeLog.setViewFilter");
     } finally {
       (vscode.window as any).showQuickPick = originalShowQuickPick;
+      (vscode.window as any).showInformationMessage = originalShowInformationMessage;
     }
 
     assert.strictEqual(
       await waitForDocumentText(document, (text) => text === everyLine),
       everyLine
+    );
+    // 解除したのに「条件に合わない 0 行を非表示にしました」とは言わない。
+    assert.ok(
+      infoMessage?.includes("非表示になった行はありません"),
+      `clearing the filter should not read as filtering, got: ${infoMessage}`
     );
   });
 
