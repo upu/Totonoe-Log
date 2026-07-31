@@ -104,6 +104,11 @@ export function filterEntriesByMatchPattern(
     }, timeoutMs);
 
     worker.once("message", (matched: boolean[]) => {
+      // タイムアウト済みなら、捨てられると分かっている結果は組み立てない
+      // （issue #237。`filterByIgnorePattern` と同じ理由）。
+      if (settled) {
+        return;
+      }
       const filtered = entries.filter((_entry, index) => matched[index]);
       finish({ ok: true, entries: filtered });
     });

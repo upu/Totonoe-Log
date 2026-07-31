@@ -120,6 +120,12 @@ export function filterEntriesByIgnorePattern(
     }, timeoutMs);
 
     worker.once("message", (excluded: boolean[]) => {
+      // `worker.terminate()` は非同期なので、タイムアウトで打ち切った直後に
+      // ワーカーのメッセージが届くことがある。`finish` が捨てると分かって
+      // いる結果を組み立てても無駄なので、その前に降りる（issue #237）。
+      if (settled) {
+        return;
+      }
       const filtered = entries.filter((_entry, index) => !excluded[index]);
       finish({ ok: true, entries: filtered });
     });
