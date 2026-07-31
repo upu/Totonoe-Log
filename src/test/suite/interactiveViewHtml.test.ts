@@ -9,6 +9,9 @@ const SCRIPT_URL = "https://file+.vscode-resource.vscode-cdn.net/out/webview/int
  * テンプレート側で id を消す・綴りを変えると、型では捕まらず Webview を開いた
  * ときに初めて壊れる（片側だけ直しても両方ともコンパイルは通る）。切り出しで
  * マークアップを移動させる以上、ここで突き合わせておく。
+ *
+ * main.ts に id を足したらこの表にも足すこと。探すときは行単位の grep だと
+ * Prettier が折り返した呼び出し（`getElementById(\n  "..."\n)`）を取りこぼす。
  */
 const REQUIRED_ELEMENT_IDS = [
   "add-files-button",
@@ -20,6 +23,7 @@ const REQUIRED_ELEMENT_IDS = [
   "date-start",
   "display-limit",
   "export-button",
+  "highlight-options-button",
   "highlight-panel",
   "highlight-rules",
   "ignore-patterns",
