@@ -26,7 +26,9 @@ VSCode 拡張機能「Totonoe Log」。コンセプトは「バラバラなロ�
 - `src/extension.ts` — エントリポイント。コマンド登録と各ビューへの配線
 - `src/virtualDocumentContentProvider.ts` — 仮想ドキュメントの `TextDocumentContentProvider`
 - `src/mergedView.ts` / `normalizedView.ts` / `compareView.ts` / `copyMasked.ts` — 各コマンドの実装（VSCode API に依存する層）
+- `src/interactiveView.ts` — Interactive View の状態管理と Webview への配線
 - `src/normalize/` — パース・マージ・フィルタ・折りたたみ・マスク・整形の純粋ロジック。**VSCode API に依存させない**（テスト容易性のため）
+- `src/webview/interactiveView/` — Interactive View のブラウザ UI と共有プロトコル
 - `src/test/suite/` — テスト
 - `scripts/` — esbuild・CHANGELOG 抽出・パッケージ内容チェックの Node スクリプト（CommonJS）
 
@@ -34,7 +36,9 @@ VSCode 拡張機能「Totonoe Log」。コンセプトは「バラバラなロ�
 
 - 表示方式は**仮想ドキュメント**（`TextDocumentContentProvider` による読み取り
   専用エディタ）を軸にする。VSCode 標準の検索・コピー・diff エディタがそのまま
-  使えるメリットを優先する。Webview は将来必要になったときに検討する
+  使えるメリットを優先する。継続的な絞り込み・マスク・折りたたみ・ハイライトを
+  その場で操作する Interactive View には Webview を使い、ログ処理の中核は
+  `src/normalize/` で仮想ドキュメントと共有する
 - ビルドは esbuild（`scripts/esbuild.js`）でバンドルし、`tsc --noEmit` で型
   チェックする（[upu/ghost-align](https://github.com/upu/ghost-align) と同じ
   構成を踏襲）
@@ -97,3 +101,13 @@ VSCode 拡張機能「Totonoe Log」。コンセプトは「バラバラなロ�
 issue の優先度を判断するときは、ユーザーへの影響度・実装コストに加えて、
 **「整える」コンセプトのコア（正規化 / マージ / フィルタ / 折りたたみ / 比較）に
 どれだけ近いか**を判断材料にする。コアに近い改善ほど優先度を高くする。
+
+## OpenWiki
+
+このリポジトリでは、コードベースの補助ドキュメントとして OpenWiki を使用する。コンテキストを調べるときは `openwiki/quickstart.md` から読み、必要に応じてリンク先のアーキテクチャ、ワークフロー、運用情報、ソースマップを参照する。
+
+OpenWiki文書は必要に応じて、次のコマンドで手動更新する。
+
+`openwiki code --update --language ja-JP`
+
+生成されたOpenWikiページは原則として直接編集せず、ソースコード、既存ドキュメント、または `openwiki/INSTRUCTIONS.md` を更新してからOpenWikiで再生成する。
