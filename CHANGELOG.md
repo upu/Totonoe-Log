@@ -8,6 +8,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- In a multi-root workspace, editing highlight rules in the Interactive View
+  panel saved them to your user settings even when the rules were defined in a
+  folder's `.vscode/settings.json`. Folder settings win over user settings, so
+  the edit had no visible effect. The panel now reads and writes the rules
+  scoped to the first loaded log file, so they go back to the folder they came
+  from (issue #240).
+
 ## [0.9.0] - 2026-07-31
 
 ### Removed

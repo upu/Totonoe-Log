@@ -20,8 +20,8 @@ const HIGHLIGHT_RULES_CONFIG_KEY = "highlightRules";
  * （`readConfiguredTimestampFormats` と同じ縮退の仕方——設定ミス1つで
  * ハイライト全体が効かなくなるのを防ぐ）。
  */
-export function readHighlightRules(): HighlightRule[] {
-  const { rules, errors } = compileHighlightRules(readRawHighlightRules());
+export function readHighlightRules(resource?: vscode.Uri): HighlightRule[] {
+  const { rules, errors } = compileHighlightRules(readRawHighlightRules(resource));
   if (errors.length > 0) {
     vscode.window.showWarningMessage(
       `Totonoe Log: totonoeLog.highlightRules に不正な項目があるため無視しました — ${errors.join(" / ")}`
@@ -38,16 +38,16 @@ export function readHighlightRules(): HighlightRule[] {
  * ここを通さずに反復すると、設定が配列でないだけでハイライトの読み取り経路
  * 全体が例外で落ちる。
  */
-function readRawHighlightRules(): unknown[] {
+function readRawHighlightRules(resource?: vscode.Uri): unknown[] {
   const settings = vscode.workspace
-    .getConfiguration(HIGHLIGHT_RULES_CONFIG_SECTION)
+    .getConfiguration(HIGHLIGHT_RULES_CONFIG_SECTION, resource)
     .get<unknown>(HIGHLIGHT_RULES_CONFIG_KEY, []);
   return Array.isArray(settings) ? settings : [];
 }
 
 /** 現在の設定値を、編集パネル（issue #238）に表示する行へ変換する。 */
-export function readHighlightRuleRows(): HighlightRuleRow[] {
-  return toHighlightRuleRows(readRawHighlightRules());
+export function readHighlightRuleRows(resource?: vscode.Uri): HighlightRuleRow[] {
+  return toHighlightRuleRows(readRawHighlightRules(resource));
 }
 
 function isHighlightColor(value: unknown): value is HighlightRuleRow["color"] {
@@ -132,6 +132,7 @@ export function toHighlightRuleSettings(rows: readonly unknown[]): HighlightRule
 
 /** {@link resolveHighlightRulesTarget} が見る、`inspect()` の結果のうち必要な部分。 */
 export interface HighlightRulesInspection {
+  readonly workspaceFolderValue?: unknown;
   readonly workspaceValue?: unknown;
   readonly globalValue?: unknown;
 }
@@ -144,24 +145,44 @@ export interface HighlightRulesInspection {
  * ため。どこにも定義が無い初回はユーザー設定にする——何もしていないのに
  * `.vscode/settings.json` が生まれて、gitの作業ツリーが汚れる驚きを避ける。
  *
- * ワークスペースが開かれていないときに `Workspace` を指定すると書き込みが
- * 失敗するため、その場合もユーザー設定へ落とす。
+ * 層は設定の優先度と同じ順（フォルダ > ワークスペース > ユーザー）で見る。
+ * マルチルートのフォルダ設定に定義されたルールをユーザー設定へ書き戻すと、
+ * 優先度で負けて「パネルで編集したのに何も変わらない」状態になる（issue #240）。
+ * `workspaceFolderValue` は `inspect()` にリソースを渡した時だけ埋まるため、
+ * この分岐に入る時点で書き込み先のフォルダは一意に決まっている。
+ *
+ * ワークスペースが開かれていないときに `Workspace` / `WorkspaceFolder` を
+ * 指定すると書き込みが失敗するため、その場合もユーザー設定へ落とす。
  */
 export function resolveHighlightRulesTarget(
   inspection: HighlightRulesInspection | undefined,
   hasWorkspaceFolder: boolean
 ): vscode.ConfigurationTarget {
-  return inspection?.workspaceValue !== undefined && hasWorkspaceFolder
-    ? vscode.ConfigurationTarget.Workspace
-    : vscode.ConfigurationTarget.Global;
+  if (!hasWorkspaceFolder) {
+    return vscode.ConfigurationTarget.Global;
+  }
+  if (inspection?.workspaceFolderValue !== undefined) {
+    return vscode.ConfigurationTarget.WorkspaceFolder;
+  }
+  if (inspection?.workspaceValue !== undefined) {
+    return vscode.ConfigurationTarget.Workspace;
+  }
+  return vscode.ConfigurationTarget.Global;
 }
 
 /**
  * 編集パネルの行を `totonoeLog.highlightRules` へ書き戻す（issue #238）。
  * 書き込みは設定変更イベントを起こし、#183 の redisplay 経路で表示へ反映される
  * ——ここで自前に再描画を促す必要はない。
+ *
+ * `resource` は設定を解決する基準（issue #240）。読み取り側と同じものを渡す
+ * こと——フォルダ設定へ書いてもリソース無しの読み取りではその値が見えず、
+ * 「保存したのに一覧に出ない」状態になる。
  */
-export async function writeHighlightRuleRows(rows: readonly unknown[]): Promise<void> {
+export async function writeHighlightRuleRows(
+  rows: readonly unknown[],
+  resource?: vscode.Uri
+): Promise<void> {
   // 配列でない値が届いたらメッセージ自体が壊れているので、何も書かずに戻る。
   // ここを通すと「解釈できる行が1つも無い」＝空配列として、ユーザーの既存の
   // ルールを消してしまう。行を全部消した結果の空配列（正当な編集）とは区別する
@@ -170,7 +191,10 @@ export async function writeHighlightRuleRows(rows: readonly unknown[]): Promise<
     return;
   }
 
-  const configuration = vscode.workspace.getConfiguration(HIGHLIGHT_RULES_CONFIG_SECTION);
+  const configuration = vscode.workspace.getConfiguration(
+    HIGHLIGHT_RULES_CONFIG_SECTION,
+    resource
+  );
   const target = resolveHighlightRulesTarget(
     configuration.inspect(HIGHLIGHT_RULES_CONFIG_KEY),
     (vscode.workspace.workspaceFolders?.length ?? 0) > 0

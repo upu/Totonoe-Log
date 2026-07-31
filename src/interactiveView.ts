@@ -381,7 +381,7 @@ export class InteractiveViewPanelController implements vscode.Disposable {
     if (message.type === "highlightRulesChanged") {
       // 書き戻しは設定変更イベントを起こし、#183 の redisplay 経路で表示へ
       // 反映されるため、ここで postState は呼ばない（二重描画を避ける）。
-      await writeHighlightRuleRows(message.rules);
+      await writeHighlightRuleRows(message.rules, this.highlightRulesResource());
       return;
     }
     this.criteria = resolveIncomingCriteria(message.criteria, this.loadedFiles.length);
@@ -571,6 +571,20 @@ export class InteractiveViewPanelController implements vscode.Disposable {
   }
 
   /**
+   * ハイライトルール設定を解決する基準リソース（issue #240）。マルチルート
+   * ワークスペースでは、どのフォルダの `.vscode/settings.json` を読み書きするか
+   * がリソース次第で変わるため、「いま開いているログ」を基準にする。
+   *
+   * 複数フォルダにまたがるログを開いている場合でも先頭のファイルで決める
+   * ——書き込み先が読み込み順だけで決まり、パネルに表示しているルールと
+   * 保存先が必ず一致するため。パネルにフォーカスがある間 `activeTextEditor`
+   * は別のエディタか `undefined` なので、そちらは基準にできない。
+   */
+  private highlightRulesResource(): vscode.Uri | undefined {
+    return this.loadedFiles[0]?.uri;
+  }
+
+  /**
    * 現在の `this.criteria` を実際に適用して結果を送り返す。無視パターンの
    * 評価がタイムアウト/エラーになった場合は、そのパターンだけを外して
    * 再計算し、警告文とともに送る（QuickPickの警告ダイアログで処理を
@@ -735,7 +749,7 @@ export class InteractiveViewPanelController implements vscode.Disposable {
       lineSources: limited.lineSources,
       warning: warnings.length > 0 ? warnings.join(" / ") : undefined,
       highlights,
-      highlightRules: readHighlightRuleRows(),
+      highlightRules: readHighlightRuleRows(this.highlightRulesResource()),
       collapsibleSupported,
       items: limited.items,
       displayLimit:
@@ -759,7 +773,7 @@ export class InteractiveViewPanelController implements vscode.Disposable {
   private async computeHighlights(
     limited: LimitedInteractiveDisplay
   ): Promise<LineHighlights | undefined> {
-    const rules = readHighlightRules();
+    const rules = readHighlightRules(this.highlightRulesResource());
     if (rules.length === 0) {
       return undefined;
     }
