@@ -57,6 +57,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   message text lines up vertically instead of shifting between `INFO` and
   `ERROR` rows. The gutter and the timestamp were already fixed-width; severity
   was the one column that moved (issue #174).
+- Continuation lines of a multi-line entry (a stack trace, say) are now indented
+  to their entry's message column instead of starting right after the gutter, so
+  the whole entry reads as one block. Their own indentation is preserved on top
+  of that. An entry whose timestamp was not recognized has no message column to
+  line up with, so its continuation lines stay put (issue #256).
 - A collapsed group's end timestamp moved from `start 〜 end` next to the start
   time into the trailing `(×5, 〜03:04:09.000Z)`, so the group header lines up
   with ordinary rows instead of being the one line pushed out of column. The end

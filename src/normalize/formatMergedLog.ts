@@ -8,7 +8,7 @@ import {
   maskDisplayMessageLines,
   type DisplayMaskOptions,
 } from "./displayMask";
-import { computeSeverityWidth, formatSeverity } from "./severityColumn";
+import { computeSeverityWidth, formatSeverity, messageColumnIndent } from "./severityColumn";
 
 /** {@link formatMergedLog} の挙動を調整するオプション。 */
 export interface FormatMergedLogOptions {
@@ -114,14 +114,24 @@ export function formatMergedLogWithLineSources(
     );
     const headerPrefix = `${fileName.padEnd(fileNameWidth)} | ${kind.padEnd(kindWidth)} | `;
 
-    const headerText = entry.matched && entry.timestampMs !== undefined
-      ? `${formatMaskableTimestamp(entry.timestampMs, displayTimezone, options.mask)} ${formatSeverity(entry.severity, severityWidth)} ${messageLines[0]}`
+    const timestampText = entry.matched && entry.timestampMs !== undefined
+      ? formatMaskableTimestamp(entry.timestampMs, displayTimezone, options.mask)
+      : undefined;
+    const headerText = timestampText !== undefined
+      ? `${timestampText} ${formatSeverity(entry.severity, severityWidth)} ${messageLines[0]}`
       : messageLines[0];
     outputLines.push(headerPrefix + formatGutter(entry.startLine, gutterWidth) + headerText);
     lineSources.push({ fileIndex, line: entry.startLine });
 
+    const continuationIndent =
+      timestampText !== undefined ? messageColumnIndent(timestampText, severityWidth) : "";
     for (let j = 1; j < messageLines.length; j++) {
-      outputLines.push(blankPrefix + formatGutter(entry.startLine + j, gutterWidth) + messageLines[j]);
+      outputLines.push(
+        blankPrefix +
+          formatGutter(entry.startLine + j, gutterWidth) +
+          continuationIndent +
+          messageLines[j]
+      );
       lineSources.push({ fileIndex, line: entry.startLine + j });
     }
   }

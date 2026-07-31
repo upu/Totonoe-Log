@@ -603,8 +603,8 @@ suite("normalize / formatNormalizedLog", () => {
       output,
       [
         "1 | 2024-01-02T03:04:05.000Z ERROR Unhandled exception",
-        "2 | java.lang.NullPointerException",
-        "3 |     at com.example.Foo.bar(Foo.java:42)",
+        "2 |                                java.lang.NullPointerException",
+        "3 |                                    at com.example.Foo.bar(Foo.java:42)",
         "4 | 2024-01-02T03:04:06.000Z INFO  recovered",
       ].join("\n")
     );
@@ -1746,11 +1746,11 @@ suite("normalize / buildInteractiveCollapsedLines (#172)", () => {
     // formatNormalizedLog(entries) を呼んだ場合（幅1桁）とは異なる。
     assert.deepStrictEqual(item.lines, [
       "  1 | 2024-01-02T03:04:05.000Z ERROR boom",
-      "  2 |   detail",
+      "  2 |                                  detail",
       "  3 | 2024-01-02T03:04:06.000Z ERROR boom",
-      "  4 |   detail",
+      "  4 |                                  detail",
       "  5 | 2024-01-02T03:04:07.000Z ERROR boom",
-      "  6 |   detail",
+      "  6 |                                  detail",
     ]);
   });
 
@@ -1986,7 +1986,7 @@ suite("normalize / display mask (#194)", () => {
       formatNormalizedLog(entries, { mask: { maskHost: true } }),
       [
         "1 | 2024-01-02T03:04:05.000Z ERROR connect to <HOST> failed",
-        "2 |     at com.example.Foo.bar(<HOST>)",
+        "2 |                                    at com.example.Foo.bar(<HOST>)",
       ].join("\n")
     );
   });
@@ -2718,7 +2718,7 @@ suite("normalize / formatCollapsedLog", () => {
       formatCollapsedLog(entries, items),
       [
         "1-6 | 2024-01-02T03:04:05.000Z ERROR boom (×3, 〜03:04:07.000Z)",
-        "  2 |   detail",
+        "  2 |                                  detail",
       ].join("\n")
     );
   });
@@ -2898,7 +2898,7 @@ suite("normalize / formatMergedLog", () => {
     const kindWidth = "app".length;
     const expected = [
       `${"app.log".padEnd(fileNameWidth)} | ${"app".padEnd(kindWidth)} | 1 | 2024-01-02T03:04:05.000Z ERROR boom`,
-      `${" ".repeat(fileNameWidth)} | ${" ".repeat(kindWidth)} | 2 |   at Foo.bar`,
+      `${" ".repeat(fileNameWidth)} | ${" ".repeat(kindWidth)} | 2 | ${" ".repeat(31)}  at Foo.bar`,
     ].join("\n");
 
     assert.strictEqual(output, expected);
@@ -4849,11 +4849,13 @@ suite("normalize / column alignment (#174)", () => {
 
   test("leaves entries without a recognized timestamp untouched", () => {
     // タイムスタンプもセベリティも出ない行は列そのものが無いので詰めない。
-    const text = ["2024-01-02T03:04:05Z ERROR boom", "no timestamp here"].join("\n");
+    // 先頭に置くのは、タイムスタンプのある行の後ろだとそのエントリの継続行に
+    // 畳まれてしまい、独立したエントリにならないため。
+    const text = ["==== banner ====", "2024-01-02T03:04:05Z ERROR boom"].join("\n");
 
     assert.strictEqual(
       formatNormalizedLog(parseLog(text)),
-      ["1 | 2024-01-02T03:04:05.000Z ERROR boom", "2 | no timestamp here"].join("\n")
+      ["1 | ==== banner ====", "2 | 2024-01-02T03:04:05.000Z ERROR boom"].join("\n")
     );
   });
 
@@ -4933,6 +4935,123 @@ suite("normalize / column alignment (#174)", () => {
         mask: { maskTimestamp: true, maskHost: true },
       }),
       "1-3 | <TIMESTAMP> INFO connect to <HOST> ok (×3)"
+    );
+  });
+});
+
+suite("normalize / continuation line indent (#256)", () => {
+  const STACK_TRACE = [
+    "2024-01-02T03:04:05Z ERROR Unhandled exception",
+    "java.lang.NullPointerException",
+    "    at com.example.Foo.bar(Foo.java:42)",
+    "2024-01-02T03:04:06Z INFO recovered",
+  ].join("\n");
+
+  test("indents continuation lines to the message column, keeping their own indent", () => {
+    // 見出しの「タイムスタンプ + 空白 + セベリティ + 空白」分だけ字下げする。
+    const indent = " ".repeat("2024-01-02T03:04:05.000Z".length + 1 + "ERROR".length + 1);
+
+    assert.strictEqual(
+      formatNormalizedLog(parseLog(STACK_TRACE)),
+      [
+        "1 | 2024-01-02T03:04:05.000Z ERROR Unhandled exception",
+        `2 | ${indent}java.lang.NullPointerException`,
+        `3 | ${indent}    at com.example.Foo.bar(Foo.java:42)`,
+        "4 | 2024-01-02T03:04:06.000Z INFO  recovered",
+      ].join("\n")
+    );
+  });
+
+  test("widens the indent with the display timezone", () => {
+    const indent = " ".repeat("2024-01-02T12:04:05.000+09:00".length + 1 + "ERROR".length + 1);
+
+    assert.strictEqual(
+      formatNormalizedLog(parseLog(STACK_TRACE), { displayTimezone: 540 }),
+      [
+        "1 | 2024-01-02T12:04:05.000+09:00 ERROR Unhandled exception",
+        `2 | ${indent}java.lang.NullPointerException`,
+        `3 | ${indent}    at com.example.Foo.bar(Foo.java:42)`,
+        "4 | 2024-01-02T12:04:06.000+09:00 INFO  recovered",
+      ].join("\n")
+    );
+  });
+
+  test("narrows the indent when the timestamp is masked", () => {
+    const indent = " ".repeat("<TIMESTAMP>".length + 1 + "ERROR".length + 1);
+
+    assert.strictEqual(
+      formatNormalizedLog(parseLog(STACK_TRACE), { mask: { maskTimestamp: true } }),
+      [
+        "1 | <TIMESTAMP> ERROR Unhandled exception",
+        `2 | ${indent}java.lang.NullPointerException`,
+        `3 | ${indent}    at com.example.Foo.bar(Foo.java:42)`,
+        "4 | <TIMESTAMP> INFO  recovered",
+      ].join("\n")
+    );
+  });
+
+  test("leaves the continuation lines of a timestamp-less entry where they are", () => {
+    // 見出し自体がガター直後から始まるので、継続行を字下げすると自分の見出しより
+    // 右にずれてしまう。
+    const text = ["==== banner ====", "  second line of the banner"].join("\n");
+
+    assert.strictEqual(
+      formatNormalizedLog(parseLog(text)),
+      ["1 | ==== banner ====", "2 |   second line of the banner"].join("\n")
+    );
+  });
+
+  test("indents continuation lines in the merged view too", () => {
+    const merged = mergeLogFiles([
+      { fileName: "app.log", text: STACK_TRACE },
+      { fileName: "db.log", text: "2024-01-02T03:04:07Z ERROR boom" },
+    ]);
+    const indent = " ".repeat("2024-01-02T03:04:05.000Z".length + 1 + "ERROR".length + 1);
+
+    assert.strictEqual(
+      formatMergedLog(merged),
+      [
+        "app.log | app | 1 | 2024-01-02T03:04:05.000Z ERROR Unhandled exception",
+        `        |     | 2 | ${indent}java.lang.NullPointerException`,
+        `        |     | 3 | ${indent}    at com.example.Foo.bar(Foo.java:42)`,
+        "app.log | app | 4 | 2024-01-02T03:04:06.000Z INFO  recovered",
+        "db.log  | db  | 1 | 2024-01-02T03:04:07.000Z ERROR boom",
+      ].join("\n")
+    );
+  });
+
+  test("indents the representative's continuation lines in a collapsed group", () => {
+    const repeated = [
+      "2024-01-02T03:04:05Z ERROR boom",
+      "  detail",
+      "2024-01-02T03:04:06Z ERROR boom",
+      "  detail",
+      "2024-01-02T03:04:07Z ERROR boom",
+      "  detail",
+    ].join("\n");
+    const entries = parseLog(repeated);
+    const items = collapseRepeatedEntries(entries, { threshold: 3 });
+    const indent = " ".repeat("2024-01-02T03:04:05.000Z".length + 1 + "ERROR".length + 1);
+
+    assert.strictEqual(
+      formatCollapsedLog(entries, items),
+      [
+        "1-6 | 2024-01-02T03:04:05.000Z ERROR boom (×3, 〜03:04:07.000Z)",
+        `  2 | ${indent}  detail`,
+      ].join("\n")
+    );
+  });
+
+  test("keeps the compare view's continuation lines unindented", () => {
+    // #174 と同じ理由。左右で見出しの幅が食い違うと、本文が同じ行まで差分になる。
+    assert.strictEqual(
+      formatMaskedLogForCompare(parseLog(STACK_TRACE)),
+      [
+        "1 | <TIMESTAMP> ERROR Unhandled exception",
+        "2 | java.lang.NullPointerException",
+        "3 |     at com.example.Foo.bar(Foo.java:42)",
+        "4 | <TIMESTAMP> INFO recovered",
+      ].join("\n")
     );
   });
 });

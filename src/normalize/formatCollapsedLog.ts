@@ -9,7 +9,7 @@ import {
   type DisplayMaskOptions,
 } from "./displayMask";
 
-import { computeSeverityWidth, formatSeverity } from "./severityColumn";
+import { computeSeverityWidth, formatSeverity, messageColumnIndent } from "./severityColumn";
 import { formatGroupSuffix } from "./groupSuffix";
 
 /** {@link formatCollapsedLog} の挙動を調整するオプション。 */
@@ -141,8 +141,14 @@ export function formatCollapsedLogWithLineSources(
     outputLines.push(formatGutter(gutterLabel, gutterWidth) + headerText);
     lineSources.push({ fileIndex: 0, line: representative.startLine });
 
+    const continuationIndent =
+      timestamps !== undefined ? messageColumnIndent(timestamps.startText, severityWidth) : "";
     for (let i = 1; i < messageLines.length; i++) {
-      outputLines.push(formatGutter(representative.startLine + i, gutterWidth) + messageLines[i]);
+      outputLines.push(
+        formatGutter(representative.startLine + i, gutterWidth) +
+          continuationIndent +
+          messageLines[i]
+      );
       lineSources.push({ fileIndex: 0, line: representative.startLine + i });
     }
   }

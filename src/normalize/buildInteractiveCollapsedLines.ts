@@ -14,7 +14,7 @@ import {
   type DisplayMaskOptions,
 } from "./displayMask";
 import { collapseRepeatedEntries, DEFAULT_COLLAPSE_THRESHOLD, type CollapsedItem } from "./collapseRepeatedEntries";
-import { computeSeverityWidth, formatSeverity } from "./severityColumn";
+import { computeSeverityWidth, formatSeverity, messageColumnIndent } from "./severityColumn";
 import { formatGroupSuffix } from "./groupSuffix";
 
 /**
@@ -127,8 +127,11 @@ function formatEntryLines(
     entry.timestampFormat,
     mask
   );
-  const headerText = entry.matched && entry.timestampMs !== undefined
-    ? `${formatMaskableTimestamp(entry.timestampMs, displayTimezone, mask)} ${formatSeverity(entry.severity, severityWidth)} ${messageLines[0]}`
+  const timestampText = entry.matched && entry.timestampMs !== undefined
+    ? formatMaskableTimestamp(entry.timestampMs, displayTimezone, mask)
+    : undefined;
+  const headerText = timestampText !== undefined
+    ? `${timestampText} ${formatSeverity(entry.severity, severityWidth)} ${messageLines[0]}`
     : messageLines[0];
 
   const lines: FormattedEntryLine[] = [
@@ -137,9 +140,15 @@ function formatEntryLines(
       lineSource: { fileIndex, line: entry.startLine },
     },
   ];
+  const continuationIndent =
+    timestampText !== undefined ? messageColumnIndent(timestampText, severityWidth) : "";
   for (let i = 1; i < messageLines.length; i++) {
     lines.push({
-      text: columnPrefix + formatGutter(entry.startLine + i, gutterWidth) + messageLines[i],
+      text:
+        columnPrefix +
+        formatGutter(entry.startLine + i, gutterWidth) +
+        continuationIndent +
+        messageLines[i],
       lineSource: { fileIndex, line: entry.startLine + i },
     });
   }
