@@ -3393,7 +3393,7 @@ suite("normalize / collapse honors the display mask (#245)", () => {
     assert.strictEqual(items[0].kind, "group");
     if (items[0].kind === "group") {
       assert.ok(items[0].headerText.includes("<PID>"), "the header should show the masked text");
-      assert.ok(items[0].headerText.includes("(×3"));
+      assert.match(items[0].headerText, /\(×3[,)]/);
       assert.strictEqual(items[0].lines.length, 3);
       assert.ok(
         items[0].lines.every((line) => line.includes("<PID>")),
