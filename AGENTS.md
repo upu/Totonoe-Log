@@ -119,3 +119,12 @@ OpenWiki文書は、次のコマンドでローカルから手動更新する（
 生成された差分は機能変更と混ぜず、`docs: OpenWiki を更新` のような単独 PR にする。
 
 生成されたOpenWikiページは原則として直接編集せず、ソースコード、既存ドキュメント、または `openwiki/INSTRUCTIONS.md` を更新してからOpenWikiで再生成する。
+
+### 更新後に取り消すもの
+
+`openwiki code --update` は `openwiki/**` の外にも書き込む。次の 2 つはこのリポジトリの方針と合わないので、コミットする前に取り消す。
+
+- **`AGENTS.md` に追加される英語の `## OpenWiki` 節**（`<!-- OPENWIKI:START -->` 〜 `<!-- OPENWIKI:END -->`）。既存の日本語の節と重複するうえ、「scheduled OpenWiki GitHub Actions workflow がwikiを更新する」という、上に書いたローカル手動運用と矛盾する内容が含まれる。`git checkout -- AGENTS.md` で戻す
+- **リポジトリルートに新規生成される `CLAUDE.md`**。同じ定型文が入る。指示ファイルは `AGENTS.md` を正本、`.claude/CLAUDE.md` をその薄いポインタとする構成なので、ルート直下に別系統を増やさない。ファイルごと削除する
+
+あわせて、`openwiki/**` の各 `index.md` が改行コードだけの差分（`git diff` が空なのに `git status` では変更扱い）になることがある。レビューできる実質差分だけを残すため、内容の変わっていないファイルは `git checkout --` で戻してからコミットする。
