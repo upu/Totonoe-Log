@@ -3,7 +3,6 @@ import {
   NORMALIZED_VIEW_SCHEME,
   NormalizedViewContentProvider,
   createShowNormalizedViewCommand,
-  createShowNormalizedViewFilteredCommand,
 } from "./normalizedView";
 import {
   COMPARE_VIEW_SCHEME,
@@ -16,13 +15,13 @@ import {
   MERGED_VIEW_SCHEME,
   MergedViewContentProvider,
   createMergeSelectedFilesCommand,
-  createMergeSelectedFilesFilteredCommand,
   createMergedViewFilenameHoverProvider,
 } from "./mergedView";
 import {
   InteractiveViewPanelController,
   createShowInteractiveViewCommand,
 } from "./interactiveView";
+import { createSetViewFilterCommand } from "./setViewFilter";
 
 export function activate(context: vscode.ExtensionContext): void {
   const normalizedViewProvider = new NormalizedViewContentProvider();
@@ -44,10 +43,6 @@ export function activate(context: vscode.ExtensionContext): void {
       "totonoeLog.mergeSelectedFiles",
       createMergeSelectedFilesCommand(mergedViewProvider)
     ),
-    vscode.commands.registerCommand(
-      "totonoeLog.mergeSelectedFilesFiltered",
-      createMergeSelectedFilesFilteredCommand(mergedViewProvider)
-    ),
     vscode.languages.registerHoverProvider(
       { scheme: MERGED_VIEW_SCHEME },
       createMergedViewFilenameHoverProvider(mergedViewProvider)
@@ -61,9 +56,20 @@ export function activate(context: vscode.ExtensionContext): void {
       "totonoeLog.showNormalizedView",
       createShowNormalizedViewCommand(normalizedViewProvider)
     ),
+    // 絞り込みは「開き方」ではなく、開いたビューに対する表示状態として設定する
+    // （issue #248）。実際に絞り込めるのは絞り込み材料を登録している正規化
+    // ビューとマージビューだけだが、比較ビューも Totonoe Log のビューとして
+    // 渡す——渡さないと「絞り込むビューがありません」と案内してしまい、
+    // ビューはあるが絞り込みに対応していない事実と食い違うため。
     vscode.commands.registerCommand(
-      "totonoeLog.showNormalizedViewFiltered",
-      createShowNormalizedViewFilteredCommand(normalizedViewProvider)
+      "totonoeLog.setViewFilter",
+      createSetViewFilterCommand(
+        new Map([
+          [NORMALIZED_VIEW_SCHEME, normalizedViewProvider],
+          [MERGED_VIEW_SCHEME, mergedViewProvider],
+          [COMPARE_VIEW_SCHEME, compareViewProvider],
+        ])
+      )
     ),
     vscode.workspace.registerTextDocumentContentProvider(
       COMPARE_VIEW_SCHEME,

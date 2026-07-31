@@ -9,8 +9,8 @@ import {
 import {
   VirtualDocumentContentProvider,
   NORMALIZED_VIEW_SCHEME,
+  type FilterableViewSource,
 } from "./virtualDocumentContentProvider";
-import { promptFilterKinds, promptFilterCriteriaForKinds, countLines } from "./filterPrompts";
 import { getSourceDocumentOrWarn, parseSourceLog } from "./logSourceDocument";
 import { readDisplayTimezone } from "./timezoneSettings";
 import { readGapThresholdMs } from "./gapThresholdSetting";
@@ -73,7 +73,8 @@ export async function openVirtualNormalizedDocument(
   provider: NormalizedViewContentProvider,
   sourceUri: vscode.Uri,
   formatted: FormattedLogWithLineSources,
-  fileTag: string
+  fileTag: string,
+  filterSource?: FilterableViewSource
 ): Promise<void> {
   const sourceBaseName = sourceUri.path.split("/").pop() ?? "log";
   // 先頭のドット（`.env` などのドットファイル）は拡張子とみなさず、
@@ -88,36 +89,47 @@ export async function openVirtualNormalizedDocument(
     sourceUris: [sourceUri],
     lineSources: formatted.lineSources,
   });
+  if (filterSource) {
+    provider.registerFilterSource(uri, filterSource);
+  }
 
   const normalizedDocument = await vscode.workspace.openTextDocument(uri);
   await vscode.window.showTextDocument(normalizedDocument, { preview: false });
 }
 
 /**
- * 絞り込みで非表示にした行数を通知として表示する。表示前後の行数をそれぞれ
- * 1回だけ数え、通知本文（非表示行数と「表示中/全体」の分母・分子）の算出で
- * 重複計算しないようにする。
- *
- * `reasonPhrase` は「指定範囲外の」「条件に合わない」等、通知文の
- * 「〜 N 行を非表示にしました」に前置する語句。
+ * 正規化ビューを後から絞り込めるようにする材料（issue #248）。表示タイム
+ * ゾーンとギャップ設定は掛け直しのたびに読み直す——絞り込みの前後で表示の
+ * 基準が変わらないよう、開いたときと同じ経路（{@link formatNormalizedWithGap}）
+ * を通す。
  */
-function reportHiddenLineCount(
-  reasonPhrase: string,
-  totalEntries: readonly LogEntry[],
-  visibleEntries: readonly LogEntry[]
-): void {
-  const totalLineCount = countLines(totalEntries);
-  const visibleLineCount = countLines(visibleEntries);
-  const hiddenLineCount = totalLineCount - visibleLineCount;
-  vscode.window.showInformationMessage(
-    `Totonoe Log: ${reasonPhrase} ${hiddenLineCount} 行を非表示にしました（${visibleLineCount}/${totalLineCount} 行を表示）。`
-  );
+export function createNormalizedFilterSource(
+  entries: readonly LogEntry[]
+): FilterableViewSource {
+  return {
+    allEntries: entries,
+    async applyFilter(criteria) {
+      const filterResult = await filterEntriesByCriteria(entries, criteria);
+      if (!filterResult.ok) {
+        return undefined;
+      }
+      const formatted = formatNormalizedWithGap(filterResult.entries);
+      return {
+        text: formatted.text,
+        lineSources: formatted.lineSources,
+        visibleEntries: filterResult.entries,
+      };
+    },
+  };
 }
 
 /**
  * アクティブなエディタの内容を正規化し、読み取り専用の仮想ドキュメントとして
  * 開くコマンドの本体。VSCode 標準の検索・コピー・diff エディタがそのまま
  * 使える仮想ドキュメント方式（`TextDocumentContentProvider`）を採用する。
+ *
+ * 絞り込みはここでは尋ねない。開いたビューに対する `Set Filter`
+ * （`setViewFilter.ts`、issue #248）で後からいつでも設定・変更・解除する。
  */
 export function createShowNormalizedViewCommand(
   provider: NormalizedViewContentProvider
@@ -131,61 +143,12 @@ export function createShowNormalizedViewCommand(
     const entries = parseSourceLog(sourceDocument);
     const formatted = formatNormalizedWithGap(entries);
 
-    await openVirtualNormalizedDocument(provider, sourceDocument.uri, formatted, "normalized");
-  };
-}
-
-/**
- * アクティブなエディタの内容を正規化し、ユーザーが選んだ条件（セベリティ /
- * 日付範囲 / 無視パターンのうち任意の組み合わせ）だけを順に尋ねて絞り込んだ
- * 読み取り専用の仮想ドキュメントとして開くコマンド。個別の組み合わせごとに
- * コマンドを増やす代わりに、まず「どの条件で絞り込むか」を複数選択ピッカーで
- * 尋ね、選ばれた条件についてだけ既存のプロンプト（{@link promptSeveritySelection}
- * 等）を順に呼ぶ（issue #60 の推奨案1）。非表示にした行数は、開いた直後に
- * 通知として表示する。
- *
- * 条件ごとに分かれていた絞り込みコマンドは、Interactive View のライブトグルと
- * このコマンドで代替できるため廃止した（issue #184）。
- */
-export function createShowNormalizedViewFilteredCommand(
-  provider: NormalizedViewContentProvider
-): () => Promise<void> {
-  return async function showNormalizedViewFiltered(): Promise<void> {
-    const sourceDocument = getSourceDocumentOrWarn("絞り込む");
-    if (!sourceDocument) {
-      return;
-    }
-
-    const selectedKinds = await promptFilterKinds();
-    // ユーザーがピッカーを Esc 等でキャンセルした場合は何もしない。
-    if (selectedKinds === undefined) {
-      return;
-    }
-
-    const entries = parseSourceLog(sourceDocument);
-    const displayTimezone = readDisplayTimezone();
-
-    const criteria = await promptFilterCriteriaForKinds(selectedKinds, entries, displayTimezone);
-    // いずれかのプロンプトがキャンセル・不正入力で中断された場合は何もしない。
-    if (criteria === undefined) {
-      return;
-    }
-
-    const filterResult = await filterEntriesByCriteria(entries, criteria);
-    if (!filterResult.ok) {
-      // 破局的バックトラッキング等でマッチング処理がタイムアウトした場合。
-      // ignorePatternフィルタ単体のコマンドと同じ理由で、フォールバックせず
-      // 警告のみ出す。
-      vscode.window.showWarningMessage(
-        "Totonoe Log: 入力されたパターンの処理に時間がかかりすぎたため中断しました。より単純なパターンをお試しください。"
-      );
-      return;
-    }
-    const filteredEntries = filterResult.entries;
-    const formatted = formatNormalizedWithGap(filteredEntries, displayTimezone);
-
-    await openVirtualNormalizedDocument(provider, sourceDocument.uri, formatted, "filtered");
-
-    reportHiddenLineCount("条件に合わない", entries, filteredEntries);
+    await openVirtualNormalizedDocument(
+      provider,
+      sourceDocument.uri,
+      formatted,
+      "normalized",
+      createNormalizedFilterSource(entries)
+    );
   };
 }
