@@ -10,9 +10,9 @@ import {
 import {
   VirtualDocumentContentProvider,
   MERGED_VIEW_SCHEME,
+  type FilterableViewSource,
   type SourceLineMap,
 } from "./virtualDocumentContentProvider";
-import { promptFilterKinds, promptFilterCriteriaForKinds, countLines } from "./filterPrompts";
 import { readConfiguredTimestampFormats } from "./timestampFormatSettings";
 import { readDisplayTimezone } from "./timezoneSettings";
 import { warnIfLowTimestampRecognition } from "./timestampRecognitionWarning";
@@ -43,12 +43,15 @@ export class MergedViewContentProvider extends VirtualDocumentContentProvider {
   async openDocument(
     formatted: FormattedLogWithLineSources,
     sourceUris: readonly vscode.Uri[],
-    path: string
+    path: string,
+    filterSource?: FilterableViewSource
   ): Promise<void> {
     if (Buffer.byteLength(formatted.text, "utf8") >= MAX_VIRTUAL_MERGED_DOCUMENT_BYTES) {
       if (this.largeResultStore === undefined) {
         throw new Error("Large merged result storage is not configured.");
       }
+      // 通常のファイルタブには絞り込み材料を紐づけられない（issue #248）。
+      // 行対応情報を登録しないのと同じ理由で、`Set Filter` の対象外になる。
       await this.largeResultStore.open(formatted.text, path);
       return;
     }
@@ -58,6 +61,9 @@ export class MergedViewContentProvider extends VirtualDocumentContentProvider {
       sourceUris,
       lineSources: formatted.lineSources,
     });
+    if (filterSource) {
+      this.registerFilterSource(uri, filterSource);
+    }
 
     const mergedDocument = await vscode.workspace.openTextDocument(uri);
     await vscode.window.showTextDocument(mergedDocument, { preview: false });
@@ -70,7 +76,6 @@ export class MergedViewContentProvider extends VirtualDocumentContentProvider {
 }
 
 let mergedViewCounter = 0;
-let mergedFilteredViewCounter = 0;
 
 /**
  * VS Code が拡張機能へ同期できるドキュメントの上限は約50MiB。境界付近で
@@ -233,7 +238,42 @@ async function openMergedView(
   });
 
   mergedViewCounter += 1;
-  await provider.openDocument(formatted, fileUris, `/merged-${mergedViewCounter}.log`);
+  await provider.openDocument(
+    formatted,
+    fileUris,
+    `/merged-${mergedViewCounter}.log`,
+    createMergedFilterSource(mergedEntries)
+  );
+}
+
+/**
+ * マージビューを後から絞り込めるようにする材料（issue #248）。
+ *
+ * 絞り込みは `MergedEntry` の `fileIndex` を保持したまま行を間引くだけなので、
+ * 行対応表の `fileIndex` は絞り込み前と同じ `fileUris` の並びで解決できる
+ * ——`sourceUris` は登録し直さなくてよい。
+ */
+export function createMergedFilterSource(
+  mergedEntries: readonly MergedEntry[]
+): FilterableViewSource {
+  return {
+    allEntries: mergedEntries.map((merged) => merged.entry),
+    async applyFilter(criteria) {
+      const filterResult = await filterMergedEntriesByCriteria(mergedEntries, criteria);
+      if (!filterResult.ok) {
+        return undefined;
+      }
+      const formatted = formatMergedLogWithLineSources(filterResult.entries, {
+        displayTimezone: readDisplayTimezone(),
+        gapThresholdMs: readGapThresholdMs(),
+      });
+      return {
+        text: formatted.text,
+        lineSources: formatted.lineSources,
+        visibleEntries: filterResult.entries.map((merged) => merged.entry),
+      };
+    },
+  };
 }
 
 /**
@@ -277,94 +317,6 @@ export function createMergeSelectedFilesCommand(
     }
 
     await openMergedView(provider, fileUris);
-  };
-}
-
-/**
- * エクスプローラで複数選択したログファイルを、ファイル選択ダイアログを経由
- * せずに直接マージしたうえで、ユーザーが選んだ条件（セベリティ / 日付範囲 /
- * 無視パターンのうち任意の組み合わせ）で絞り込んだ結果を開くコマンドの本体
- * （issue #61 / #151）。
- *
- * もとは `Show Merged View Filtered` として `vscode.window.showOpenDialog` 経由
- * でファイルを選ばせていたが、OS標準のファイル選択ダイアログは単一フォルダ内
- * でしか複数選択できず、複数フォルダにまたがるログをマージしたいケースで実質
- * 使えなかった（issue #151）。エクスプローラの複数選択はフォルダをまたいでも
- * 問題なく選べるため、`mergeSelectedFiles` と同じ入力経路（{@link resolveSelectedLogFileUris}）
- * に一本化した。
- *
- * 「マージビューを開いた後にそのビューへ絞り込みコマンドを実行する」形（正規化
- * ビューの絞り込み系コマンドと同じ、アクティブエディタを起点とする方式）ではなく、
- * 「マージしてから絞り込む」を1コマンドにまとめる方式を採った。マージビューは
- * `formatMergedLog` でファイル名/種類列・行番号ガター付きのテキストに整形済みで
- * 表示されるため、後者を選ぶとその表示テキストから `MergedEntry[]` を再パース
- * する専用ロジックが要り、フォーマットの変更に弱くなる
- * （`guardAgainstVirtualDocumentSource` が仮想ドキュメントに対する
- * `parseLog` 実行を警告する形で防いでいるのと同種の問題、#57）。
- */
-export function createMergeSelectedFilesFilteredCommand(
-  provider: MergedViewContentProvider
-): (clickedUri: vscode.Uri, selectedUris?: vscode.Uri[]) => Promise<void> {
-  return async function mergeSelectedFilesFiltered(
-    clickedUri: vscode.Uri,
-    selectedUris?: vscode.Uri[]
-  ): Promise<void> {
-    const fileUris = await resolveSelectedLogFileUris(clickedUri, selectedUris);
-    if (!fileUris) {
-      return;
-    }
-
-    const files = await readLogFiles(fileUris);
-    const mergedEntries: MergedEntry[] = mergeLogFiles(files, {
-      timestampFormats: readConfiguredTimestampFormats(),
-    });
-    warnLowTimestampRecognitionPerFile(fileUris, mergedEntries);
-
-    const selectedKinds = await promptFilterKinds();
-    // ユーザーがピッカーを Esc 等でキャンセルした場合は何もしない。
-    if (selectedKinds === undefined) {
-      return;
-    }
-
-    const entries = mergedEntries.map((merged) => merged.entry);
-    const displayTimezone = readDisplayTimezone();
-
-    const criteria = await promptFilterCriteriaForKinds(selectedKinds, entries, displayTimezone);
-    // いずれかのプロンプトがキャンセル・不正入力で中断された場合は何もしない。
-    if (criteria === undefined) {
-      return;
-    }
-
-    const filterResult = await filterMergedEntriesByCriteria(mergedEntries, criteria);
-    if (!filterResult.ok) {
-      // 破局的バックトラッキング等でマッチング処理がタイムアウトした場合。
-      // 正規化ビューの統合絞り込みコマンドと同じ理由で、フォールバックせず
-      // 警告のみ出す。
-      vscode.window.showWarningMessage(
-        "Totonoe Log: 入力されたパターンの処理に時間がかかりすぎたため中断しました。より単純なパターンをお試しください。"
-      );
-      return;
-    }
-    const filteredMergedEntries = filterResult.entries;
-    // 絞り込みは MergedEntry の fileIndex を保持したまま行を間引くだけなので、
-    // 対応表の fileIndex は絞り込み前と同じ fileUris の並びで解決できる。
-    const formatted = formatMergedLogWithLineSources(filteredMergedEntries, {
-      displayTimezone,
-      gapThresholdMs: readGapThresholdMs(),
-    });
-
-    mergedFilteredViewCounter += 1;
-    await provider.openDocument(
-      formatted,
-      fileUris,
-      `/merged-filtered-${mergedFilteredViewCounter}.log`
-    );
-
-    const filteredEntries = filteredMergedEntries.map((merged) => merged.entry);
-    const hiddenLineCount = countLines(entries) - countLines(filteredEntries);
-    vscode.window.showInformationMessage(
-      `Totonoe Log: 条件に合わない ${hiddenLineCount} 行を非表示にしました（${countLines(filteredEntries)}/${countLines(entries)} 行を表示）。`
-    );
   };
 }
 

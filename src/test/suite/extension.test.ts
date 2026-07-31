@@ -1,6 +1,29 @@
 import * as assert from "node:assert";
 import * as vscode from "vscode";
 
+/**
+ * `Set Filter`（issue #248）は `TextDocumentContentProvider` の `onDidChange`
+ * を発火して開いているタブの内容を差し替える。VSCode が内容を取り直すのは
+ * コマンドの完了後なので、期待する本文になるまで待つ。
+ *
+ * 条件を満たさないままタイムアウトした場合も最後に読んだ本文を返す
+ * ——待ち切れなかったことを「一致しなかった」として呼び出し側の
+ * `assert` に判定させ、失敗時に実際の内容が見えるようにするため。
+ */
+async function waitForDocumentText(
+  document: vscode.TextDocument,
+  matches: (text: string) => boolean,
+  timeoutMs = 5000
+): Promise<string> {
+  const deadline = Date.now() + timeoutMs;
+  let text = document.getText();
+  while (!matches(text) && Date.now() < deadline) {
+    await new Promise((resolve) => setTimeout(resolve, 25));
+    text = document.getText();
+  }
+  return text;
+}
+
 suite("Totonoe Log extension", () => {
   test("activates and registers the mergeSelectedFiles command", async () => {
     const extension = vscode.extensions.getExtension("upu.totonoe-log");
@@ -31,7 +54,6 @@ suite("Totonoe Log extension", () => {
     await extension!.activate();
 
     // Interactive View のライブトグルで代替できるため廃止した4コマンド。
-    // 複合ピッカー版（showNormalizedViewFiltered）だけを残す。
     const removedCommands = [
       "totonoeLog.showNormalizedViewFilteredBySeverity",
       "totonoeLog.showNormalizedViewFilteredByDateRange",
@@ -41,6 +63,10 @@ suite("Totonoe Log extension", () => {
       // 吸収されたため廃止（issue #233）。#158 でマージ表示にも折りたたみが
       // 入り、このコマンドにできて Interactive View にできないことは無くなった。
       "totonoeLog.showCollapsedView",
+      // 「開く時点で条件を決め打ちする」形をやめ、開いたビューに対する
+      // `Set Filter` へ統合したため廃止（issue #248）。
+      "totonoeLog.showNormalizedViewFiltered",
+      "totonoeLog.mergeSelectedFilesFiltered",
     ];
 
     const commands = await vscode.commands.getCommands(true);
@@ -54,8 +80,8 @@ suite("Totonoe Log extension", () => {
     }
 
     assert.ok(
-      contributed.includes("totonoeLog.showNormalizedViewFiltered"),
-      "the combined picker command should remain"
+      contributed.includes("totonoeLog.setViewFilter"),
+      "the command the filtered variants were folded into should remain"
     );
     assert.ok(
       contributed.includes("totonoeLog.showInteractiveView"),
@@ -217,14 +243,16 @@ suite("Totonoe Log normalized view", () => {
   });
 });
 
-suite("Totonoe Log normalized view filtered (combined)", () => {
+suite("Totonoe Log set filter on the normalized view (#248)", () => {
   /**
    * 「どの条件で絞り込むか」を尋ねる1回目の QuickPick と、選択した条件ごとの
    * 2回目以降の QuickPick（セベリティ選択）を、選択肢のラベルで区別する
-   * モック。1回目は `kindLabels` に含まれるラベルの選択肢だけを持つため、
-   * それで判別できる。
+   * モック。1回目は条件の種類のラベルだけを持つため、それで判別できる。
    */
-  function installQuickPickMock(kindsToSelect: readonly string[]): () => void {
+  function installQuickPickMock(
+    kindsToSelect: readonly string[],
+    severitiesToSelect: readonly string[] = ["ERROR"]
+  ): () => void {
     const original = vscode.window.showQuickPick;
     (vscode.window as any).showQuickPick = async (items: vscode.QuickPickItem[]) => {
       const isKindPicker = items.some((item) =>
@@ -233,38 +261,71 @@ suite("Totonoe Log normalized view filtered (combined)", () => {
       if (isKindPicker) {
         return items.filter((item) => kindsToSelect.includes(item.label));
       }
-      // セベリティ選択ピッカー: ERROR のみ選択する。
-      return items.filter((item) => item.label === "ERROR");
+      return items.filter((item) => severitiesToSelect.includes(item.label));
     };
     return () => {
       (vscode.window as any).showQuickPick = original;
     };
   }
 
-  test("registers the showNormalizedViewFiltered command", async () => {
+  /**
+   * 絞り込みは「開き方」ではなく開いたビューへの設定になったため（issue #248）、
+   * 各テストはまず正規化ビューを開くところから始まる。返すのはそのビューの
+   * ドキュメントで、`Set Filter` はこれを開いたまま書き換える。
+   */
+  async function openNormalizedView(content: string): Promise<vscode.TextDocument> {
+    const extension = vscode.extensions.getExtension("upu.totonoe-log");
+    await extension!.activate();
+
+    const source = await vscode.workspace.openTextDocument({ content, language: "log" });
+    await vscode.window.showTextDocument(source);
+    await vscode.commands.executeCommand("totonoeLog.showNormalizedView");
+
+    const document = vscode.window.activeTextEditor!.document;
+    assert.strictEqual(document.uri.scheme, "totonoe-log-normalized");
+    return document;
+  }
+
+  teardown(async () => {
+    await vscode.commands.executeCommand("workbench.action.closeAllEditors");
+  });
+
+  test("registers the setViewFilter command", async () => {
     const extension = vscode.extensions.getExtension("upu.totonoe-log");
     await extension!.activate();
 
     const commands = await vscode.commands.getCommands(true);
     assert.ok(
-      commands.includes("totonoeLog.showNormalizedViewFiltered"),
-      "totonoeLog.showNormalizedViewFiltered command should be registered"
+      commands.includes("totonoeLog.setViewFilter"),
+      "totonoeLog.setViewFilter command should be registered"
+    );
+  });
+
+  test("contributes an editor/context entry limited to the normalized and merged views", async () => {
+    const extension = vscode.extensions.getExtension("upu.totonoe-log");
+    await extension!.activate();
+
+    const editorContext = extension!.packageJSON.contributes.menus["editor/context"] as Array<{
+      command: string;
+      when: string;
+    }>;
+    const entry = editorContext.find((item) => item.command === "totonoeLog.setViewFilter");
+    assert.ok(entry, "setViewFilter should appear in the editor context menu");
+    assert.ok(
+      entry!.when.includes("totonoe-log-normalized") && entry!.when.includes("totonoe-log-merged"),
+      "the entry should be limited to the views it can actually filter"
     );
   });
 
   test("applies only the criteria selected in the kind picker (severity + ignore pattern)", async () => {
-    const extension = vscode.extensions.getExtension("upu.totonoe-log");
-    await extension!.activate();
-
-    const source = await vscode.workspace.openTextDocument({
-      content: [
+    const document = await openNormalizedView(
+      [
         "2024-01-02T03:04:05Z INFO starting",
         "2024-01-02T03:04:06Z ERROR boom",
         "2024-01-02T03:04:07Z ERROR heartbeat noise",
-      ].join("\n"),
-      language: "log",
-    });
-    await vscode.window.showTextDocument(source);
+      ].join("\n")
+    );
+    const uriBefore = document.uri.toString();
 
     const restoreQuickPick = installQuickPickMock(["セベリティ", "無視パターン"]);
     const originalShowInputBox = vscode.window.showInputBox;
@@ -278,19 +339,19 @@ suite("Totonoe Log normalized view filtered (combined)", () => {
     };
 
     try {
-      await vscode.commands.executeCommand("totonoeLog.showNormalizedViewFiltered");
+      await vscode.commands.executeCommand("totonoeLog.setViewFilter");
     } finally {
       restoreQuickPick();
       (vscode.window as any).showInputBox = originalShowInputBox;
       (vscode.window as any).showInformationMessage = originalShowInformationMessage;
     }
 
-    const activeEditor = vscode.window.activeTextEditor;
-    assert.ok(activeEditor, "a filtered normalized view editor should be shown");
-    assert.strictEqual(activeEditor!.document.uri.scheme, "totonoe-log-normalized");
+    const expected = "2 | 2024-01-02T03:04:06.000Z ERROR boom";
+    assert.strictEqual(await waitForDocumentText(document, (text) => text === expected), expected);
     assert.strictEqual(
-      activeEditor!.document.getText(),
-      "2 | 2024-01-02T03:04:06.000Z ERROR boom"
+      vscode.window.activeTextEditor!.document.uri.toString(),
+      uriBefore,
+      "the filter should rewrite the same tab instead of opening a new one"
     );
     assert.ok(
       infoMessage?.includes("条件に合わない 2 行"),
@@ -299,23 +360,17 @@ suite("Totonoe Log normalized view filtered (combined)", () => {
   });
 
   test("combines all three criteria (severity + date range + ignore pattern)", async () => {
-    const extension = vscode.extensions.getExtension("upu.totonoe-log");
-    await extension!.activate();
-
-    const source = await vscode.workspace.openTextDocument({
-      content: [
+    const document = await openNormalizedView(
+      [
         "2024-01-01T00:00:00Z ERROR before range",
         "2024-01-02T03:04:05Z INFO in range but wrong severity",
         "2024-01-02T03:04:06Z ERROR in range and matching",
         "2024-01-02T03:04:07Z ERROR heartbeat noise",
         "2024-01-03T00:00:00Z ERROR after range",
-      ].join("\n"),
-      language: "log",
-    });
-    await vscode.window.showTextDocument(source);
+      ].join("\n")
+    );
 
     const restoreQuickPick = installQuickPickMock(["セベリティ", "日付範囲", "無視パターン"]);
-
     const originalShowInputBox = vscode.window.showInputBox;
     let inputBoxCallCount = 0;
     (vscode.window as any).showInputBox = async () => {
@@ -326,84 +381,94 @@ suite("Totonoe Log normalized view filtered (combined)", () => {
     };
 
     try {
-      await vscode.commands.executeCommand("totonoeLog.showNormalizedViewFiltered");
+      await vscode.commands.executeCommand("totonoeLog.setViewFilter");
     } finally {
       restoreQuickPick();
       (vscode.window as any).showInputBox = originalShowInputBox;
     }
 
-    const activeEditor = vscode.window.activeTextEditor;
-    assert.ok(activeEditor, "a filtered normalized view editor should be shown");
-    assert.strictEqual(
-      activeEditor!.document.getText(),
-      "3 | 2024-01-02T03:04:06.000Z ERROR in range and matching"
-    );
+    const expected = "3 | 2024-01-02T03:04:06.000Z ERROR in range and matching";
+    assert.strictEqual(await waitForDocumentText(document, (text) => text === expected), expected);
   });
 
-  test("opens an unfiltered normalized view when no kind is selected (but the picker is not dismissed)", async () => {
-    const extension = vscode.extensions.getExtension("upu.totonoe-log");
-    await extension!.activate();
+  test("re-applies the filter from the unfiltered entries instead of narrowing further", async () => {
+    const document = await openNormalizedView(
+      ["2024-01-02T03:04:05Z INFO starting", "2024-01-02T03:04:06Z ERROR boom"].join("\n")
+    );
 
-    const source = await vscode.workspace.openTextDocument({
-      content: "2024-01-02T03:04:05Z INFO starting",
-      language: "log",
-    });
-    await vscode.window.showTextDocument(source);
-    await vscode.commands.executeCommand("workbench.action.closeOtherEditors");
+    let restoreQuickPick = installQuickPickMock(["セベリティ"], ["ERROR"]);
+    try {
+      await vscode.commands.executeCommand("totonoeLog.setViewFilter");
+    } finally {
+      restoreQuickPick();
+    }
+    const errorOnly = "2 | 2024-01-02T03:04:06.000Z ERROR boom";
+    assert.strictEqual(
+      await waitForDocumentText(document, (text) => text === errorOnly),
+      errorOnly
+    );
+
+    // 前回の結果に重ねるなら0行になるが、絞り込み前のエントリへ掛け直すので戻る。
+    restoreQuickPick = installQuickPickMock(["セベリティ"], ["INFO"]);
+    try {
+      await vscode.commands.executeCommand("totonoeLog.setViewFilter");
+    } finally {
+      restoreQuickPick();
+    }
+
+    const infoOnly = "1 | 2024-01-02T03:04:05.000Z INFO starting";
+    assert.strictEqual(await waitForDocumentText(document, (text) => text === infoOnly), infoOnly);
+  });
+
+  test("clears the filter when no kind is selected (but the picker is not dismissed)", async () => {
+    const everyLine = [
+      "1 | 2024-01-02T03:04:05.000Z INFO starting",
+      "2 | 2024-01-02T03:04:06.000Z ERROR boom",
+    ].join("\n");
+    const document = await openNormalizedView(
+      ["2024-01-02T03:04:05Z INFO starting", "2024-01-02T03:04:06Z ERROR boom"].join("\n")
+    );
+
+    const restoreQuickPick = installQuickPickMock(["セベリティ"], ["ERROR"]);
+    try {
+      await vscode.commands.executeCommand("totonoeLog.setViewFilter");
+    } finally {
+      restoreQuickPick();
+    }
+    await waitForDocumentText(document, (text) => !text.includes("INFO starting"));
 
     const originalShowQuickPick = vscode.window.showQuickPick;
     (vscode.window as any).showQuickPick = async () => [];
-
     try {
-      await vscode.commands.executeCommand("totonoeLog.showNormalizedViewFiltered");
+      await vscode.commands.executeCommand("totonoeLog.setViewFilter");
     } finally {
       (vscode.window as any).showQuickPick = originalShowQuickPick;
     }
 
-    const activeEditor = vscode.window.activeTextEditor;
-    assert.ok(activeEditor, "a normalized view editor should be shown");
-    assert.strictEqual(activeEditor!.document.uri.scheme, "totonoe-log-normalized");
     assert.strictEqual(
-      activeEditor!.document.getText(),
-      "1 | 2024-01-02T03:04:05.000Z INFO starting"
+      await waitForDocumentText(document, (text) => text === everyLine),
+      everyLine
     );
   });
 
-  test("does nothing when the kind picker is dismissed", async () => {
-    const extension = vscode.extensions.getExtension("upu.totonoe-log");
-    await extension!.activate();
-
-    const source = await vscode.workspace.openTextDocument({
-      content: "2024-01-02T03:04:05Z INFO starting",
-      language: "log",
-    });
-    await vscode.window.showTextDocument(source);
-    await vscode.commands.executeCommand("workbench.action.closeOtherEditors");
+  test("leaves the view untouched when the kind picker is dismissed", async () => {
+    const document = await openNormalizedView("2024-01-02T03:04:05Z INFO starting");
+    const textBefore = document.getText();
 
     const originalShowQuickPick = vscode.window.showQuickPick;
     (vscode.window as any).showQuickPick = async () => undefined;
-
     try {
-      await vscode.commands.executeCommand("totonoeLog.showNormalizedViewFiltered");
+      await vscode.commands.executeCommand("totonoeLog.setViewFilter");
     } finally {
       (vscode.window as any).showQuickPick = originalShowQuickPick;
     }
 
-    const activeEditor = vscode.window.activeTextEditor;
-    assert.ok(activeEditor, "the original editor should remain active");
-    assert.notStrictEqual(activeEditor!.document.uri.scheme, "totonoe-log-normalized");
+    assert.strictEqual(document.getText(), textBefore);
   });
 
-  test("does nothing when the severity picker is dismissed after selecting the severity kind", async () => {
-    const extension = vscode.extensions.getExtension("upu.totonoe-log");
-    await extension!.activate();
-
-    const source = await vscode.workspace.openTextDocument({
-      content: "2024-01-02T03:04:05Z INFO starting",
-      language: "log",
-    });
-    await vscode.window.showTextDocument(source);
-    await vscode.commands.executeCommand("workbench.action.closeOtherEditors");
+  test("leaves the view untouched when the severity picker is dismissed after selecting the severity kind", async () => {
+    const document = await openNormalizedView("2024-01-02T03:04:05Z INFO starting");
+    const textBefore = document.getText();
 
     const originalShowQuickPick = vscode.window.showQuickPick;
     let callCount = 0;
@@ -416,82 +481,51 @@ suite("Totonoe Log normalized view filtered (combined)", () => {
     };
 
     try {
-      await vscode.commands.executeCommand("totonoeLog.showNormalizedViewFiltered");
+      await vscode.commands.executeCommand("totonoeLog.setViewFilter");
     } finally {
       (vscode.window as any).showQuickPick = originalShowQuickPick;
     }
 
-    const activeEditor = vscode.window.activeTextEditor;
-    assert.ok(activeEditor, "the original editor should remain active");
-    assert.notStrictEqual(activeEditor!.document.uri.scheme, "totonoe-log-normalized");
+    assert.strictEqual(document.getText(), textBefore);
   });
 
-  test("does nothing when a date prompt is dismissed after selecting the date range kind", async () => {
-    const extension = vscode.extensions.getExtension("upu.totonoe-log");
-    await extension!.activate();
-
-    const source = await vscode.workspace.openTextDocument({
-      content: "2024-01-02T03:04:05Z INFO starting",
-      language: "log",
-    });
-    await vscode.window.showTextDocument(source);
-    await vscode.commands.executeCommand("workbench.action.closeOtherEditors");
+  test("leaves the view untouched when a date prompt is dismissed after selecting the date range kind", async () => {
+    const document = await openNormalizedView("2024-01-02T03:04:05Z INFO starting");
+    const textBefore = document.getText();
 
     const restoreQuickPick = installQuickPickMock(["日付範囲"]);
     const originalShowInputBox = vscode.window.showInputBox;
     (vscode.window as any).showInputBox = async () => undefined;
 
     try {
-      await vscode.commands.executeCommand("totonoeLog.showNormalizedViewFiltered");
+      await vscode.commands.executeCommand("totonoeLog.setViewFilter");
     } finally {
       restoreQuickPick();
       (vscode.window as any).showInputBox = originalShowInputBox;
     }
 
-    const activeEditor = vscode.window.activeTextEditor;
-    assert.ok(activeEditor, "the original editor should remain active");
-    assert.notStrictEqual(activeEditor!.document.uri.scheme, "totonoe-log-normalized");
+    assert.strictEqual(document.getText(), textBefore);
   });
 
-  test("does nothing when the ignore pattern prompt is dismissed after selecting the ignore pattern kind", async () => {
-    const extension = vscode.extensions.getExtension("upu.totonoe-log");
-    await extension!.activate();
-
-    const source = await vscode.workspace.openTextDocument({
-      content: "2024-01-02T03:04:05Z INFO starting",
-      language: "log",
-    });
-    await vscode.window.showTextDocument(source);
-    await vscode.commands.executeCommand("workbench.action.closeOtherEditors");
+  test("leaves the view untouched when the ignore pattern prompt is dismissed", async () => {
+    const document = await openNormalizedView("2024-01-02T03:04:05Z INFO starting");
+    const textBefore = document.getText();
 
     const restoreQuickPick = installQuickPickMock(["無視パターン"]);
     const originalShowInputBox = vscode.window.showInputBox;
     (vscode.window as any).showInputBox = async () => undefined;
 
     try {
-      await vscode.commands.executeCommand("totonoeLog.showNormalizedViewFiltered");
+      await vscode.commands.executeCommand("totonoeLog.setViewFilter");
     } finally {
       restoreQuickPick();
       (vscode.window as any).showInputBox = originalShowInputBox;
     }
 
-    const activeEditor = vscode.window.activeTextEditor;
-    assert.ok(activeEditor, "the original editor should remain active");
-    assert.notStrictEqual(activeEditor!.document.uri.scheme, "totonoe-log-normalized");
+    assert.strictEqual(document.getText(), textBefore);
   });
 
-  test("shows a warning when there is no active editor to filter", async () => {
-    const extension = vscode.extensions.getExtension("upu.totonoe-log");
-    await extension!.activate();
-
-    await vscode.commands.executeCommand("workbench.action.closeAllEditors");
-
-    await assert.doesNotReject(async () => {
-      await vscode.commands.executeCommand("totonoeLog.showNormalizedViewFiltered");
-    });
-  });
-
-  test("shows a warning and does nothing when an entered date cannot be parsed", async () => {
+  test("warns and does nothing when the active editor is not a Totonoe Log view", async () => {
     const extension = vscode.extensions.getExtension("upu.totonoe-log");
     await extension!.activate();
 
@@ -501,6 +535,49 @@ suite("Totonoe Log normalized view filtered (combined)", () => {
     });
     await vscode.window.showTextDocument(source);
     await vscode.commands.executeCommand("workbench.action.closeOtherEditors");
+
+    const originalShowWarningMessage = vscode.window.showWarningMessage;
+    let warningMessage: string | undefined;
+    (vscode.window as any).showWarningMessage = async (message: string) => {
+      warningMessage = message;
+      return undefined;
+    };
+    let quickPickShown = false;
+    const originalShowQuickPick = vscode.window.showQuickPick;
+    (vscode.window as any).showQuickPick = async () => {
+      quickPickShown = true;
+      return undefined;
+    };
+
+    try {
+      await vscode.commands.executeCommand("totonoeLog.setViewFilter");
+    } finally {
+      (vscode.window as any).showWarningMessage = originalShowWarningMessage;
+      (vscode.window as any).showQuickPick = originalShowQuickPick;
+    }
+
+    assert.ok(warningMessage, "a warning should explain that the command needs a Totonoe Log view");
+    assert.strictEqual(quickPickShown, false, "the prompts should not start at all");
+    assert.strictEqual(
+      vscode.window.activeTextEditor!.document.getText(),
+      "2024-01-02T03:04:05Z INFO starting"
+    );
+  });
+
+  test("shows a warning when there is no active editor at all", async () => {
+    const extension = vscode.extensions.getExtension("upu.totonoe-log");
+    await extension!.activate();
+
+    await vscode.commands.executeCommand("workbench.action.closeAllEditors");
+
+    await assert.doesNotReject(async () => {
+      await vscode.commands.executeCommand("totonoeLog.setViewFilter");
+    });
+  });
+
+  test("shows a warning and leaves the view untouched when an entered date cannot be parsed", async () => {
+    const document = await openNormalizedView("2024-01-02T03:04:05Z INFO starting");
+    const textBefore = document.getText();
 
     const restoreQuickPick = installQuickPickMock(["日付範囲"]);
     const originalShowInputBox = vscode.window.showInputBox;
@@ -508,31 +585,24 @@ suite("Totonoe Log normalized view filtered (combined)", () => {
 
     try {
       await assert.doesNotReject(async () => {
-        await vscode.commands.executeCommand("totonoeLog.showNormalizedViewFiltered");
+        await vscode.commands.executeCommand("totonoeLog.setViewFilter");
       });
     } finally {
       restoreQuickPick();
       (vscode.window as any).showInputBox = originalShowInputBox;
     }
 
-    const activeEditor = vscode.window.activeTextEditor;
-    assert.ok(activeEditor, "the original editor should remain active");
-    assert.notStrictEqual(activeEditor!.document.uri.scheme, "totonoe-log-normalized");
+    assert.strictEqual(document.getText(), textBefore);
   });
 
   test("counts every physical line of a hidden multi-line entry, including non-matching continuation lines", async () => {
-    const extension = vscode.extensions.getExtension("upu.totonoe-log");
-    await extension!.activate();
-
-    const source = await vscode.workspace.openTextDocument({
-      content: [
+    const document = await openNormalizedView(
+      [
         "2024-01-02T03:04:05Z ERROR boom",
         "    at com.example.Foo.bar(Foo.java:42)",
         "2024-01-02T03:04:06Z INFO keep",
-      ].join("\n"),
-      language: "log",
-    });
-    await vscode.window.showTextDocument(source);
+      ].join("\n")
+    );
 
     const restoreQuickPick = installQuickPickMock(["無視パターン"]);
     const originalShowInputBox = vscode.window.showInputBox;
@@ -546,19 +616,15 @@ suite("Totonoe Log normalized view filtered (combined)", () => {
     };
 
     try {
-      await vscode.commands.executeCommand("totonoeLog.showNormalizedViewFiltered");
+      await vscode.commands.executeCommand("totonoeLog.setViewFilter");
     } finally {
       restoreQuickPick();
       (vscode.window as any).showInputBox = originalShowInputBox;
       (vscode.window as any).showInformationMessage = originalShowInformationMessage;
     }
 
-    const activeEditor = vscode.window.activeTextEditor;
-    assert.ok(activeEditor, "a filtered normalized view editor should be shown");
-    assert.strictEqual(
-      activeEditor!.document.getText(),
-      "3 | 2024-01-02T03:04:06.000Z INFO keep"
-    );
+    const expected = "3 | 2024-01-02T03:04:06.000Z INFO keep";
+    assert.strictEqual(await waitForDocumentText(document, (text) => text === expected), expected);
     // マッチしたエントリは2物理行分（ERROR行＋スタックトレースの継続行）
     // にまたがっており、"boom" を含むのは先頭行だけである点に注意。
     assert.ok(
@@ -568,47 +634,28 @@ suite("Totonoe Log normalized view filtered (combined)", () => {
   });
 
   test("trims surrounding whitespace from the entered pattern before matching", async () => {
-    const extension = vscode.extensions.getExtension("upu.totonoe-log");
-    await extension!.activate();
-
-    const source = await vscode.workspace.openTextDocument({
-      content: [
-        "2024-01-02T03:04:05Z INFO heartbeat ok",
-        "2024-01-02T03:04:06Z ERROR boom",
-      ].join("\n"),
-      language: "log",
-    });
-    await vscode.window.showTextDocument(source);
+    const document = await openNormalizedView(
+      ["2024-01-02T03:04:05Z INFO heartbeat ok", "2024-01-02T03:04:06Z ERROR boom"].join("\n")
+    );
 
     const restoreQuickPick = installQuickPickMock(["無視パターン"]);
     const originalShowInputBox = vscode.window.showInputBox;
     (vscode.window as any).showInputBox = async () => "  heartbeat  ";
 
     try {
-      await vscode.commands.executeCommand("totonoeLog.showNormalizedViewFiltered");
+      await vscode.commands.executeCommand("totonoeLog.setViewFilter");
     } finally {
       restoreQuickPick();
       (vscode.window as any).showInputBox = originalShowInputBox;
     }
 
-    const activeEditor = vscode.window.activeTextEditor;
-    assert.ok(activeEditor, "a filtered normalized view editor should be shown");
-    assert.strictEqual(
-      activeEditor!.document.getText(),
-      "2 | 2024-01-02T03:04:06.000Z ERROR boom"
-    );
+    const expected = "2 | 2024-01-02T03:04:06.000Z ERROR boom";
+    assert.strictEqual(await waitForDocumentText(document, (text) => text === expected), expected);
   });
 
-  test("shows a warning and does nothing when the entered pattern is not a valid regular expression", async () => {
-    const extension = vscode.extensions.getExtension("upu.totonoe-log");
-    await extension!.activate();
-
-    const source = await vscode.workspace.openTextDocument({
-      content: "2024-01-02T03:04:05Z INFO starting",
-      language: "log",
-    });
-    await vscode.window.showTextDocument(source);
-    await vscode.commands.executeCommand("workbench.action.closeOtherEditors");
+  test("shows a warning and leaves the view untouched when the entered pattern is not a valid regular expression", async () => {
+    const document = await openNormalizedView("2024-01-02T03:04:05Z INFO starting");
+    const textBefore = document.getText();
 
     const restoreQuickPick = installQuickPickMock(["無視パターン"]);
     const originalShowInputBox = vscode.window.showInputBox;
@@ -616,16 +663,14 @@ suite("Totonoe Log normalized view filtered (combined)", () => {
 
     try {
       await assert.doesNotReject(async () => {
-        await vscode.commands.executeCommand("totonoeLog.showNormalizedViewFiltered");
+        await vscode.commands.executeCommand("totonoeLog.setViewFilter");
       });
     } finally {
       restoreQuickPick();
       (vscode.window as any).showInputBox = originalShowInputBox;
     }
 
-    const activeEditor = vscode.window.activeTextEditor;
-    assert.ok(activeEditor, "the original editor should remain active");
-    assert.notStrictEqual(activeEditor!.document.uri.scheme, "totonoe-log-normalized");
+    assert.strictEqual(document.getText(), textBefore);
   });
 });
 
@@ -1061,13 +1106,12 @@ suite("Totonoe Log merged view", () => {
       // 処理のコスト（エントリ数に比例）は抑えたいので、行数は少なく1行
       // あたりを長くして総サイズを稼ぐ。
       //
-      // マージ後の表示（仮想ドキュメントを開く処理）にも同じ50MB制限が
-      // 別途かかるため（このテストで検証する読み込み側の制限とは別レイヤー、
-      // issue #98のスコープ外）、ファイル選択ダイアログ→絞り込みコマンドを
-      // 通し、フィルタ後の表示内容自体は小さく保つ。巨大ファイルの末尾の
-      // 1行だけを ERROR にしてセベリティ絞り込みでその1行だけを残すことで、
-      // 「ファイル全体が末尾まで読み込まれたこと」を、表示側の制限を踏まずに
-      // 検証できる。
+      // 検証するのは読み込み側の制限だけ。マージ後の表示にも同じ50MB制限が
+      // 別レイヤーでかかる（issue #98のスコープ外）ため、マージコマンド経由
+      // ではなく、そのコマンドが使う読み込み関数（`loadLogFiles`）を直接
+      // 通す。以前は「マージしてから絞り込む」コマンドで表示内容を小さく
+      // 保っていたが、絞り込みが表示後の操作になった（issue #248）ため、
+      // 表示を経由せずに読み込み結果そのものを確かめる形に変えた。
       const oneMb = 1024 * 1024;
       const targetSizeBytes = 52 * oneMb;
       const bigLineCount = 60;
@@ -1090,57 +1134,14 @@ suite("Totonoe Log merged view", () => {
         `test fixture should exceed VSCode's ~50MB sync limit (actual: ${bigLogStats.size} bytes)`
       );
 
-      const smallLogPath = path.join(tempDir, "small.log");
-      await fs.writeFile(smallLogPath, "2024-01-02T02:59:59Z ERROR boom");
+      const { loadLogFiles } = await import("../../logFileReading");
+      const [loaded] = await loadLogFiles([vscode.Uri.file(bigLogPath)]);
 
-      const bigLogUri = vscode.Uri.file(bigLogPath);
-      const smallLogUri = vscode.Uri.file(smallLogPath);
-
-      const originalShowQuickPick = vscode.window.showQuickPick;
-      (vscode.window as any).showQuickPick = async (items: vscode.QuickPickItem[]) => {
-        const isKindPicker = items.some((item) => item.label === "セベリティ");
-        // 条件種類ピッカーでは「セベリティ」だけを選び、セベリティ選択
-        // ピッカーでは ERROR だけを選ぶ。
-        return isKindPicker
-          ? items.filter((item) => item.label === "セベリティ")
-          : items.filter((item) => item.label === "ERROR");
-      };
-
-      try {
-        await vscode.commands.executeCommand(
-          "totonoeLog.mergeSelectedFilesFiltered",
-          bigLogUri,
-          [bigLogUri, smallLogUri]
-        );
-      } finally {
-        (vscode.window as any).showQuickPick = originalShowQuickPick;
-      }
-
-      const activeEditor = vscode.window.activeTextEditor;
-      assert.ok(activeEditor, "a filtered merged view editor should be shown");
-      assert.strictEqual(activeEditor!.document.uri.scheme, "totonoe-log-merged");
-
-      const mergedLines = activeEditor!.document.getText().split("\n");
-      // small.log (02:59:59) と big.log の末尾行（03:00:59）の間は60秒空いており、
-      // 既定のギャップ検出しきい値（30秒）を超えるため「XX秒の空白」の区切り行が
-      // 間に挿入される（issue #102、マージビューへのギャップ検出追加）。
-      assert.strictEqual(
-        mergedLines.length,
-        3,
-        "the two ERROR entries plus a gap marker line should remain after filtering"
-      );
       assert.ok(
-        mergedLines[0].includes("small.log") && mergedLines[0].includes("ERROR boom"),
-        "the small file's earlier ERROR entry should sort first"
-      );
-      assert.ok(
-        mergedLines[1].includes("秒の空白"),
-        "a gap marker should separate the two entries (60s gap exceeds the default 30s threshold)"
-      );
-      assert.ok(
-        mergedLines[2].includes(`line-${String(lastIndex).padStart(3, "0")}`),
+        loaded.input.text.includes(`line-${String(lastIndex).padStart(3, "0")}`),
         "the big file's last line (only reachable by reading the whole ~52MB file) must be present"
       );
+      assert.strictEqual(loaded.input.fileName, "big.log");
     } finally {
       await vscode.commands.executeCommand("workbench.action.closeAllEditors");
       await fs.rm(tempDir, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 });
@@ -1245,14 +1246,11 @@ suite("Totonoe Log merged view filename hover (#150)", () => {
   });
 });
 
-suite("Totonoe Log merged view filtered (combined)", () => {
+suite("Totonoe Log set filter on the merged view (#248)", () => {
   /**
-   * "セベリティ" / "日付範囲" / "無視パターン" の条件選択ピッカーを、指定した
-   * 種類だけ選んで確定するようにモックする。正規化ビューの統合絞り込みテスト
-   * が使う `installQuickPickMock` と同じ役割だが、こちらは
-   * `mergeSelectedFilesFiltered` 用に別定義する（テストファイル内で重複がある点は
-   * 承知のうえ、対象コマンドが違うテストスイート間で暗黙の結合を作らないよう
-   * 意図的に分けている）。
+   * 条件選択ピッカーとセベリティ選択ピッカーを、選択肢のラベルで区別する
+   * モック。正規化ビュー側のスイートと同じ役割だが、対象のビューが違う
+   * テストスイート間で暗黙の結合を作らないよう意図的に分けている。
    */
   function installFilterKindQuickPickMock(kindsToSelect: readonly string[]): () => void {
     const original = vscode.window.showQuickPick;
@@ -1296,18 +1294,17 @@ suite("Totonoe Log merged view filtered (combined)", () => {
     }
   }
 
-  test("registers the mergeSelectedFilesFiltered command", async () => {
-    const extension = vscode.extensions.getExtension("upu.totonoe-log");
-    await extension!.activate();
+  /** 指定したファイル群をマージして開き、そのビューのドキュメントを返す。 */
+  async function openMergedView(fileUris: readonly vscode.Uri[]): Promise<vscode.TextDocument> {
+    await vscode.commands.executeCommand("totonoeLog.mergeSelectedFiles", fileUris[0], [
+      ...fileUris,
+    ]);
+    const document = vscode.window.activeTextEditor!.document;
+    assert.strictEqual(document.uri.scheme, "totonoe-log-merged");
+    return document;
+  }
 
-    const commands = await vscode.commands.getCommands(true);
-    assert.ok(
-      commands.includes("totonoeLog.mergeSelectedFilesFiltered"),
-      "totonoeLog.mergeSelectedFilesFiltered command should be registered"
-    );
-  });
-
-  test("merges the selected files and applies only the criteria selected in the kind picker, keeping fileName/kind columns", async () => {
+  test("applies only the criteria selected in the kind picker, keeping fileName/kind columns", async () => {
     const extension = vscode.extensions.getExtension("upu.totonoe-log");
     await extension!.activate();
 
@@ -1320,8 +1317,10 @@ suite("Totonoe Log merged view filtered (combined)", () => {
         ].join("\n"),
       },
       async (paths) => {
-        const appLogUri = vscode.Uri.file(paths["app.log"]);
-        const dbLogUri = vscode.Uri.file(paths["database_20240101.log"]);
+        const document = await openMergedView([
+          vscode.Uri.file(paths["app.log"]),
+          vscode.Uri.file(paths["database_20240101.log"]),
+        ]);
 
         const restoreQuickPick = installFilterKindQuickPickMock(["セベリティ", "無視パターン"]);
         const originalShowInputBox = vscode.window.showInputBox;
@@ -1335,26 +1334,19 @@ suite("Totonoe Log merged view filtered (combined)", () => {
         };
 
         try {
-          await vscode.commands.executeCommand(
-            "totonoeLog.mergeSelectedFilesFiltered",
-            appLogUri,
-            [appLogUri, dbLogUri]
-          );
+          await vscode.commands.executeCommand("totonoeLog.setViewFilter");
         } finally {
           restoreQuickPick();
           (vscode.window as any).showInputBox = originalShowInputBox;
           (vscode.window as any).showInformationMessage = originalShowInformationMessage;
         }
 
-        const activeEditor = vscode.window.activeTextEditor;
-        assert.ok(activeEditor, "a filtered merged view editor should be shown");
-        assert.strictEqual(activeEditor!.document.uri.scheme, "totonoe-log-merged");
-
         const fileNameWidth = "database_20240101.log".length;
         const kindWidth = "database".length;
+        const expected = `${"database_20240101.log".padEnd(fileNameWidth)} | ${"database".padEnd(kindWidth)} | 1 | 2024-01-02T03:04:06.000Z ERROR boom`;
         assert.strictEqual(
-          activeEditor!.document.getText(),
-          `${"database_20240101.log".padEnd(fileNameWidth)} | ${"database".padEnd(kindWidth)} | 1 | 2024-01-02T03:04:06.000Z ERROR boom`
+          await waitForDocumentText(document, (text) => text === expected),
+          expected
         );
         assert.ok(
           infoMessage?.includes("条件に合わない 2 行"),
@@ -1364,7 +1356,7 @@ suite("Totonoe Log merged view filtered (combined)", () => {
     );
   });
 
-  test("opens an unfiltered merged view when no kind is selected (but the picker is not dismissed)", async () => {
+  test("keeps the source mapping so Go to Source Line still reaches the original file", async () => {
     const extension = vscode.extensions.getExtension("upu.totonoe-log");
     await extension!.activate();
 
@@ -1374,196 +1366,132 @@ suite("Totonoe Log merged view filtered (combined)", () => {
         "db.log": "2024-01-02T03:04:06Z ERROR boom",
       },
       async (paths) => {
-        const appLogUri = vscode.Uri.file(paths["app.log"]);
         const dbLogUri = vscode.Uri.file(paths["db.log"]);
+        const document = await openMergedView([vscode.Uri.file(paths["app.log"]), dbLogUri]);
 
-        const originalShowQuickPick = vscode.window.showQuickPick;
-        (vscode.window as any).showQuickPick = async () => [];
-
+        const restoreQuickPick = installFilterKindQuickPickMock(["セベリティ"]);
         try {
-          await vscode.commands.executeCommand(
-            "totonoeLog.mergeSelectedFilesFiltered",
-            appLogUri,
-            [appLogUri, dbLogUri]
-          );
+          await vscode.commands.executeCommand("totonoeLog.setViewFilter");
         } finally {
-          (vscode.window as any).showQuickPick = originalShowQuickPick;
+          restoreQuickPick();
         }
+        await waitForDocumentText(document, (text) => !text.includes("INFO starting"));
 
-        const activeEditor = vscode.window.activeTextEditor;
-        assert.ok(activeEditor, "a merged view editor should be shown");
-        assert.strictEqual(activeEditor!.document.uri.scheme, "totonoe-log-merged");
+        const mergedEditor = vscode.window.activeTextEditor!;
+        mergedEditor.selection = new vscode.Selection(0, 0, 0, 0);
+        await vscode.commands.executeCommand("totonoeLog.goToSourceLine");
 
-        const fileNameWidth = "app.log".length;
-        const kindWidth = "app".length;
         assert.strictEqual(
-          activeEditor!.document.getText(),
-          [
-            `${"app.log".padEnd(fileNameWidth)} | ${"app".padEnd(kindWidth)} | 1 | 2024-01-02T03:04:05.000Z INFO starting`,
-            `${"db.log".padEnd(fileNameWidth)} | ${"db".padEnd(kindWidth)} | 1 | 2024-01-02T03:04:06.000Z ERROR boom`,
-          ].join("\n")
+          vscode.window.activeTextEditor!.document.uri.fsPath,
+          dbLogUri.fsPath,
+          "Go to Source Line should still reach the original file after filtering"
         );
       }
     );
-
-    await vscode.commands.executeCommand("workbench.action.closeAllEditors");
   });
 
-  test("shows a warning and does nothing when fewer than two files are selected", async () => {
+  test("clears the filter when no kind is selected (but the picker is not dismissed)", async () => {
     const extension = vscode.extensions.getExtension("upu.totonoe-log");
     await extension!.activate();
 
     await withTempLogFiles(
-      { "app.log": "2024-01-02T03:04:05Z INFO starting" },
+      {
+        "app.log": "2024-01-02T03:04:05Z INFO starting",
+        "db.log": "2024-01-02T03:04:06Z ERROR boom",
+      },
       async (paths) => {
-        const appLogUri = vscode.Uri.file(paths["app.log"]);
+        const document = await openMergedView([
+          vscode.Uri.file(paths["app.log"]),
+          vscode.Uri.file(paths["db.log"]),
+        ]);
 
-        const source = await vscode.workspace.openTextDocument({
-          content: "2024-01-02T03:04:05Z INFO starting",
-          language: "log",
-        });
-        await vscode.window.showTextDocument(source);
-        await vscode.commands.executeCommand("workbench.action.closeOtherEditors");
-
-        const originalShowWarningMessage = vscode.window.showWarningMessage;
-        (vscode.window as any).showWarningMessage = async () => undefined;
-
+        const restoreQuickPick = installFilterKindQuickPickMock(["セベリティ"]);
         try {
-          await vscode.commands.executeCommand(
-            "totonoeLog.mergeSelectedFilesFiltered",
-            appLogUri,
-            [appLogUri]
-          );
+          await vscode.commands.executeCommand("totonoeLog.setViewFilter");
         } finally {
-          (vscode.window as any).showWarningMessage = originalShowWarningMessage;
+          restoreQuickPick();
+        }
+        await waitForDocumentText(document, (text) => !text.includes("INFO starting"));
+
+        const originalShowQuickPick = vscode.window.showQuickPick;
+        (vscode.window as any).showQuickPick = async () => [];
+        try {
+          await vscode.commands.executeCommand("totonoeLog.setViewFilter");
+        } finally {
+          (vscode.window as any).showQuickPick = originalShowQuickPick;
         }
 
-        const activeEditor = vscode.window.activeTextEditor;
-        assert.ok(activeEditor, "the original editor should remain active");
-        assert.notStrictEqual(activeEditor!.document.uri.scheme, "totonoe-log-merged");
+        const fileNameWidth = "app.log".length;
+        const kindWidth = "app".length;
+        const everyLine = [
+          `${"app.log".padEnd(fileNameWidth)} | ${"app".padEnd(kindWidth)} | 1 | 2024-01-02T03:04:05.000Z INFO starting`,
+          `${"db.log".padEnd(fileNameWidth)} | ${"db".padEnd(kindWidth)} | 1 | 2024-01-02T03:04:06.000Z ERROR boom`,
+        ].join("\n");
+        assert.strictEqual(
+          await waitForDocumentText(document, (text) => text === everyLine),
+          everyLine
+        );
       }
     );
   });
 
-  test("does nothing when the kind picker is dismissed", async () => {
+  test("leaves the view untouched when the kind picker is dismissed", async () => {
     const extension = vscode.extensions.getExtension("upu.totonoe-log");
     await extension!.activate();
 
     await withTempLogFiles(
-      { "app.log": "2024-01-02T03:04:05Z INFO starting" },
+      {
+        "app.log": "2024-01-02T03:04:05Z INFO starting",
+        "db.log": "2024-01-02T03:04:06Z ERROR boom",
+      },
       async (paths) => {
-        const appLogUri = vscode.Uri.file(paths["app.log"]);
+        const document = await openMergedView([
+          vscode.Uri.file(paths["app.log"]),
+          vscode.Uri.file(paths["db.log"]),
+        ]);
+        const textBefore = document.getText();
 
         const originalShowQuickPick = vscode.window.showQuickPick;
         (vscode.window as any).showQuickPick = async () => undefined;
-
         try {
-          await vscode.commands.executeCommand(
-            "totonoeLog.mergeSelectedFilesFiltered",
-            appLogUri,
-            [appLogUri, appLogUri]
-          );
+          await vscode.commands.executeCommand("totonoeLog.setViewFilter");
         } finally {
           (vscode.window as any).showQuickPick = originalShowQuickPick;
         }
 
-        const activeEditor = vscode.window.activeTextEditor;
-        assert.ok(!activeEditor || activeEditor.document.uri.scheme !== "totonoe-log-merged");
+        assert.strictEqual(document.getText(), textBefore);
       }
     );
   });
 
-  test("does nothing when the severity picker is dismissed after selecting the severity kind", async () => {
+  test("leaves the view untouched when a prompt is dismissed after picking a kind", async () => {
     const extension = vscode.extensions.getExtension("upu.totonoe-log");
     await extension!.activate();
 
     await withTempLogFiles(
-      { "app.log": "2024-01-02T03:04:05Z INFO starting" },
+      {
+        "app.log": "2024-01-02T03:04:05Z INFO starting",
+        "db.log": "2024-01-02T03:04:06Z ERROR boom",
+      },
       async (paths) => {
-        const appLogUri = vscode.Uri.file(paths["app.log"]);
-
-        const originalShowQuickPick = vscode.window.showQuickPick;
-        let callCount = 0;
-        (vscode.window as any).showQuickPick = async (items: vscode.QuickPickItem[]) => {
-          callCount += 1;
-          if (callCount === 1) {
-            return items.filter((item) => item.label === "セベリティ");
-          }
-          return undefined;
-        };
-
-        try {
-          await vscode.commands.executeCommand(
-            "totonoeLog.mergeSelectedFilesFiltered",
-            appLogUri,
-            [appLogUri, appLogUri]
-          );
-        } finally {
-          (vscode.window as any).showQuickPick = originalShowQuickPick;
-        }
-
-        const activeEditor = vscode.window.activeTextEditor;
-        assert.ok(!activeEditor || activeEditor.document.uri.scheme !== "totonoe-log-merged");
-      }
-    );
-  });
-
-  test("does nothing when a date prompt is dismissed after selecting the date range kind", async () => {
-    const extension = vscode.extensions.getExtension("upu.totonoe-log");
-    await extension!.activate();
-
-    await withTempLogFiles(
-      { "app.log": "2024-01-02T03:04:05Z INFO starting" },
-      async (paths) => {
-        const appLogUri = vscode.Uri.file(paths["app.log"]);
-
-        const restoreQuickPick = installFilterKindQuickPickMock(["日付範囲"]);
-        const originalShowInputBox = vscode.window.showInputBox;
-        (vscode.window as any).showInputBox = async () => undefined;
-
-        try {
-          await vscode.commands.executeCommand(
-            "totonoeLog.mergeSelectedFilesFiltered",
-            appLogUri,
-            [appLogUri, appLogUri]
-          );
-        } finally {
-          restoreQuickPick();
-          (vscode.window as any).showInputBox = originalShowInputBox;
-        }
-
-        const activeEditor = vscode.window.activeTextEditor;
-        assert.ok(!activeEditor || activeEditor.document.uri.scheme !== "totonoe-log-merged");
-      }
-    );
-  });
-
-  test("does nothing when the ignore pattern prompt is dismissed after selecting the ignore pattern kind", async () => {
-    const extension = vscode.extensions.getExtension("upu.totonoe-log");
-    await extension!.activate();
-
-    await withTempLogFiles(
-      { "app.log": "2024-01-02T03:04:05Z INFO starting" },
-      async (paths) => {
-        const appLogUri = vscode.Uri.file(paths["app.log"]);
+        const document = await openMergedView([
+          vscode.Uri.file(paths["app.log"]),
+          vscode.Uri.file(paths["db.log"]),
+        ]);
+        const textBefore = document.getText();
 
         const restoreQuickPick = installFilterKindQuickPickMock(["無視パターン"]);
         const originalShowInputBox = vscode.window.showInputBox;
         (vscode.window as any).showInputBox = async () => undefined;
 
         try {
-          await vscode.commands.executeCommand(
-            "totonoeLog.mergeSelectedFilesFiltered",
-            appLogUri,
-            [appLogUri, appLogUri]
-          );
+          await vscode.commands.executeCommand("totonoeLog.setViewFilter");
         } finally {
           restoreQuickPick();
           (vscode.window as any).showInputBox = originalShowInputBox;
         }
 
-        const activeEditor = vscode.window.activeTextEditor;
-        assert.ok(!activeEditor || activeEditor.document.uri.scheme !== "totonoe-log-merged");
+        assert.strictEqual(document.getText(), textBefore);
       }
     );
   });
@@ -1812,58 +1740,11 @@ suite("Totonoe Log virtual document guard", () => {
     );
   });
 
-  test("filter commands warn and open nothing new when a normalized view is active", async () => {
-    const extension = vscode.extensions.getExtension("upu.totonoe-log");
-    await extension!.activate();
-
-    const source = await vscode.workspace.openTextDocument({
-      content: "2024-01-02T03:04:05Z INFO starting",
-      language: "log",
-    });
-    await vscode.window.showTextDocument(source);
-    await vscode.commands.executeCommand("workbench.action.closeOtherEditors");
-
-    await vscode.commands.executeCommand("totonoeLog.showNormalizedView");
-    const normalizedUri = vscode.window.activeTextEditor?.document.uri.toString();
-    assert.strictEqual(vscode.window.activeTextEditor?.document.uri.scheme, "totonoe-log-normalized");
-
-    const guardedCommands = ["totonoeLog.showNormalizedViewFiltered"];
-
-    const originalShowWarningMessage = vscode.window.showWarningMessage;
-    // 絞り込み系コマンドはガードで早期リターンする前提だが、万一ガードが
-    // 効かずにピッカーへ進んだ場合にテストがハングしないよう、
-    // showQuickPick / showInputBox もあわせてキャンセル相当にしておく。
-    const originalShowQuickPick = vscode.window.showQuickPick;
-    const originalShowInputBox = vscode.window.showInputBox;
-    (vscode.window as any).showQuickPick = async () => undefined;
-    (vscode.window as any).showInputBox = async () => undefined;
-
-    try {
-      for (const command of guardedCommands) {
-        let warningMessage: string | undefined;
-        (vscode.window as any).showWarningMessage = async (message: string) => {
-          warningMessage = message;
-          return undefined;
-        };
-
-        await vscode.commands.executeCommand(command);
-
-        assert.ok(
-          warningMessage?.includes("元のログファイルに対して実行してください"),
-          `${command} should warn when the active editor is a normalized view`
-        );
-        assert.strictEqual(
-          vscode.window.activeTextEditor?.document.uri.toString(),
-          normalizedUri,
-          `${command} should not open a new view`
-        );
-      }
-    } finally {
-      (vscode.window as any).showWarningMessage = originalShowWarningMessage;
-      (vscode.window as any).showQuickPick = originalShowQuickPick;
-      (vscode.window as any).showInputBox = originalShowInputBox;
-    }
-  });
+  // 「絞り込み系コマンドも仮想ドキュメント上では警告する」テストは削除した。
+  // 絞り込みは開いたビューに対して実行するのが正しい使い方になったため
+  // （issue #248）、ガードの対象ではなくなっている。仮想ドキュメントを
+  // 入力として読もうとするコマンド（Show Normalized View / Copy Masked Text）
+  // のガードは、この前後のテストで引き続き確認している。
 
   test("copyMaskedText warns and leaves the clipboard untouched when a normalized view is active", async () => {
     const extension = vscode.extensions.getExtension("upu.totonoe-log");
@@ -1910,7 +1791,7 @@ suite("Totonoe Log virtual document guard", () => {
     );
   });
 
-  test("filter commands warn when a merged view is active", async () => {
+  test("Show Normalized View warns when a merged view is active", async () => {
     const extension = vscode.extensions.getExtension("upu.totonoe-log");
     await extension!.activate();
 
@@ -1943,14 +1824,14 @@ suite("Totonoe Log virtual document guard", () => {
       };
 
       try {
-        await vscode.commands.executeCommand("totonoeLog.showNormalizedViewFiltered");
+        await vscode.commands.executeCommand("totonoeLog.showNormalizedView");
       } finally {
         (vscode.window as any).showWarningMessage = originalShowWarningMessage;
       }
 
       assert.ok(
         warningMessage?.includes("元のログファイルに対して実行してください"),
-        "a warning should be shown when filtering from a merged view"
+        "a warning should be shown when normalizing from a merged view"
       );
       assert.strictEqual(
         vscode.window.activeTextEditor?.document.uri.toString(),
@@ -1963,7 +1844,7 @@ suite("Totonoe Log virtual document guard", () => {
     }
   });
 
-  test("filter commands warn when a compare view is active", async () => {
+  test("Set Filter warns when a compare view is active", async () => {
     const extension = vscode.extensions.getExtension("upu.totonoe-log");
     await extension!.activate();
 
@@ -2002,13 +1883,15 @@ suite("Totonoe Log virtual document guard", () => {
       };
 
       try {
-        await vscode.commands.executeCommand("totonoeLog.showNormalizedViewFiltered");
+        await vscode.commands.executeCommand("totonoeLog.setViewFilter");
       } finally {
         (vscode.window as any).showWarningMessage = originalShowWarningMessage;
       }
 
+      // 比較ビューは絞り込み材料を持たない（タイムスタンプごとマスクした
+      // diff 用のテキストで、元エントリから作り直せない）。
       assert.ok(
-        warningMessage?.includes("元のログファイルに対して実行してください"),
+        warningMessage,
         "a warning should be shown when filtering from a compare view"
       );
       assert.strictEqual(
@@ -2195,13 +2078,14 @@ suite("Totonoe Log timezone settings (#13)", () => {
     };
 
     try {
-      await vscode.commands.executeCommand("totonoeLog.showNormalizedViewFiltered");
+      await vscode.commands.executeCommand("totonoeLog.showNormalizedView");
+      const document = vscode.window.activeTextEditor!.document;
+      await vscode.commands.executeCommand("totonoeLog.setViewFilter");
 
-      const activeEditor = vscode.window.activeTextEditor;
-      assert.ok(activeEditor, "a filtered normalized view editor should be shown");
+      const expected = "2 | 2024-01-02T12:04:05.000+09:00 INFO target";
       assert.strictEqual(
-        activeEditor!.document.getText(),
-        "2 | 2024-01-02T12:04:05.000+09:00 INFO target"
+        await waitForDocumentText(document, (text) => text === expected),
+        expected
       );
       assert.ok(
         prompts.every((prompt) => prompt.includes("表示タイムゾーン +09:00 基準")),
@@ -2730,14 +2614,16 @@ suite("Totonoe Log go to source line (#137)", () => {
     (vscode.window as any).showQuickPick = async (items: vscode.QuickPickItem[]) =>
       items.filter((item) => item.label === "セベリティ" || item.label === "ERROR");
 
+    await vscode.commands.executeCommand("totonoeLog.showNormalizedView");
+    const view = vscode.window.activeTextEditor!.document;
     try {
-      await vscode.commands.executeCommand("totonoeLog.showNormalizedViewFiltered");
+      await vscode.commands.executeCommand("totonoeLog.setViewFilter");
     } finally {
       (vscode.window as any).showQuickPick = originalShowQuickPick;
     }
+    await waitForDocumentText(view, (text) => !text.includes("INFO starting"));
 
     const viewEditor = vscode.window.activeTextEditor;
-    assert.ok(viewEditor, "a filtered normalized view editor should be shown");
     assert.strictEqual(viewEditor!.document.uri.scheme, "totonoe-log-normalized");
     // 絞り込み後の表示1行目は、元ファイルでは2行目の ERROR エントリ。
     viewEditor!.selection = new vscode.Selection(0, 0, 0, 0);

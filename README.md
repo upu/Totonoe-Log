@@ -64,11 +64,11 @@ Process-ID masking, available here and in `Copy Masked Text`, covers syslog-styl
 
 Common timestamp formats are recognized out of the box: ISO 8601 (plain and bracketed), classic syslog, slash-separated dates (`2024/01/02 03:04:05`), Apache/Nginx access-log timestamps (`[02/Jan/2024:03:04:05 +0900]`), and leading epoch seconds/milliseconds. Formats not covered by the built-ins can be added via the `totonoeLog.timestampFormats` setting (see [Custom timestamp formats](#custom-timestamp-formats)).
 
-Long silent stretches are marked, too: when the timestamp gap between consecutive entries exceeds a threshold, a "XX seconds of silence" separator line is inserted so the quiet periods stand out during an incident investigation (applies to the normalized view and the merged view, and their filtered variants; configure with `totonoeLog.gap.thresholdSeconds`).
+Long silent stretches are marked, too: when the timestamp gap between consecutive entries exceeds a threshold, a "XX seconds of silence" separator line is inserted so the quiet periods stand out during an incident investigation (applies to the normalized view and the merged view, and is recalculated after filtering; configure with `totonoeLog.gap.thresholdSeconds`).
 
 ## Filter out the noise
 
-`Totonoe Log: Show Normalized View Filtered` lets you freely combine filters in a single flow: pick the conditions you want from a multi-select list, and answer only the prompts for the conditions you picked.
+Filtering is a display state of an open view, not a way of opening one. Open a view with `Show Normalized View` or `Merge Selected Files`, then run `Totonoe Log: Set Filter` against that tab (it is in the editor context menu too) to freely combine filters in a single flow: pick the conditions you want from a multi-select list, and answer only the prompts for the conditions you picked.
 
 - **Severity** — keep only error / warn / info / ...
 - **Date/time range** — narrow down to the time window you care about
@@ -81,6 +81,12 @@ You can therefore copy the wall-clock part of a timestamp shown in a view
 the selected timezone. With `local`, ordinary times use the machine's local
 timezone; a nonexistent time during a daylight-saving transition is rejected,
 and a repeated time selects its earlier occurrence.
+
+Each run **replaces** the filter rather than narrowing the previous result: the
+starting point is always the unfiltered log, so loosening a condition brings
+hidden lines back. Confirm the picker without selecting any condition and the
+filter is cleared entirely. The result rewrites the tab you already have open,
+so changing conditions never piles up new tabs.
 
 ## Merge multiple files
 
@@ -99,7 +105,7 @@ regular text tabs, bypassing the same synchronization limit while preserving
 VS Code's standard search and copy features. Editing that temporary copy never
 changes the source logs, and the stored result is removed after its tab closes.
 
-The merged view can be filtered too: select the files in the Explorer and choose `Totonoe Log: Merge Selected Files Filtered` instead, which applies the same multi-select filter flow described above right after merging.
+The merged view can be filtered too: run `Totonoe Log: Set Filter` against the open merged view and you get exactly the same flow as the normalized view (see [Filter out the noise](#filter-out-the-noise)). The fileName/kind columns and the `Go to Source Line` mapping survive filtering. Results above 50 MiB that opened as an ordinary tab are the exception — as with the source mapping, the information filtering needs can only be attached to a virtual document. Use the Interactive View for those.
 
 The same "XX seconds of silence" gap detection described above applies here too, spotting silent stretches across all merged source files (see [Normalize into one timeline](#normalize-into-one-timeline)).
 
@@ -224,7 +230,7 @@ All settings live under the `totonoeLog` namespace.
 
 | Setting | Type | Default | Description |
 | --- | --- | --- | --- |
-| `totonoeLog.gap.thresholdSeconds` | number | `30` | Insert a "XX seconds of silence" separator line in `Show Normalized View` and the merged view (`Merge Selected Files` and their filtered variants) when the timestamp gap between consecutive entries is at least this many seconds. `0` disables it. |
+| `totonoeLog.gap.thresholdSeconds` | number | `30` | Insert a "XX seconds of silence" separator line in the `Show Normalized View` and `Merge Selected Files` views when the timestamp gap between consecutive entries is at least this many seconds. It also applies to the ordering left after `Set Filter`. `0` disables it. |
 | `totonoeLog.collapse.threshold` | number | `3` | How many consecutive repeats it takes before the Interactive View folds them into one line. |
 | `totonoeLog.interactiveView.maxDisplayLines` | number | `20000` | Maximum number of lines `Show Interactive View` renders at once. Beyond this, only the leading lines are rendered and a notice suggests narrowing the filters or opening the whole log with "Export as Virtual Document". `0` disables the cap. |
 | `totonoeLog.copyMasked.maskTimestamp` | boolean | `true` | Mask timestamps when running `Copy Masked Text`. |

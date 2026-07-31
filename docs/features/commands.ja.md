@@ -16,15 +16,14 @@ Totonoe Log が提供する全コマンドを、コマンドID・起動導線・
 | --- | --- | --- | --- |
 | Show Interactive View | `totonoeLog.showInteractiveView` | パレット、エクスプローラ右クリック | エクスプローラの選択、無ければアクティブエディタ |
 | Show Normalized View | `totonoeLog.showNormalizedView` | パレット | アクティブエディタ |
-| Show Normalized View Filtered | `totonoeLog.showNormalizedViewFiltered` | パレット | アクティブエディタ |
+| Set Filter | `totonoeLog.setViewFilter` | パレット、エディタ右クリック | 正規化ビュー／マージビューのアクティブなタブ |
 | Merge Selected Files | `totonoeLog.mergeSelectedFiles` | エクスプローラ右クリック（パレットにも出る ※） | 選択した2つ以上のファイル |
-| Merge Selected Files Filtered | `totonoeLog.mergeSelectedFilesFiltered` | エクスプローラ右クリック（パレットにも出る ※） | 選択した2つ以上のファイル |
 | Compare Logs | `totonoeLog.compareLogs` | パレット | ダイアログで選ぶ2ファイル |
 | Copy Masked Text | `totonoeLog.copyMaskedText` | パレット | アクティブエディタの選択範囲、無ければ全体 |
 | Go to Source Line | `totonoeLog.goToSourceLine` | パレット、エディタ右クリック | 正規化ビュー／マージビューのカーソル行 |
 | Go to Source Line | `totonoeLog.goToSourceLineFromInteractiveView` | Interactive View の右クリックのみ | パネル上で右クリックした行 |
 
-※ `Merge Selected Files` 系の2つも他と同じくコマンドパレットに登録されているため
+※ `Merge Selected Files` も他と同じくコマンドパレットに登録されているため
 パレットには並ぶ。ただしパレット経由では対象となるエクスプローラの選択が渡らず、
 警告が出るだけで終わる。実行する導線はエクスプローラ右クリックだと考えてよい。
 
@@ -35,12 +34,13 @@ Totonoe Log が提供する全コマンドを、コマンドID・起動導線・
 ## どこに出るか
 
 - **コマンドパレット** — `totonoeLog.goToSourceLineFromInteractiveView` 以外の
-  すべて。`Merge Selected Files` 系については上の ※ のとおり
+  すべて。`Merge Selected Files` については上の ※ のとおり
 - **エクスプローラ右クリック** — 複数選択時（`listMultiSelection`）に
-  `Merge Selected Files` と `Merge Selected Files Filtered`、フォルダ以外
-  （`!explorerResourceIsFolder`）に `Show Interactive View`
-- **エディタ右クリック** — `Go to Source Line`。Totonoe Log が生成する読み取り
-  専用ビュー（`totonoe-log-normalized` / `totonoe-log-merged`）の上でのみ出る
+  `Merge Selected Files`、フォルダ以外（`!explorerResourceIsFolder`）に
+  `Show Interactive View`
+- **エディタ右クリック** — `Go to Source Line` と `Set Filter`。どちらも
+  Totonoe Log が生成する読み取り専用ビュー（`totonoe-log-normalized` /
+  `totonoe-log-merged`）の上でのみ出る
 - **Interactive View の右クリック** — パネル内のログ行に対する
   `Go to Source Line`
 
@@ -49,10 +49,14 @@ Totonoe Log が提供する全コマンドを、コマンドID・起動導線・
 
 ## アクティブエディタを読むコマンド
 
-`Show Normalized View`・`Show Normalized View Filtered`・`Copy Masked Text`、
-およびエクスプローラの選択なしで実行した `Show Interactive View` は、いずれもアクティブエディタのログを読む（未保存の
-変更を含む）。Totonoe Log 自身の読み取り専用ビュー上では実行できず警告になる。
-整形済みのビューを再度パースすると誤読するため。
+`Show Normalized View`・`Copy Masked Text`、およびエクスプローラの選択なしで
+実行した `Show Interactive View` は、いずれもアクティブエディタのログを読む
+（未保存の変更を含む）。Totonoe Log 自身の読み取り専用ビュー上では実行できず
+警告になる。整形済みのビューを再度パースすると誤読するため。
+
+`Set Filter` はこの逆で、**Totonoe Log 自身のビューの上でしか実行できない**。
+元ログを読み直すのではなく、そのビューが保持している絞り込み前のエントリに
+条件を掛け直すため。
 
 ---
 
@@ -88,21 +92,27 @@ Totonoe Log が提供する全コマンドを、コマンドID・起動導線・
 - **関連設定** — `gap.thresholdSeconds`、および共通の解析・表示設定
 - **詳細** — [1本のタイムラインに正規化する](../../README.ja.md#1本のタイムラインに正規化する)
 
-### Show Normalized View Filtered
+### Set Filter
 
-`totonoeLog.showNormalizedViewFiltered`
+`totonoeLog.setViewFilter`
 
-- **起動導線** — コマンドパレット
-- **入力** — アクティブエディタ。続いて「どの条件で絞り込むか」（セベリティ／
-  日時範囲／無視パターン）の複数選択ピッカーが出て、選んだ条件についてだけ
-  順にプロンプトが出る。途中でキャンセルするか不正な入力をすると、何も開かずに
-  中断する。条件を1つも選ばずに確定した場合は、絞り込みなしで開く
-- **出力** — 上と同じ形式の読み取り専用の仮想ドキュメント。タブ名は
-  `<元ファイル名>.filtered-N.log`。非表示にした行数が通知で出る
-- **補足** — 日時の境界は `timezone.display` で選んだタイムゾーンで解釈されるので、
-  ビューに表示されているタイムスタンプの時刻部分をそのまま貼り付けられる。
-  パターンの評価に時間がかかりすぎた場合は、絞り込みなしにフォールバックせず、
-  警告を出して何も開かない
+- **起動導線** — コマンドパレット、およびエディタ右クリック。右クリックに出るのは
+  `totonoe-log-normalized` / `totonoe-log-merged` のドキュメント上のみ
+- **入力** — アクティブな正規化ビュー／マージビュー。続いて「どの条件で絞り込むか」
+  （セベリティ／日時範囲／無視パターン）の複数選択ピッカーが出て、選んだ条件に
+  ついてだけ順にプロンプトが出る。途中でキャンセルするか不正な入力をすると、
+  表示を変えずに中断する。条件を1つも選ばずに確定した場合は**絞り込みを解除**する
+- **出力** — 新しいタブは開かず、**いま開いているタブの内容がその場で書き換わる**。
+  非表示にした行数が通知で出る
+- **補足** — 条件は毎回「掛け直し」。前回の結果に重ねず、常に絞り込む前の
+  エントリが出発点なので、条件を緩めれば行が戻る。日時の境界は
+  `timezone.display` で選んだタイムゾーンで解釈されるので、ビューに表示されて
+  いるタイムスタンプの時刻部分をそのまま貼り付けられる。パターンの評価に時間が
+  かかりすぎた場合は、絞り込みなしにフォールバックせず、警告を出して表示を
+  変えない
+- **対象外** — 比較ビュー、Interactive View から書き出したビュー（折りたたみ・
+  マスクを含む表示状態のスナップショットで、絞り込みはパネル側で行う）、および
+  50 MiB 超で通常のファイルタブとして開いたマージ結果。いずれも警告が出る
 - **関連設定** — `gap.thresholdSeconds`、および共通の解析・表示設定
 - **詳細** — [ノイズを絞り込みで取り除く](../../README.ja.md#ノイズを絞り込みで取り除く)
 
@@ -126,18 +136,6 @@ Totonoe Log が提供する全コマンドを、コマンドID・起動導線・
 - **関連設定** — `gap.thresholdSeconds`、および共通の解析・表示設定。特に
   `timezone.fileOffsets` と `clockSkew.fileOffsets` はこのコマンドで効いてくる。
   サーバごとに異なるログを正しい時系列順でマージするための設定であるため
-- **詳細** — [複数ファイルをマージする](../../README.ja.md#複数ファイルをマージする)
-
-### Merge Selected Files Filtered
-
-`totonoeLog.mergeSelectedFilesFiltered`
-
-- **起動導線** — 複数選択に対するエクスプローラ右クリック。パレットについては
-  `Merge Selected Files` と同じ
-- **入力** — 選択の条件は上と同じ。そのあと `Show Normalized View Filtered` と
-  同じ条件ピッカーとプロンプトが出る。絞り込みはマージの後に適用される
-- **出力** — 読み取り専用の仮想ドキュメント。タブ名は `merged-filtered-N.log`
-- **関連設定** — `Merge Selected Files` と同じ
 - **詳細** — [複数ファイルをマージする](../../README.ja.md#複数ファイルをマージする)
 
 ### Compare Logs

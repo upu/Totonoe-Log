@@ -3,7 +3,6 @@ import {
   NORMALIZED_VIEW_SCHEME,
   NormalizedViewContentProvider,
   createShowNormalizedViewCommand,
-  createShowNormalizedViewFilteredCommand,
 } from "./normalizedView";
 import {
   COMPARE_VIEW_SCHEME,
@@ -16,13 +15,13 @@ import {
   MERGED_VIEW_SCHEME,
   MergedViewContentProvider,
   createMergeSelectedFilesCommand,
-  createMergeSelectedFilesFilteredCommand,
   createMergedViewFilenameHoverProvider,
 } from "./mergedView";
 import {
   InteractiveViewPanelController,
   createShowInteractiveViewCommand,
 } from "./interactiveView";
+import { createSetViewFilterCommand } from "./setViewFilter";
 
 export function activate(context: vscode.ExtensionContext): void {
   const normalizedViewProvider = new NormalizedViewContentProvider();
@@ -44,10 +43,6 @@ export function activate(context: vscode.ExtensionContext): void {
       "totonoeLog.mergeSelectedFiles",
       createMergeSelectedFilesCommand(mergedViewProvider)
     ),
-    vscode.commands.registerCommand(
-      "totonoeLog.mergeSelectedFilesFiltered",
-      createMergeSelectedFilesFilteredCommand(mergedViewProvider)
-    ),
     vscode.languages.registerHoverProvider(
       { scheme: MERGED_VIEW_SCHEME },
       createMergedViewFilenameHoverProvider(mergedViewProvider)
@@ -61,9 +56,17 @@ export function activate(context: vscode.ExtensionContext): void {
       "totonoeLog.showNormalizedView",
       createShowNormalizedViewCommand(normalizedViewProvider)
     ),
+    // 絞り込みは「開き方」ではなく、開いたビューに対する表示状態として設定する
+    // （issue #248）。対象になるのは行対応情報と同じく、絞り込み材料を登録して
+    // いる正規化ビューとマージビューの2スキーム。
     vscode.commands.registerCommand(
-      "totonoeLog.showNormalizedViewFiltered",
-      createShowNormalizedViewFilteredCommand(normalizedViewProvider)
+      "totonoeLog.setViewFilter",
+      createSetViewFilterCommand(
+        new Map([
+          [NORMALIZED_VIEW_SCHEME, normalizedViewProvider],
+          [MERGED_VIEW_SCHEME, mergedViewProvider],
+        ])
+      )
     ),
     vscode.workspace.registerTextDocumentContentProvider(
       COMPARE_VIEW_SCHEME,

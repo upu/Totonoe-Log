@@ -1,5 +1,5 @@
 import * as vscode from "vscode";
-import type { LineSource } from "./normalize";
+import type { FilterCriteria, LineSource, LogEntry } from "./normalize";
 
 /** 正規化ビュー用の仮想ドキュメントに割り当てる URI スキーム。 */
 export const NORMALIZED_VIEW_SCHEME = "totonoe-log-normalized";
@@ -79,17 +79,60 @@ export interface SourceLineMap {
 }
 
 /**
+ * 絞り込みをやり直した結果の本文と、それに対応する行対応情報（issue #248）。
+ */
+export interface FilteredViewContent {
+  readonly text: string;
+  readonly lineSources: readonly (LineSource | undefined)[];
+  /** 絞り込み後に残ったエントリ。非表示行数の通知に使う。 */
+  readonly visibleEntries: readonly LogEntry[];
+}
+
+/**
+ * 開いている仮想ドキュメントに対して絞り込みを掛け直すために、ビューが
+ * 手放さずに持っておく「絞り込み前の材料」（issue #248）。
+ *
+ * これを持たせるまでは、整形済みテキストしか残っていなかったため、後から
+ * 条件を変えるには表示テキストを再パースするしかなかった（`parseLog` は
+ * 行頭アンカーで判定するので、ガター付きの整形済みテキストは正しく読めない
+ * ——{@link guardAgainstVirtualDocumentSource} が防いでいるのと同じ問題、#57）。
+ * 元のエントリを持っておけば再パースは不要になる。
+ */
+export interface FilterableViewSource {
+  /**
+   * 絞り込み前の全エントリ。セベリティ選択のプロンプトと、非表示行数の通知の
+   * 分母に使う。
+   */
+  readonly allEntries: readonly LogEntry[];
+  /**
+   * 条件を掛け直して本文と行対応情報を作り直す。**前回の結果には重ねない**
+   * ——出発点は常に絞り込み前のエントリなので、条件を緩めれば行は戻る。
+   * パターンの評価がタイムアウトした場合は `undefined` を返す。
+   */
+  applyFilter(criteria: FilterCriteria): Promise<FilteredViewContent | undefined>;
+}
+
+/**
  * URIごとにテキスト内容を保持する読み取り専用の仮想ドキュメントプロバイダ。
  * 正規化ビュー・比較ビューなど、スキームだけが異なる複数の機能が共有する
- * 基底実装。ドキュメントが閉じられたら保持内容（本文と行対応情報の両方）を
- * 解放し、コマンドを繰り返し実行してもメモリが増え続けないようにする。
+ * 基底実装。ドキュメントが閉じられたら保持内容（本文・行対応情報・絞り込み
+ * 材料）を解放し、コマンドを繰り返し実行してもメモリが増え続けないようにする。
  */
 export class VirtualDocumentContentProvider
   implements vscode.TextDocumentContentProvider, vscode.Disposable
 {
   private readonly contentByUri = new Map<string, string>();
   private readonly sourceLineMapByUri = new Map<string, SourceLineMap>();
+  private readonly filterSourceByUri = new Map<string, FilterableViewSource>();
   private readonly closeListener: vscode.Disposable;
+  private readonly changeEmitter = new vscode.EventEmitter<vscode.Uri>();
+
+  /**
+   * 保持している本文を差し替えたことをVSCodeへ知らせるイベント。これを発火
+   * すると `provideTextDocumentContent` が呼び直され、開いたままのタブの
+   * 内容が入れ替わる（issue #248 の「同じタブを書き換える」経路）。
+   */
+  readonly onDidChange = this.changeEmitter.event;
 
   constructor(private readonly scheme: string) {
     this.closeListener = vscode.workspace.onDidCloseTextDocument((document) => {
@@ -105,6 +148,18 @@ export class VirtualDocumentContentProvider
   }
 
   /**
+   * この URI のビューを後から絞り込めるようにする（issue #248）。
+   *
+   * 登録するのは「素の正規化 / マージ結果」を開いたときだけ。Interactive View
+   * からの書き出し（issue #175）には登録しない——あちらは折りたたみ・マスクを
+   * 含むパネルの表示状態のスナップショットで、元エントリから作り直すとその
+   * 状態が消えてしまうため。絞り込み自体もパネル側で完結している。
+   */
+  registerFilterSource(uri: vscode.Uri, filterSource: FilterableViewSource): void {
+    this.filterSourceByUri.set(uri.toString(), filterSource);
+  }
+
+  /**
    * 指定した URI の仮想ドキュメントに紐づく行対応情報を返す。登録されて
    * いない（比較ビュー等の対象外ビュー、または解放済み）場合は `undefined`。
    */
@@ -112,11 +167,31 @@ export class VirtualDocumentContentProvider
     return this.sourceLineMapByUri.get(uri.toString());
   }
 
+  /**
+   * 指定した URI の絞り込み材料を返す。絞り込みに対応しないビュー、または
+   * 内容が解放済みの場合は `undefined`。
+   */
+  getFilterSource(uri: vscode.Uri): FilterableViewSource | undefined {
+    return this.filterSourceByUri.get(uri.toString());
+  }
+
+  /**
+   * 保持している本文と行対応情報を差し替え、開いているタブへ反映する。
+   * `register` と分けているのは、こちらだけが `onDidChange` を発火するため
+   * ——初回登録は `openTextDocument` が内容を取りに来るので発火は不要で、
+   * 発火すると開く前のURIに対する無駄な問い合わせが1回増える。
+   */
+  update(uri: vscode.Uri, content: string, sourceLineMap?: SourceLineMap): void {
+    this.register(uri, content, sourceLineMap);
+    this.changeEmitter.fire(uri);
+  }
+
   /** 指定した URI の保持内容を破棄する。対象スキーム以外の URI は無視する。 */
   release(uri: vscode.Uri): void {
     if (uri.scheme === this.scheme) {
       this.contentByUri.delete(uri.toString());
       this.sourceLineMapByUri.delete(uri.toString());
+      this.filterSourceByUri.delete(uri.toString());
     }
   }
 
@@ -126,5 +201,6 @@ export class VirtualDocumentContentProvider
 
   dispose(): void {
     this.closeListener.dispose();
+    this.changeEmitter.dispose();
   }
 }

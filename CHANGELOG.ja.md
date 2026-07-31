@@ -8,6 +8,32 @@
 
 ## [Unreleased]
 
+### Removed
+
+- **破壊的変更:** `Totonoe Log: Show Normalized View Filtered`
+  （`totonoeLog.showNormalizedViewFiltered`）と `Totonoe Log: Merge Selected
+  Files Filtered`（`totonoeLog.mergeSelectedFilesFiltered`）を廃止した。どちらも
+  開く時点で絞り込み条件を決め打ちする形で、条件を緩めたくなったら元ファイルに
+  戻ってコマンドを実行し直すしかなかった。`Show Normalized View` または
+  `Merge Selected Files` でビューを開き、新しい `Totonoe Log: Set Filter` を
+  使うこと。キーバインドを設定していた場合は `totonoeLog.setViewFilter` に
+  付け替える（issue #248）。
+- 50 MiB のドキュメント同期上限を超えるマージ結果は絞り込めなくなった。
+  `Merge Selected Files Filtered` は整形前に絞り込むため、大きなマージでも
+  絞れば上限に収まることがあったが、`Set Filter` は仮想ドキュメントだけを
+  対象にする（`Go to Source Line` と同じ制約）。この場合は Interactive View を
+  使うこと。
+
+### Added
+
+- `Totonoe Log: Set Filter`（`totonoeLog.setViewFilter`）を追加した。既に開いて
+  いる正規化ビュー／マージビューに対して、コマンドパレットまたはエディタの
+  右クリックメニューから絞り込みを設定・変更・解除できる。新しいタブは開かず
+  いま開いているタブをその場で書き換え、条件は毎回「掛け直し」になる——前回の
+  結果に重ねず絞り込む前のエントリが出発点なので、条件を緩めれば行が戻り、
+  何も選ばずに確定すれば解除になる。絞り込みは、Interactive View と同じく
+  いつでも変えられる表示状態になった（issue #248）。
+
 ### Fixed
 
 - マルチルートワークスペースで、Interactive View のパネルからハイライトルールを

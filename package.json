@@ -42,16 +42,12 @@
         "title": "Totonoe Log: Merge Selected Files"
       },
       {
-        "command": "totonoeLog.mergeSelectedFilesFiltered",
-        "title": "Totonoe Log: Merge Selected Files Filtered"
-      },
-      {
         "command": "totonoeLog.showNormalizedView",
         "title": "Totonoe Log: Show Normalized View"
       },
       {
-        "command": "totonoeLog.showNormalizedViewFiltered",
-        "title": "Totonoe Log: Show Normalized View Filtered"
+        "command": "totonoeLog.setViewFilter",
+        "title": "Totonoe Log: Set Filter"
       },
       {
         "command": "totonoeLog.compareLogs",
@@ -95,14 +91,9 @@
           "group": "totonoeLog@1"
         },
         {
-          "command": "totonoeLog.mergeSelectedFilesFiltered",
-          "when": "listMultiSelection",
-          "group": "totonoeLog@2"
-        },
-        {
           "command": "totonoeLog.showInteractiveView",
           "when": "!explorerResourceIsFolder",
-          "group": "totonoeLog@3"
+          "group": "totonoeLog@2"
         }
       ],
       "editor/context": [
@@ -110,6 +101,11 @@
           "command": "totonoeLog.goToSourceLine",
           "when": "resourceScheme == totonoe-log-normalized || resourceScheme == totonoe-log-merged",
           "group": "totonoeLog@1"
+        },
+        {
+          "command": "totonoeLog.setViewFilter",
+          "when": "resourceScheme == totonoe-log-normalized || resourceScheme == totonoe-log-merged",
+          "group": "totonoeLog@2"
         }
       ]
     },

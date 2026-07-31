@@ -8,6 +8,33 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Removed
+
+- **Breaking:** `Totonoe Log: Show Normalized View Filtered`
+  (`totonoeLog.showNormalizedViewFiltered`) and `Totonoe Log: Merge Selected
+  Files Filtered` (`totonoeLog.mergeSelectedFilesFiltered`) were removed. Both
+  decided the filter at the moment you opened the view, which meant loosening a
+  condition sent you back to the source file to run the command again. Open the
+  view with `Show Normalized View` or `Merge Selected Files` and use the new
+  `Totonoe Log: Set Filter` instead. If you had keybindings for either, point
+  them at `totonoeLog.setViewFilter` (issue #248).
+- Filtering a merged result that exceeds the 50 MiB document sync limit is no
+  longer possible. `Merge Selected Files Filtered` filtered before formatting,
+  so a large merge could sometimes be squeezed under the limit; `Set Filter`
+  only works on virtual documents, the same restriction `Go to Source Line`
+  already has. Use the Interactive View for those.
+
+### Added
+
+- `Totonoe Log: Set Filter` (`totonoeLog.setViewFilter`) sets, changes, and
+  clears the filter on a normalized or merged view you already have open, from
+  the Command Palette or the editor context menu. It rewrites the current tab in
+  place rather than opening a new one, and each run re-applies conditions to the
+  unfiltered entries instead of narrowing the previous result — so loosening a
+  condition brings lines back, and confirming the picker with nothing selected
+  clears the filter. Filtering is now a display state you can change at any
+  time, the same model the Interactive View already uses (issue #248).
+
 ### Fixed
 
 - In a multi-root workspace, editing highlight rules in the Interactive View
