@@ -33,3 +33,20 @@ export function computeSeverityWidth(entries: readonly LogEntry[]): number {
 export function formatSeverity(severity: string | undefined, width: number): string {
   return (severity ?? SEVERITY_PLACEHOLDER).padEnd(width);
 }
+
+/**
+ * 継続行（スタックトレース等、直前のエントリに畳まれた行）を、見出し行の
+ * メッセージ開始桁まで下げるための字下げを返す（issue #256）。見出しは
+ * 「タイムスタンプ + 空白 + セベリティ + 空白」の後ろからメッセージが始まる。
+ *
+ * タイムスタンプ幅は表示タイムゾーン（UTC は24桁、`+09:00` は29桁）とマスク
+ * （`<TIMESTAMP>` は11桁）で変わるため、固定値ではなく実際に組み立てた文字列
+ * から求める。
+ *
+ * 呼び出すのは見出しにタイムスタンプ欄を持つエントリだけ。認識できなかった
+ * エントリは見出し自体がガター直後から始まるので、継続行を下げると自分の
+ * 見出しより右にずれてしまう。
+ */
+export function messageColumnIndent(timestampText: string, severityWidth: number): string {
+  return " ".repeat(timestampText.length + 1 + severityWidth + 1);
+}

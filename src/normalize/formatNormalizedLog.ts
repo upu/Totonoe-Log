@@ -8,7 +8,7 @@ import {
   maskDisplayMessageLines,
   type DisplayMaskOptions,
 } from "./displayMask";
-import { computeSeverityWidth, formatSeverity } from "./severityColumn";
+import { computeSeverityWidth, formatSeverity, messageColumnIndent } from "./severityColumn";
 
 /** {@link formatNormalizedLog} の挙動を調整するオプション。 */
 export interface FormatNormalizedLogOptions {
@@ -45,7 +45,7 @@ export interface FormatNormalizedLogOptions {
  *   一部のエントリだけを渡した場合も、各エントリの `startLine` を使うため
  *   元の行番号がずれない）。
  * - 複数行にまたがるエントリ（スタックトレース等）の継続行は、元のインデント
- *   をそのまま保持して見出し行の下に並べる。
+ *   を保持したまま、見出し行のメッセージ開始桁まで下げて並べる（issue #256）。
  * - `options.gapThresholdMs` を指定すると、隣り合うエントリ（配列上で連続する
  *   もの）のタイムスタンプ差がその値以上のとき、間に「XX秒の空白」の区切り
  *   行を挿入する。絞り込み後のエントリ列に対してもそのまま機能するため、
@@ -94,14 +94,21 @@ export function formatNormalizedLogWithLineSources(
       options.mask
     );
 
-    const headerText = entry.matched && entry.timestampMs !== undefined
-      ? `${formatMaskableTimestamp(entry.timestampMs, displayTimezone, options.mask)} ${formatSeverity(entry.severity, severityWidth)} ${messageLines[0]}`
+    const timestampText = entry.matched && entry.timestampMs !== undefined
+      ? formatMaskableTimestamp(entry.timestampMs, displayTimezone, options.mask)
+      : undefined;
+    const headerText = timestampText !== undefined
+      ? `${timestampText} ${formatSeverity(entry.severity, severityWidth)} ${messageLines[0]}`
       : messageLines[0];
     outputLines.push(formatGutter(entry.startLine, gutterWidth) + headerText);
     lineSources.push({ fileIndex: 0, line: entry.startLine });
 
+    const continuationIndent =
+      timestampText !== undefined ? messageColumnIndent(timestampText, severityWidth) : "";
     for (let j = 1; j < messageLines.length; j++) {
-      outputLines.push(formatGutter(entry.startLine + j, gutterWidth) + messageLines[j]);
+      outputLines.push(
+        formatGutter(entry.startLine + j, gutterWidth) + continuationIndent + messageLines[j]
+      );
       lineSources.push({ fileIndex: 0, line: entry.startLine + j });
     }
   }
