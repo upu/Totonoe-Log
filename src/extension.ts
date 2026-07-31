@@ -1,9 +1,5 @@
 import * as vscode from "vscode";
-import {
-  NORMALIZED_VIEW_SCHEME,
-  NormalizedViewContentProvider,
-  createShowNormalizedViewCommand,
-} from "./normalizedView";
+import { NORMALIZED_VIEW_SCHEME, NormalizedViewContentProvider } from "./normalizedView";
 import {
   COMPARE_VIEW_SCHEME,
   CompareViewContentProvider,
@@ -14,7 +10,6 @@ import { createGoToSourceLineCommand } from "./goToSourceLine";
 import {
   MERGED_VIEW_SCHEME,
   MergedViewContentProvider,
-  createMergeSelectedFilesCommand,
   createMergedViewFilenameHoverProvider,
 } from "./mergedView";
 import {
@@ -22,6 +17,7 @@ import {
   createShowInteractiveViewCommand,
 } from "./interactiveView";
 import { createSetViewFilterCommand } from "./setViewFilter";
+import { createOpenVirtualDocumentCommand } from "./openVirtualDocument";
 
 export function activate(context: vscode.ExtensionContext): void {
   const normalizedViewProvider = new NormalizedViewContentProvider();
@@ -39,10 +35,6 @@ export function activate(context: vscode.ExtensionContext): void {
       mergedViewProvider
     ),
     mergedViewProvider,
-    vscode.commands.registerCommand(
-      "totonoeLog.mergeSelectedFiles",
-      createMergeSelectedFilesCommand(mergedViewProvider)
-    ),
     vscode.languages.registerHoverProvider(
       { scheme: MERGED_VIEW_SCHEME },
       createMergedViewFilenameHoverProvider(mergedViewProvider)
@@ -52,9 +44,11 @@ export function activate(context: vscode.ExtensionContext): void {
       normalizedViewProvider
     ),
     normalizedViewProvider,
+    // 対象が1ファイルか複数かでコマンドを分けない（issue #249）。入力の解決は
+    // Show Interactive View と同じで、出力先が仮想ドキュメントになるだけ。
     vscode.commands.registerCommand(
-      "totonoeLog.showNormalizedView",
-      createShowNormalizedViewCommand(normalizedViewProvider)
+      "totonoeLog.openVirtualDocument",
+      createOpenVirtualDocumentCommand(normalizedViewProvider, mergedViewProvider)
     ),
     // 絞り込みは「開き方」ではなく、開いたビューに対する表示状態として設定する
     // （issue #248）。実際に絞り込めるのは絞り込み材料を登録している正規化

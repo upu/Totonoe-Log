@@ -60,7 +60,7 @@ Process-ID masking, available here and in `Copy Masked Text`, covers syslog-styl
 
 ## Normalize into one timeline
 
-`Totonoe Log: Show Normalized View` parses the log file in the active editor and re-renders every entry in a common structure, regardless of the format each line was originally written in.
+`Totonoe Log: Open in Virtual Document` parses the log files you pick and re-renders every entry in a common structure, regardless of the format each line was originally written in. It uses the Explorer selection when there is one and the active editor otherwise (two or more files switch to the merged display below).
 
 Common timestamp formats are recognized out of the box: ISO 8601 (plain and bracketed), classic syslog, slash-separated dates (`2024/01/02 03:04:05`), Apache/Nginx access-log timestamps (`[02/Jan/2024:03:04:05 +0900]`), and leading epoch seconds/milliseconds. Formats not covered by the built-ins can be added via the `totonoeLog.timestampFormats` setting (see [Custom timestamp formats](#custom-timestamp-formats)).
 
@@ -68,7 +68,7 @@ Long silent stretches are marked, too: when the timestamp gap between consecutiv
 
 ## Filter out the noise
 
-Filtering is a display state of an open view, not a way of opening one. Open a view with `Show Normalized View` or `Merge Selected Files`, then run `Totonoe Log: Set Filter` against that tab (it is in the editor context menu too) to freely combine filters in a single flow: pick the conditions you want from a multi-select list, and answer only the prompts for the conditions you picked.
+Filtering is a display state of an open view, not a way of opening one. Open a view with `Open in Virtual Document`, then run `Totonoe Log: Set Filter` against that tab (it is in the editor context menu too) to freely combine filters in a single flow: pick the conditions you want from a multi-select list, and answer only the prompts for the conditions you picked.
 
 - **Severity** — keep only error / warn / info / ...
 - **Date/time range** — narrow down to the time window you care about
@@ -90,7 +90,7 @@ so changing conditions never piles up new tabs.
 
 ## Merge multiple files
 
-Select two or more log files in the Explorer, then right-click and choose `Totonoe Log: Merge Selected Files` to merge them by timestamp into a single timeline for cross-file investigation, with source file name and file "kind" columns (e.g. `message_20240101.log` → kind `message`). Hovering over the file name column shows the full source path, so same-named files merged from different folders can still be told apart.
+Select two or more log files in the Explorer, then right-click and choose `Totonoe Log: Open in Virtual Document` to merge them by timestamp into a single timeline for cross-file investigation, with source file name and file "kind" columns (e.g. `message_20240101.log` → kind `message`). Selecting just one gives you the normalized view above, so you never have to pick a command based on how many files you selected. Hovering over the file name column shows the full source path, so same-named files merged from different folders can still be told apart.
 
 Each selected file is decoded with VS Code's resource-scoped `files.encoding`
 setting. Normal VS Code configuration precedence applies, so a workspace-folder
@@ -230,7 +230,7 @@ All settings live under the `totonoeLog` namespace.
 
 | Setting | Type | Default | Description |
 | --- | --- | --- | --- |
-| `totonoeLog.gap.thresholdSeconds` | number | `30` | Insert a "XX seconds of silence" separator line in the `Show Normalized View` and `Merge Selected Files` views when the timestamp gap between consecutive entries is at least this many seconds. It also applies to the ordering left after `Set Filter`. `0` disables it. |
+| `totonoeLog.gap.thresholdSeconds` | number | `30` | Insert a "XX seconds of silence" separator line in the views `Open in Virtual Document` produces when the timestamp gap between consecutive entries is at least this many seconds. It also applies to the ordering left after `Set Filter`. `0` disables it. |
 | `totonoeLog.collapse.threshold` | number | `3` | How many consecutive repeats it takes before the Interactive View folds them into one line. |
 | `totonoeLog.interactiveView.maxDisplayLines` | number | `20000` | Maximum number of lines `Show Interactive View` renders at once. Beyond this, only the leading lines are rendered and a notice suggests narrowing the filters or opening the whole log with "Export as Virtual Document". `0` disables the cap. |
 | `totonoeLog.copyMasked.maskTimestamp` | boolean | `true` | Mask timestamps when running `Copy Masked Text`. |

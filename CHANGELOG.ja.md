@@ -10,6 +10,14 @@
 
 ### Removed
 
+- **破壊的変更:** `Totonoe Log: Show Normalized View`
+  （`totonoeLog.showNormalizedView`）と `Totonoe Log: Merge Selected Files`
+  （`totonoeLog.mergeSelectedFiles`）を廃止した。両者の違いは入力が1ファイルか
+  複数かだけで、本来ユーザーがコマンドを選び分ける理由にならない——1ファイルを
+  選んで `Merge Selected Files` を実行すると「2つ以上選べ」と怒られるだけだった。
+  どちらも新しい `Totonoe Log: Open in Virtual Document` を使うこと。
+  キーバインドを設定していた場合は `totonoeLog.openVirtualDocument` に
+  付け替える（issue #249）。
 - **破壊的変更:** `Totonoe Log: Show Normalized View Filtered`
   （`totonoeLog.showNormalizedViewFiltered`）と `Totonoe Log: Merge Selected
   Files Filtered`（`totonoeLog.mergeSelectedFilesFiltered`）を廃止した。どちらも
@@ -26,6 +34,13 @@
 
 ### Added
 
+- `Totonoe Log: Open in Virtual Document`（`totonoeLog.openVirtualDocument`）を
+  追加した。選んだログを、1ファイルでも複数ファイルでも読み取り専用の仮想
+  ドキュメントとして開く（1つなら正規化ビュー、2つ以上ならマージビュー）。
+  入力の解決は `Show Interactive View` とまったく同じ——エクスプローラの選択が
+  あればそれ、無ければアクティブエディタ——なので、両者の違いは出力先だけに
+  なった。エクスプローラの右クリックメニューには単一ファイル選択でも出る
+  （旧マージコマンドは複数選択時しか出なかった）（issue #249）。
 - `Totonoe Log: Set Filter`（`totonoeLog.setViewFilter`）を追加した。既に開いて
   いる正規化ビュー／マージビューに対して、コマンドパレットまたはエディタの
   右クリックメニューから絞り込みを設定・変更・解除できる。新しいタブは開かず

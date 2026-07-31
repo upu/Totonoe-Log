@@ -38,12 +38,8 @@
   "contributes": {
     "commands": [
       {
-        "command": "totonoeLog.mergeSelectedFiles",
-        "title": "Totonoe Log: Merge Selected Files"
-      },
-      {
-        "command": "totonoeLog.showNormalizedView",
-        "title": "Totonoe Log: Show Normalized View"
+        "command": "totonoeLog.openVirtualDocument",
+        "title": "Totonoe Log: Open in Virtual Document"
       },
       {
         "command": "totonoeLog.setViewFilter",
@@ -86,8 +82,8 @@
       ],
       "explorer/context": [
         {
-          "command": "totonoeLog.mergeSelectedFiles",
-          "when": "listMultiSelection",
+          "command": "totonoeLog.openVirtualDocument",
+          "when": "!explorerResourceIsFolder",
           "group": "totonoeLog@1"
         },
         {
