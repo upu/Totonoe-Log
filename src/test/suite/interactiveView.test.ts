@@ -19,9 +19,12 @@ import { parseWebviewLineSource } from "../../interactiveViewContext";
 import { buildLowTimestampRecognitionWarnings } from "../../timestampRecognitionWarning";
 import { classifyInteractiveViewConfigChange } from "../../interactiveViewConfigWatch";
 import {
+  readHighlightRuleRows,
+  readHighlightRules,
   resolveHighlightRulesTarget,
   toHighlightRuleRows,
   toHighlightRuleSettings,
+  writeHighlightRuleRows,
 } from "../../highlightRuleSettings";
 import { DEFAULT_HIGHLIGHT_COLOR } from "../../normalize";
 import { reresolveLogFileOffsets } from "../../logFileReading";
@@ -1001,6 +1004,147 @@ suite("highlightRuleSettings / resolveHighlightRulesTarget (#238)", () => {
       resolveHighlightRulesTarget({ workspaceValue: [] }, false),
       vscode.ConfigurationTarget.Global
     );
+  });
+
+  test("writes back to the folder settings when the rules are defined there (#240)", () => {
+    // マルチルートのフォルダ設定に定義されたルールを、ユーザー設定側へ
+    // 逃がすと、優先度で負けて書き戻しが効かなくなる。
+    assert.strictEqual(
+      resolveHighlightRulesTarget({ workspaceFolderValue: [] }, true),
+      vscode.ConfigurationTarget.WorkspaceFolder
+    );
+  });
+
+  test("prefers the folder settings over the workspace settings (#240)", () => {
+    // 両方に定義がある場合、実際に効いているのは優先度が高いフォルダ設定の側。
+    assert.strictEqual(
+      resolveHighlightRulesTarget({ workspaceFolderValue: [], workspaceValue: [] }, true),
+      vscode.ConfigurationTarget.WorkspaceFolder
+    );
+  });
+
+  test("falls back to the user settings when no workspace is open, even with a folder value (#240)", () => {
+    assert.strictEqual(
+      resolveHighlightRulesTarget({ workspaceFolderValue: [] }, false),
+      vscode.ConfigurationTarget.Global
+    );
+  });
+});
+
+suite("highlightRuleSettings / resource scope (#240)", () => {
+  /**
+   * `vscode.workspace.getConfiguration` を差し替え、`totonoeLog` セクションに
+   * 渡されたリソース（第2引数）と、`update` の呼び出し内容を記録する。
+   * フォルダ設定の層は resource を渡した時だけ解決されるため、リソースが
+   * 実際に伝わっているかどうかがこの issue の本題になる。
+   */
+  function stubConfiguration(options: {
+    readonly workspaceFolderValue?: unknown;
+    readonly value?: unknown[];
+    /** フォルダ設定へ書ける状況（＝ワークスペースが開かれている）を作るか。 */
+    readonly withWorkspaceFolder?: boolean;
+  }): {
+    readonly scopes: (vscode.ConfigurationScope | null | undefined)[];
+    readonly updates: { key: string; value: unknown; target: unknown }[];
+    restore(): void;
+  } {
+    const scopes: (vscode.ConfigurationScope | null | undefined)[] = [];
+    const updates: { key: string; value: unknown; target: unknown }[] = [];
+    const original = vscode.workspace.getConfiguration;
+
+    (vscode.workspace as any).getConfiguration = (
+      section?: string,
+      scope?: vscode.ConfigurationScope | null
+    ) => {
+      if (section !== "totonoeLog") {
+        return original(section, scope);
+      }
+      scopes.push(scope);
+      return {
+        get: (key: string, defaultValue: unknown) =>
+          key === "highlightRules" ? (options.value ?? defaultValue) : defaultValue,
+        inspect: () => ({ workspaceFolderValue: options.workspaceFolderValue }),
+        update: async (key: string, value: unknown, target: unknown) => {
+          updates.push({ key, value, target });
+        },
+      };
+    };
+
+    // テストランナーはフォルダを開かずに起動するため、フォルダ設定が
+    // 絡むケースは workspaceFolders ごと差し替えないと再現できない。
+    const originalFolders = Object.getOwnPropertyDescriptor(
+      vscode.workspace,
+      "workspaceFolders"
+    );
+    if (options.withWorkspaceFolder) {
+      Object.defineProperty(vscode.workspace, "workspaceFolders", {
+        configurable: true,
+        get: () => [{ uri: vscode.Uri.file("/folder-a"), name: "folder-a", index: 0 }],
+      });
+    }
+
+    return {
+      scopes,
+      updates,
+      restore: () => {
+        (vscode.workspace as any).getConfiguration = original;
+        if (options.withWorkspaceFolder && originalFolders) {
+          Object.defineProperty(vscode.workspace, "workspaceFolders", originalFolders);
+        }
+      },
+    };
+  }
+
+  const resource = vscode.Uri.file("/folder-a/app.log");
+
+  test("readHighlightRuleRows resolves the setting against the given resource", () => {
+    const stub = stubConfiguration({ value: [{ pattern: "boom", color: "red" }] });
+    try {
+      const rows = readHighlightRuleRows(resource);
+      assert.deepStrictEqual(stub.scopes, [resource]);
+      assert.deepStrictEqual(
+        rows.map((row) => row.pattern),
+        ["boom"]
+      );
+    } finally {
+      stub.restore();
+    }
+  });
+
+  test("readHighlightRules resolves the setting against the given resource", () => {
+    const stub = stubConfiguration({ value: [{ pattern: "boom", color: "red" }] });
+    try {
+      const rules = readHighlightRules(resource);
+      assert.deepStrictEqual(stub.scopes, [resource]);
+      assert.strictEqual(rules.length, 1);
+    } finally {
+      stub.restore();
+    }
+  });
+
+  test("writeHighlightRuleRows writes to the folder settings of the given resource", async () => {
+    const stub = stubConfiguration({ workspaceFolderValue: [], withWorkspaceFolder: true });
+    try {
+      await writeHighlightRuleRows([{ pattern: "boom", color: "red" }], resource);
+      assert.deepStrictEqual(stub.scopes, [resource]);
+      assert.strictEqual(stub.updates.length, 1);
+      assert.strictEqual(stub.updates[0].key, "highlightRules");
+      assert.strictEqual(stub.updates[0].target, vscode.ConfigurationTarget.WorkspaceFolder);
+      assert.deepStrictEqual(stub.updates[0].value, [{ pattern: "boom", color: "red" }]);
+    } finally {
+      stub.restore();
+    }
+  });
+
+  test("keeps working without a resource, for a panel with no files loaded", async () => {
+    const stub = stubConfiguration({});
+    try {
+      await writeHighlightRuleRows([{ pattern: "boom", color: "red" }], undefined);
+      assert.deepStrictEqual(stub.scopes, [undefined]);
+      assert.strictEqual(stub.updates[0].target, vscode.ConfigurationTarget.Global);
+    } finally {
+      stub.restore();
+    }
   });
 });
 
