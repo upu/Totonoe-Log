@@ -89,12 +89,14 @@ flowchart TD
 - マージ時は由来ファイルを区別せず連続する同一メッセージをまとめる。複数サーバのheartbeatが交互に並ぶ実態に合わせるためである。
 - 折りたたみ表示ではグループ内部のどこへgapを置くか定義できないため、gap markerを挿入しない。
 
-severity列は表示集合に合わせて幅を揃える。ただし比較ビューでは左右の列幅差自体がdiffノイズになるためpaddingしない。この例外は `src/normalize/severityColumn.ts` と `maskForCompare.ts` の変更時に守る。
+severity列は表示集合に合わせて幅を揃える。タイムスタンプを認識した複数行エントリでは、継続行も見出しのメッセージ開始桁まで下げ、元からあるスタックトレース等のインデントをその上に保つ。字下げ幅は表示タイムゾーンや `<TIMESTAMP>` マスクで変わるため、`src/normalize/severityColumn.ts:messageColumnIndent` が実際のタイムスタンプ文字列とseverity列幅から計算する。タイムスタンプ未認識のエントリはメッセージ列を持たないので字下げせず、本文の行数と `LineSource` も変えない。
+
+比較ビューでは、左右で列幅が異なると同じ本文までdiffになるため、severityのpaddingも継続行の字下げも適用しない。この例外は `src/normalize/severityColumn.ts` と `src/normalize/maskForCompare.ts` の変更時に守る。表示整形の回帰確認は[テスト指針](/openwiki/testing/guide.md)に従う。
 
 ## 変更時の不変条件
 
 - 未認識行を捨てない。
-- 複数行エントリの物理行順と `startLine` を維持する。
+- 複数行エントリの物理行順、元のインデント、`startLine` を維持する。継続行を表示上字下げしても行数と元行対応は変えない。
 - 本文の行数を変える変換では `LineSource` も同時に更新する。
 - timezone情報がログに明示されている場合は設定よりログを優先する。
 - 同一時刻のマージ順を非決定的にしない。

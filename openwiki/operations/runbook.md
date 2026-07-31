@@ -74,6 +74,16 @@ flowchart TD
 
 変更箇所は[ソースマップ](/openwiki/source-map.md)、公開面は[VS Code統合](/openwiki/integrations/vscode.md)で確認する。
 
+## OpenWikiの更新
+
+OpenWikiはCIで自動更新せず、リリース前にまとめて更新する。加えて、ファイル構成、command、ビルド・テスト手順、アーキテクチャ方針を変えたPRのマージ後にも更新する。毎PRで再生成しないのは、無関係な生成差分が機能レビューを妨げるのを避けるためである。
+
+```bash
+openwiki code --update --language ja-JP
+```
+
+生成差分は機能変更と混ぜず、`docs: OpenWiki を更新` のような単独PRにする。`openwiki/**` は `.vscodeignore` によりVSIXから除外されるため、リリース直前の更新はパッケージ内容へ影響しない。詳細な正本は `AGENTS.md` の「OpenWiki」節であり、Wikiの入口は[クイックスタート](/openwiki/quickstart.md)である。
+
 ## 切り分け
 
 - **仮想文書の内容消失**: `CONTENT_LOST_PLACEHOLDER` なら元commandを再実行する。providerの内容は永続化されない。
