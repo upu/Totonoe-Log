@@ -138,6 +138,11 @@ export function highlightDisplayLines(
     }, timeoutMs);
 
     worker.once("message", (matched: LineHighlight[][]) => {
+      // タイムアウト済みなら、捨てられると分かっている結果は組み立てない
+      // （issue #237。`filterByIgnorePattern` と同じ理由）。
+      if (settled) {
+        return;
+      }
       const highlights: [string, LineHighlight[]][] = [];
       distinctLines.forEach((line, index) => {
         const ranges = matched[index];

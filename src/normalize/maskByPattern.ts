@@ -198,6 +198,11 @@ function maskMessages<TEntry>(
     }, timeoutMs);
 
     worker.once("message", (masked: string[]) => {
+      // タイムアウト済みなら、捨てられると分かっている結果は組み立てない
+      // （issue #237。`filterByIgnorePattern` と同じ理由）。
+      if (settled) {
+        return;
+      }
       finish({
         ok: true,
         entries: entries.map((entry, index) =>
