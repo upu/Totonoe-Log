@@ -144,6 +144,12 @@ export class VirtualDocumentContentProvider
     this.contentByUri.set(uri.toString(), content);
     if (sourceLineMap) {
       this.sourceLineMapByUri.set(uri.toString(), sourceLineMap);
+    } else {
+      // 本文だけ差し替える場合は、前の本文に対応していた行対応情報を残さない
+      // ——残すと `Go to Source Line` が今の表示と合わない行へ飛ぶ。以前は
+      // URI ごとに1回しか登録しなかったため起きえなかったが、{@link update}
+      // で同じ URI を registerし直すようになったため明示的に消す。
+      this.sourceLineMapByUri.delete(uri.toString());
     }
   }
 
