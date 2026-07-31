@@ -1888,11 +1888,12 @@ suite("Totonoe Log virtual document guard", () => {
         (vscode.window as any).showWarningMessage = originalShowWarningMessage;
       }
 
-      // 比較ビューは絞り込み材料を持たない（タイムスタンプごとマスクした
-      // diff 用のテキストで、元エントリから作り直せない）。
+      // 比較ビューは Totonoe Log のビューではあるが、絞り込み材料を持たない
+      // （タイムスタンプごとマスクした diff 用のテキストで、元エントリから
+      // 作り直せない）。「ビューが無い」ではなく「対応していない」と案内する。
       assert.ok(
-        warningMessage,
-        "a warning should be shown when filtering from a compare view"
+        warningMessage?.includes("このビューは絞り込みに対応していません"),
+        `a compare view should be reported as unsupported, got: ${warningMessage}`
       );
       assert.strictEqual(
         vscode.window.activeTextEditor?.document.uri.toString(),

@@ -25,6 +25,8 @@ export function createSetViewFilterCommand(
     const document = vscode.window.activeTextEditor?.document;
     const provider = document ? providersByScheme.get(document.uri.scheme) : undefined;
     if (!document || !provider) {
+      // Totonoe Log のビューですらない（元のログファイル、50MiB 超で通常の
+      // ファイルタブとして開いたマージ結果、エディタ自体が無い場合）。
       vscode.window.showWarningMessage(
         "Totonoe Log: 絞り込むビューがありません。Show Normalized View または Merge Selected Files で開いたビューに対して実行してください。"
       );

@@ -57,14 +57,17 @@ export function activate(context: vscode.ExtensionContext): void {
       createShowNormalizedViewCommand(normalizedViewProvider)
     ),
     // 絞り込みは「開き方」ではなく、開いたビューに対する表示状態として設定する
-    // （issue #248）。対象になるのは行対応情報と同じく、絞り込み材料を登録して
-    // いる正規化ビューとマージビューの2スキーム。
+    // （issue #248）。実際に絞り込めるのは絞り込み材料を登録している正規化
+    // ビューとマージビューだけだが、比較ビューも Totonoe Log のビューとして
+    // 渡す——渡さないと「絞り込むビューがありません」と案内してしまい、
+    // ビューはあるが絞り込みに対応していない事実と食い違うため。
     vscode.commands.registerCommand(
       "totonoeLog.setViewFilter",
       createSetViewFilterCommand(
         new Map([
           [NORMALIZED_VIEW_SCHEME, normalizedViewProvider],
           [MERGED_VIEW_SCHEME, mergedViewProvider],
+          [COMPARE_VIEW_SCHEME, compareViewProvider],
         ])
       )
     ),
