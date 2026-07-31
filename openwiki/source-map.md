@@ -48,13 +48,13 @@ tags: [source-map, history, navigation]
 5. **非同期の正しさ** — exportは押下時criteriaを使い、worker完了順の逆転にはlatest-winsで対処した。
 6. **ノイズ処理の統合** — 複数pattern、highlight編集、マージ横断collapse、認識率警告をpanelへ集約し、旧専用collapse commandを廃止した。
 7. **操作の単純化** — filterをビューの状態へ移し、単一・複数ファイルの仮想表示を `Open in Virtual Document` へ統合した。
-8. **表示品質** — HEADではseverity列幅とgroup suffixを調整した。比較ビューでは列paddingが不要diffを生むため例外扱いである。
+8. **表示品質** — v0.10.0ではseverity列幅とgroup suffixを調整し、複数行エントリの継続行もメッセージ列へ揃えた。比較ビューでは列paddingや継続行の字下げが不要diffを生むため例外扱いである。
 
-v0.9.0後にもマルチルート設定、command統合、worker timeout後処理、列整列の変更があり、`package.json` のversionよりHEADが先行している。
+v0.9.0後のマルチルート設定、command統合、worker timeout後処理、列整列は v0.10.0 としてリリースされ、`package.json` と変更履歴のversionは一致している。
 
 ## 最近変更された高感度領域
 
-- `severityColumn.ts`, `groupSuffix.ts`, formatter群: 表示列とdiff安定性。
+- `severityColumn.ts`, `groupSuffix.ts`, formatter群: severity列、継続行の字下げ、diff安定性。
 - `setViewFilter.ts`, `FilterableViewSource`: 毎回元entryへ条件を掛け直す。
 - `openVirtualDocument.ts`: Explorerとactive documentの入力規則。
 - `highlightRuleSettings.ts`: multi-rootのresource scope。
