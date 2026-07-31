@@ -39,7 +39,7 @@ export function createSetViewFilterCommand(
       // 内容が解放されたビュー（issue #92）。書き出しは折りたたみ・マスクを
       // 含むパネルの表示状態のスナップショットで、絞り込みはパネル側で行う。
       vscode.window.showWarningMessage(
-        "Totonoe Log: このビューは絞り込みに対応していません。元のコマンドで開き直すか、Interactive View で絞り込んでください。"
+        "Totonoe Log: このビューは絞り込みに対応していません。Show Normalized View / Merge Selected Files で開いたビューか、Interactive View で絞り込んでください。"
       );
       return;
     }

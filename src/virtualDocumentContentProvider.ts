@@ -202,5 +202,11 @@ export class VirtualDocumentContentProvider
   dispose(): void {
     this.closeListener.dispose();
     this.changeEmitter.dispose();
+    // 保持しているのは本文だけでなくパース済みエントリ（issue #248）にもなった
+    // ため、GC 任せにせずここで手放す。閉じられていないタブの分が残っていても、
+    // 拡張機能が止まる時点で使い道は無い。
+    this.contentByUri.clear();
+    this.sourceLineMapByUri.clear();
+    this.filterSourceByUri.clear();
   }
 }
