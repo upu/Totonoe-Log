@@ -10,6 +10,116 @@ import type { DisplayTimezone } from "./timezone";
  */
 export type DateBoundaryKind = "start" | "end";
 
+interface DateBoundaryParts {
+  readonly year: number;
+  readonly month: number;
+  readonly day: number;
+  readonly hour: number;
+  readonly minute: number;
+  readonly second: number;
+  readonly millisecond: number;
+}
+
+function isValidBoundaryTime(parts: DateBoundaryParts): boolean {
+  return parts.hour <= 23 && parts.minute <= 59 && parts.second <= 59;
+}
+
+function parseDateBoundaryParts(
+  input: string,
+  boundaryKind: DateBoundaryKind
+): DateBoundaryParts | undefined {
+  const match = /^(\d{4})-(\d{2})-(\d{2})(?:[T ](\d{2}):(\d{2})(?::(\d{2}))?)?$/.exec(
+    input.trim()
+  );
+  if (!match) {
+    return undefined;
+  }
+
+  let hour = 0;
+  let minute = 0;
+  let second = 0;
+  let millisecond = 0;
+  if (match[4] === undefined) {
+    if (boundaryKind === "end") {
+      hour = 23;
+      minute = 59;
+      second = 59;
+      millisecond = 999;
+    }
+  } else {
+    hour = Number(match[4]);
+    minute = Number(match[5]);
+    second = match[6] === undefined ? 0 : Number(match[6]);
+  }
+
+  const parts = {
+    year: Number(match[1]),
+    month: Number(match[2]) - 1,
+    day: Number(match[3]),
+    hour,
+    minute,
+    second,
+    millisecond,
+  };
+  if (!isValidBoundaryTime(parts)) {
+    return undefined;
+  }
+  return parts;
+}
+
+function isSameLocalBoundary(check: Date, parts: DateBoundaryParts): boolean {
+  return (
+    check.getFullYear() === parts.year &&
+    check.getMonth() === parts.month &&
+    check.getDate() === parts.day &&
+    check.getHours() === parts.hour &&
+    check.getMinutes() === parts.minute &&
+    check.getSeconds() === parts.second &&
+    check.getMilliseconds() === parts.millisecond
+  );
+}
+
+function localBoundaryToEpochMs(parts: DateBoundaryParts): number | undefined {
+  const epochMs = new Date(
+    parts.year,
+    parts.month,
+    parts.day,
+    parts.hour,
+    parts.minute,
+    parts.second,
+    parts.millisecond
+  ).getTime();
+  return isSameLocalBoundary(new Date(epochMs), parts) ? epochMs : undefined;
+}
+
+function isSameUtcDate(check: Date, parts: DateBoundaryParts): boolean {
+  return (
+    check.getUTCFullYear() === parts.year &&
+    check.getUTCMonth() === parts.month &&
+    check.getUTCDate() === parts.day
+  );
+}
+
+function fixedOffsetBoundaryToEpochMs(
+  parts: DateBoundaryParts,
+  displayTimezone: number
+): number | undefined {
+  const wallClockMs = Date.UTC(
+    parts.year,
+    parts.month,
+    parts.day,
+    parts.hour,
+    parts.minute,
+    parts.second,
+    parts.millisecond
+  );
+  // Date.UTC は範囲外の日付を繰り上げるため、オフセット適用前に拒否する。
+  if (!isSameUtcDate(new Date(wallClockMs), parts)) {
+    return undefined;
+  }
+  return wallClockMs - displayTimezone * 60 * 1000;
+}
+
 /**
  * 日付範囲の境界（開始・終了いずれか一方）として使う入力文字列を解析する。
  *
@@ -31,61 +141,14 @@ export function parseDateBoundary(
   boundaryKind: DateBoundaryKind,
   displayTimezone: DisplayTimezone = 0
 ): number | undefined {
-  const match = /^(\d{4})-(\d{2})-(\d{2})(?:[T ](\d{2}):(\d{2})(?::(\d{2}))?)?$/.exec(
-    input.trim()
-  );
-  if (!match) {
+  const parts = parseDateBoundaryParts(input, boundaryKind);
+  if (parts === undefined) {
     return undefined;
   }
-
-  const year = Number(match[1]);
-  const month = Number(match[2]) - 1;
-  const day = Number(match[3]);
-  const hasTime = match[4] !== undefined;
-  const isEndOfDayDefault = boundaryKind === "end" && !hasTime;
-  const hour = Number(match[4] ?? (isEndOfDayDefault ? "23" : "0"));
-  const minute = Number(match[5] ?? (isEndOfDayDefault ? "59" : "0"));
-  const second = Number(match[6] ?? (isEndOfDayDefault ? "59" : "0"));
-  const millisecond = isEndOfDayDefault ? 999 : 0;
-
-  // Date.UTC は時刻の範囲外値（24:00 や 03:60 等）も繰り上げてしまうため、
-  // 日付だけでなく時刻の各要素も事前に範囲チェックし、不正な入力を
-  // サイレントに受け入れないようにする。
-  if (hour > 23 || minute > 59 || second > 59) {
-    return undefined;
-  }
-
   if (displayTimezone === "local") {
-    const epochMs = new Date(year, month, day, hour, minute, second, millisecond).getTime();
-    const check = new Date(epochMs);
-    if (
-      check.getFullYear() !== year ||
-      check.getMonth() !== month ||
-      check.getDate() !== day ||
-      check.getHours() !== hour ||
-      check.getMinutes() !== minute ||
-      check.getSeconds() !== second ||
-      check.getMilliseconds() !== millisecond
-    ) {
-      return undefined;
-    }
-    return epochMs;
+    return localBoundaryToEpochMs(parts);
   }
-
-  const wallClockMs = Date.UTC(year, month, day, hour, minute, second, millisecond);
-
-  // Date.UTC は範囲外の値を繰り上げ処理するため（例: 2024-02-30 → 2024-03-01）、
-  // オフセット適用前の壁時計を逆算して不正な日付を拒否する。
-  const check = new Date(wallClockMs);
-  if (
-    check.getUTCFullYear() !== year ||
-    check.getUTCMonth() !== month ||
-    check.getUTCDate() !== day
-  ) {
-    return undefined;
-  }
-
-  return wallClockMs - displayTimezone * 60 * 1000;
+  return fixedOffsetBoundaryToEpochMs(parts, displayTimezone);
 }
 
 /** {@link filterEntriesByDateRange} の絞り込み範囲。両端とも省略可能（片側のみの指定を許す）。 */

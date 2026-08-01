@@ -17,6 +17,99 @@ const MONTH_ABBREVIATIONS: Record<string, number> = {
   dec: 11,
 };
 
+interface IsoLikeDateTimeParts {
+  readonly year: number;
+  readonly month: number;
+  readonly day: number;
+  readonly hour: number;
+  readonly minute: number;
+  readonly second: number;
+  readonly millisecond: number;
+}
+
+function parseFractionalMilliseconds(value: string | undefined): number | undefined {
+  if (value === undefined) {
+    return 0;
+  }
+  if (!/^\d+$/.test(value)) {
+    return undefined;
+  }
+  // 丸めると実際より後の時刻へ繰り上がり、ログの並びを誤解しやすいため切り捨てる。
+  return Number(value.padEnd(3, "0").slice(0, 3));
+}
+
+function isValidIsoLikeTime(parts: IsoLikeDateTimeParts): boolean {
+  return (
+    Number.isInteger(parts.hour) &&
+    parts.hour >= 0 &&
+    parts.hour <= 23 &&
+    Number.isInteger(parts.minute) &&
+    parts.minute >= 0 &&
+    parts.minute <= 59 &&
+    Number.isInteger(parts.second) &&
+    parts.second >= 0 &&
+    parts.second <= 59
+  );
+}
+
+function parseIsoLikeDateTimeParts(
+  groups: Record<string, string | undefined>
+): IsoLikeDateTimeParts | undefined {
+  const millisecond = parseFractionalMilliseconds(groups.ms);
+  if (millisecond === undefined) {
+    return undefined;
+  }
+  const parts = {
+    year: Number(groups.y),
+    month: Number(groups.mo) - 1,
+    day: Number(groups.d),
+    hour: Number(groups.h),
+    minute: Number(groups.mi),
+    second: Number(groups.s),
+    millisecond,
+  };
+  return isValidIsoLikeTime(parts) ? parts : undefined;
+}
+
+function isSameUtcDate(check: Date, parts: IsoLikeDateTimeParts): boolean {
+  return (
+    check.getUTCFullYear() === parts.year &&
+    check.getUTCMonth() === parts.month &&
+    check.getUTCDate() === parts.day
+  );
+}
+
+function toValidatedUtcWallClockMs(parts: IsoLikeDateTimeParts): number | undefined {
+  const epochMs = Date.UTC(
+    parts.year,
+    parts.month,
+    parts.day,
+    parts.hour,
+    parts.minute,
+    parts.second,
+    parts.millisecond
+  );
+  // Date.UTC は範囲外の日付を繰り上げるため、オフセット適用前に拒否する。
+  return isSameUtcDate(new Date(epochMs), parts) ? epochMs : undefined;
+}
+
+function resolveIsoLikeOffsetMinutes(
+  groups: Record<string, string | undefined>,
+  fallbackUtcOffsetMinutes: number
+): number | undefined {
+  if (groups.tzs) {
+    const offsetText =
+      `${groups.tzs}${groups.tzh ?? ""}` +
+      (groups.tzm === undefined ? "" : `:${groups.tzm}`);
+    return parseUtcOffsetMinutes(offsetText);
+  }
+  // `Z` は UTC の明示なので、タイムゾーン表記なし用のフォールバックと区別する。
+  if (groups.tzz) {
+    return 0;
+  }
+  return fallbackUtcOffsetMinutes;
+}
+
 /**
  * 以下の ISO 8601 系フォーマットが共有する名前付きキャプチャグループを
  * エポックミリ秒に変換する。範囲外の日時や UTC オフセットは `undefined` を
@@ -36,65 +129,19 @@ export function isoLikeGroupsToEpochMs(
   groups: Record<string, string | undefined>,
   fallbackUtcOffsetMinutes = 0
 ): number | undefined {
-  const year = Number(groups.y);
-  const month = Number(groups.mo) - 1;
-  const day = Number(groups.d);
-  const hour = Number(groups.h);
-  const minute = Number(groups.mi);
-  const second = Number(groups.s);
-  // 3桁未満（例: ".5" → "500"）は0埋めし、4桁以上（.NETの7桁・Goの9桁など）は
-  // 先頭3桁だけを使ってミリ秒に切り捨てる。丸めではなく切り捨てなのは、
-  // タイムスタンプ順のマージで「実際より後ろの時刻」に繰り上がる方が
-  // 「実際より前」より誤解を招きやすいと判断したため。
-  const ms = groups.ms ? Number(groups.ms.padEnd(3, "0").slice(0, 3)) : 0;
-
-  if (
-    !Number.isInteger(hour) ||
-    hour < 0 ||
-    hour > 23 ||
-    !Number.isInteger(minute) ||
-    minute < 0 ||
-    minute > 59 ||
-    !Number.isInteger(second) ||
-    second < 0 ||
-    second > 59 ||
-    (groups.ms !== undefined && !/^\d+$/.test(groups.ms))
-  ) {
+  const parts = parseIsoLikeDateTimeParts(groups);
+  if (parts === undefined) {
     return undefined;
   }
-
-  const epochMs = Date.UTC(year, month, day, hour, minute, second, ms);
-
-  // Date.UTC は範囲外の値を繰り上げ処理するため（月12 → 翌年など）、
-  // 逆算して比較することで "2024-02-30" のような不正日付を検出する。
-  // タイムゾーンオフセット適用前に比較すること。
-  const check = new Date(epochMs);
-  if (
-    check.getUTCFullYear() !== year ||
-    check.getUTCMonth() !== month ||
-    check.getUTCDate() !== day
-  ) {
+  const epochMs = toValidatedUtcWallClockMs(parts);
+  if (epochMs === undefined) {
     return undefined;
   }
-
-  if (groups.tzs) {
-    const offsetText =
-      `${groups.tzs}${groups.tzh ?? ""}` +
-      (groups.tzm === undefined ? "" : `:${groups.tzm}`);
-    const offsetMinutes = parseUtcOffsetMinutes(offsetText);
-    if (offsetMinutes === undefined) {
-      return undefined;
-    }
-    return epochMs - offsetMinutes * 60 * 1000;
+  const offsetMinutes = resolveIsoLikeOffsetMinutes(groups, fallbackUtcOffsetMinutes);
+  if (offsetMinutes === undefined) {
+    return undefined;
   }
-
-  if (groups.tzz) {
-    // `Z` は UTC の明示。タイムゾーン表記なしとは区別し、フォールバックを
-    // 適用しない。
-    return epochMs;
-  }
-
-  return epochMs - fallbackUtcOffsetMinutes * 60 * 1000;
+  return epochMs - offsetMinutes * 60 * 1000;
 }
 
 /**

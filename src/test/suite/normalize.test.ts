@@ -108,6 +108,11 @@ suite("normalize / parseLog", () => {
     assert.strictEqual(entry.timestampMs, Date.UTC(2024, 0, 1, 18, 4, 5));
   });
 
+  test("right-pads a one-digit fractional second to milliseconds", () => {
+    const [entry] = parseLog("2024-01-02T03:04:05.5Z INFO hello");
+    assert.strictEqual(entry.timestampMs, Date.UTC(2024, 0, 2, 3, 4, 5, 500));
+  });
+
   test("applies a UTC offset with .NET-style 7-digit fractional seconds (#94)", () => {
     const [entry] = parseLog("2024-01-02T03:04:05.1234567+09:00 INFO hello");
     // タイムゾーンオフセットが正しく読まれていれば前日18時台になる。
@@ -470,6 +475,13 @@ suite("normalize / compileCustomTimestampFormats", () => {
       assert.strictEqual(entry.timestampMs, undefined, line);
     }
 
+    const [invalidOffsetWithFallback] = parseLog(
+      "2024.01.02 03:04:05.123 +99:99 invalid offset",
+      { timestampFormats: formats, sourceUtcOffsetMinutes: 540 }
+    );
+    assert.strictEqual(invalidOffsetWithFallback.matched, false);
+    assert.strictEqual(invalidOffsetWithFallback.timestampMs, undefined);
+
     const [boundary] = parseLog("2024.01.02 23:59:59.9999 +14:00 valid boundary", {
       timestampFormats: formats,
     });
@@ -788,6 +800,10 @@ suite("normalize / filterEntriesByDateRange", () => {
       parseDateBoundary("2024-01-02 03:04", "start"),
       Date.UTC(2024, 0, 2, 3, 4, 0)
     );
+    assert.strictEqual(
+      parseDateBoundary("2024-01-02 03:04", "end"),
+      Date.UTC(2024, 0, 2, 3, 4, 0)
+    );
   });
 
   test("parseDateBoundary interprets wall-clock input in a fixed display offset (issue #134)", () => {
@@ -813,6 +829,17 @@ suite("normalize / filterEntriesByDateRange", () => {
       parseDateBoundary("2024-01-02T12:04:05", "start", "local"),
       new Date(2024, 0, 2, 12, 4, 5, 0).getTime()
     );
+  });
+
+  test("parseDateBoundary completes a date-only local end boundary at the last instant", () => {
+    assert.strictEqual(
+      parseDateBoundary("2024-01-02", "end", "local"),
+      new Date(2024, 0, 2, 23, 59, 59, 999).getTime()
+    );
+  });
+
+  test("parseDateBoundary rejects invalid local calendar dates", () => {
+    assert.strictEqual(parseDateBoundary("2024-02-30", "start", "local"), undefined);
   });
 
   test("parseDateBoundary returns undefined for an unrecognized or invalid string", () => {
