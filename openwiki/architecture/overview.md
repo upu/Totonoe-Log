@@ -36,6 +36,7 @@ flowchart TD
 | ドメイン処理 | `src/normalize/` | parse、merge、filter、mask、collapse、format、line mappingを行う |
 | 仮想文書 | `src/virtualDocumentContentProvider.ts`, `normalizedView.ts`, `mergedView.ts`, `compareView.ts` | 読み取り専用本文、再フィルタ材料、元行対応をURI単位で保持する |
 | Interactive controller | `src/interactiveView.ts` | Webviewの状態、ファイル群、非同期処理、export、設定変更を調停する |
+| Interactive HTML template | `src/interactiveViewHtml.ts` | 拡張ホスト側でHTML/CSS、CSP、Webview script tagを組み立てる |
 | Webview UI | `src/webview/interactiveView/main.ts` | フォーム操作と安全なテキスト描画を行う |
 | 共有protocol | `src/webview/interactiveView/protocol.ts` | Node・DOM・`vscode`に依存しないJSON可能な型を定義する |
 
@@ -56,7 +57,9 @@ flowchart TD
 
 ## Interactive View経路
 
-`InteractiveViewPanelController` は同時に1パネルを管理する。Webviewは条件をJSONで送り、拡張ホストがworker threadを含む正規化処理を実行して、単一の `state` メッセージを返す。`RegExp` や `Set` は送信しない。
+`InteractiveViewPanelController` は同時に1パネルを管理する。パネル生成時はscript URIとnonceだけを `buildInteractiveViewHtml` へ渡し、`src/interactiveViewHtml.ts` が拡張ホスト側のHTML/CSSとCSPを構築する。このtemplateはbrowser bundleではないため `src/webview/` ではなく `src/` 直下に置かれ、`src/test/suite/interactiveViewHtml.test.ts` がCSPと `main.ts` の `getElementById` に対応する要素IDを検証する。
+
+Webviewは条件をJSONで送り、拡張ホストがworker threadを含む正規化処理を実行して、単一の `state` メッセージを返す。`RegExp` や `Set` は送信しない。
 
 ```mermaid
 sequenceDiagram
