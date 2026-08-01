@@ -24,12 +24,17 @@ CI相当の順序とOS差は[運用ランブック](/openwiki/operations/runbook
 | ファイル | 主な対象 |
 | --- | --- |
 | `src/test/suite/normalize.test.ts` | parse、timestamp、severity、filter、merge、mask、collapse、highlight、timezone、clock skew、line source |
-| `src/test/suite/extension.test.ts` | command登録、仮想文書、比較、マージ、設定、元行ジャンプ |
-| `src/test/suite/interactiveView.test.ts` | panel、criteria、file visibility、export、highlight設定 |
+| `src/test/suite/extension.test.ts` | command登録、比較、設定などの拡張統合 |
+| `src/test/suite/openInVirtualDocument.test.ts`, `mergedView.test.ts` | 単一・複数入力から仮想文書を開く経路、encoding、大容量fallback |
+| `src/test/suite/setViewFilterNormalized.test.ts`, `setViewFilterMerged.test.ts` | 開いた仮想文書へのfilter適用と行対応 |
+| `src/test/suite/goToSourceLine.test.ts`, `virtualDocumentGuard.test.ts` | 元行ジャンプと、整形済み文書を入力へ再利用しないガード |
+| `src/test/suite/interactiveView.test.ts`, `interactiveViewHtml.test.ts` | panel、criteria、file visibility、export、HTML/CSP、Webview要素ID契約 |
 | `src/test/suite/filterPrompts.test.ts` | QuickPick/InputBoxによるfilter入力 |
 | `src/test/suite/interactiveViewRefresh.test.ts` | latest-winsの世代管理 |
 
 純粋処理を `src/normalize/` に置く[アーキテクチャ境界](/openwiki/architecture/overview.md)により、広いドメインケースをUIから切り離して検証できる。[ソースマップ](/openwiki/source-map.md)から変更目的に対応するsuiteを選ぶ。
+
+`eslint.config.mjs` は `src/**/*.ts` の関数を空行・コメントを除いて最大60行に制限する。`src/test/**/*.ts` も対象だが、複数testを束ねる `suite()` callbackを考慮して最大200行である。大きな統合suiteは上表のように機能境界で分け、共有待機処理は `src/test/suite/support/waitForDocumentText.ts` のような非 `*.test.ts` helperへ置く。テスト名やassertionを変えずに配置だけを直す場合も、Mochaの `*.test.js` 検出対象とtest件数が変わらないことを確認する。
 
 ## 変更種別ごとの確認
 
@@ -43,7 +48,7 @@ severity/date/match/ignoreのAND・OR、空条件、複数行message、構文エ
 
 ### 表示整形・元行ジャンプ
 
-本文と `lineSources` の行数・順序、gap markerの `undefined`、collapse group、severity列幅、マージ `fileIndex` を確認する。pure formatterだけでなく `extension.test.ts` または `interactiveView.test.ts` で元行ジャンプまで通す。[ログ調査ワークフロー](/openwiki/workflows/log-investigation.md)にあるexportと大容量fallbackの差も守る。
+本文と `lineSources` の行数・順序、gap markerの `undefined`、collapse group、severity列幅、マージ `fileIndex` を確認する。pure formatterだけでなく `goToSourceLine.test.ts` または `interactiveView.test.ts` で元行ジャンプまで通す。[ログ調査ワークフロー](/openwiki/workflows/log-investigation.md)にあるexportと大容量fallbackの差は `openInVirtualDocument.test.ts` と `mergedView.test.ts` で守る。
 
 ### command・menu・configuration
 

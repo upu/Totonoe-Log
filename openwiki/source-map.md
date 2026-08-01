@@ -15,14 +15,14 @@ tags: [source-map, history, navigation]
 | 入力・encoding | `src/logFileReading.ts`, `src/logSourceDocument.ts` | `openVirtualDocument.ts`, `interactiveViewFiles.ts` |
 | parse・timestamp | `src/normalize/parseLog.ts`, `timestampFormats.ts`, `customTimestampFormats.ts` | `types.ts`, `normalize.test.ts` |
 | timezone・clock skew | `src/timezoneSettings.ts`, `clockSkewSettings.ts` | `src/normalize/timezone.ts`, `clockSkew.ts` |
-| merge | `src/normalize/mergeLogFiles.ts`, `src/mergedView.ts` | `formatMergedLog.ts`, `extension.test.ts` |
-| filter | `src/normalize/filterEntries.ts`, `src/filterPrompts.ts` | `setViewFilter.ts`, `interactiveViewCriteria.ts` |
+| merge | `src/normalize/mergeLogFiles.ts`, `src/mergedView.ts` | `formatMergedLog.ts`, `mergedView.test.ts` |
+| filter | `src/normalize/filterEntries.ts`, `src/filterPrompts.ts` | `setViewFilter.ts`, `setViewFilterNormalized.test.ts`, `setViewFilterMerged.test.ts` |
 | mask・compare | `maskForCompare.ts`, `displayMask.ts` | `copyMasked.ts`, `compareView.ts` |
 | collapse | `collapseRepeatedEntries.ts`, `collapseMergedEntries.ts` | `buildInteractiveCollapsedLines.ts` |
 | highlight | `highlightRules.ts`, `highlightDisplayLines.ts` | `highlightRuleSettings.ts`, Webview `main.ts` |
-| Interactive View | `src/interactiveView.ts` | `protocol.ts`, `main.ts`, `interactiveView.test.ts` |
-| 仮想文書 lifecycle | `src/virtualDocumentContentProvider.ts` | `normalizedView.ts`, `mergedView.ts`, `compareView.ts` |
-| 元行ジャンプ | `lineSources.ts`, `revealSourceLine.ts` | `goToSourceLine.ts`, Webview message |
+| Interactive View | `src/interactiveView.ts`, `src/interactiveViewHtml.ts` | `protocol.ts`, `main.ts`, `interactiveView.test.ts`, `interactiveViewHtml.test.ts` |
+| 仮想文書 lifecycle | `src/virtualDocumentContentProvider.ts` | `normalizedView.ts`, `mergedView.ts`, `compareView.ts`, `virtualDocumentGuard.test.ts` |
+| 元行ジャンプ | `lineSources.ts`, `revealSourceLine.ts` | `goToSourceLine.ts`, `goToSourceLine.test.ts`, Webview message |
 | build・release | `scripts/esbuild.js`, `package.json` | `check-package-contents.js`, `.github/workflows/` |
 
 責務の意味は[アーキテクチャ概要](/openwiki/architecture/overview.md)、データ規則は[ログ処理ドメイン](/openwiki/domain/log-processing.md)、利用順は[ログ調査ワークフロー](/openwiki/workflows/log-investigation.md)を参照する。

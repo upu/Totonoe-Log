@@ -21,7 +21,7 @@ tags: [integration, vscode, webview]
 | `totonoeLog.showInteractiveView` | Explorer選択またはアクティブエディタ | `createShowInteractiveViewCommand` |
 | `totonoeLog.goToSourceLineFromInteractiveView` | Webview右クリック行 | controller method |
 
-コマンドやmenuを変える場合は `package.json`、英日 `docs/features/commands.*.md`、必要なら英日README、`extension.test.ts` を同じ変更で揃える。
+コマンドやmenuを変える場合は `package.json`、英日 `docs/features/commands.*.md`、必要なら英日READMEを同じ変更で揃え、対象に応じて `extension.test.ts`、`openInVirtualDocument.test.ts`、`setViewFilterNormalized.test.ts`、`setViewFilterMerged.test.ts`、`goToSourceLine.test.ts` の公開面テストを更新する。
 
 ## URI schemeとprovider
 
