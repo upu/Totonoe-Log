@@ -19,17 +19,12 @@ import {
 import { createSetViewFilterCommand } from "./setViewFilter";
 import { createOpenVirtualDocumentCommand } from "./openVirtualDocument";
 
-export function activate(context: vscode.ExtensionContext): void {
-  const normalizedViewProvider = new NormalizedViewContentProvider();
-  const compareViewProvider = new CompareViewContentProvider();
-  const mergedViewProvider = new MergedViewContentProvider(context.globalStorageUri);
-  const interactiveViewController = new InteractiveViewPanelController(
-    context.extensionUri,
-    normalizedViewProvider,
-    mergedViewProvider
-  );
-
-  context.subscriptions.push(
+function registerNormalizedAndMergedViewFeatures(
+  normalizedViewProvider: NormalizedViewContentProvider,
+  mergedViewProvider: MergedViewContentProvider,
+  compareViewProvider: CompareViewContentProvider
+): vscode.Disposable[] {
+  return [
     vscode.workspace.registerTextDocumentContentProvider(
       MERGED_VIEW_SCHEME,
       mergedViewProvider
@@ -65,6 +60,13 @@ export function activate(context: vscode.ExtensionContext): void {
         ])
       )
     ),
+  ];
+}
+
+function registerCompareViewFeatures(
+  compareViewProvider: CompareViewContentProvider
+): vscode.Disposable[] {
+  return [
     vscode.workspace.registerTextDocumentContentProvider(
       COMPARE_VIEW_SCHEME,
       compareViewProvider
@@ -74,6 +76,14 @@ export function activate(context: vscode.ExtensionContext): void {
       "totonoeLog.compareLogs",
       createCompareLogsCommand(compareViewProvider)
     ),
+  ];
+}
+
+function registerSharedViewCommands(
+  normalizedViewProvider: NormalizedViewContentProvider,
+  mergedViewProvider: MergedViewContentProvider
+): vscode.Disposable[] {
+  return [
     vscode.commands.registerCommand("totonoeLog.copyMaskedText", copyMaskedLogText),
     // 行対応情報を登録するのは正規化ビュー（絞り込み・折りたたみ含む）と
     // マージビューの2プロバイダのみ。比較ビューは diff 表示専用のため対象外。
@@ -81,6 +91,13 @@ export function activate(context: vscode.ExtensionContext): void {
       "totonoeLog.goToSourceLine",
       createGoToSourceLineCommand([normalizedViewProvider, mergedViewProvider])
     ),
+  ];
+}
+
+function registerInteractiveViewFeatures(
+  interactiveViewController: InteractiveViewPanelController
+): vscode.Disposable[] {
+  return [
     interactiveViewController,
     vscode.commands.registerCommand(
       "totonoeLog.showInteractiveView",
@@ -91,7 +108,29 @@ export function activate(context: vscode.ExtensionContext): void {
     vscode.commands.registerCommand(
       "totonoeLog.goToSourceLineFromInteractiveView",
       (context: unknown) => interactiveViewController.revealSourceLineFromContext(context)
-    )
+    ),
+  ];
+}
+
+export function activate(context: vscode.ExtensionContext): void {
+  const normalizedViewProvider = new NormalizedViewContentProvider();
+  const compareViewProvider = new CompareViewContentProvider();
+  const mergedViewProvider = new MergedViewContentProvider(context.globalStorageUri);
+  const interactiveViewController = new InteractiveViewPanelController(
+    context.extensionUri,
+    normalizedViewProvider,
+    mergedViewProvider
+  );
+
+  context.subscriptions.push(
+    ...registerNormalizedAndMergedViewFeatures(
+      normalizedViewProvider,
+      mergedViewProvider,
+      compareViewProvider
+    ),
+    ...registerCompareViewFeatures(compareViewProvider),
+    ...registerSharedViewCommands(normalizedViewProvider, mergedViewProvider),
+    ...registerInteractiveViewFeatures(interactiveViewController)
   );
 }
 

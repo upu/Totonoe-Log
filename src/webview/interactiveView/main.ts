@@ -368,6 +368,76 @@ function moveHighlightRuleRow(row: HTMLElement, direction: -1 | 1): void {
   postHighlightRulesChanged();
 }
 
+function createHighlightRuleTextInput(
+  className: string,
+  value: string,
+  placeholder: string,
+  ariaLabel: string
+): HTMLInputElement {
+  const input = document.createElement("input");
+  input.type = "text";
+  input.className = className;
+  input.value = value;
+  input.placeholder = placeholder;
+  input.setAttribute("aria-label", ariaLabel);
+  input.addEventListener("input", postHighlightRulesChangedDebounced);
+  return input;
+}
+
+function createHighlightColorSelect(
+  patternInput: HTMLInputElement,
+  color: HighlightRuleRow["color"]
+): HTMLSelectElement {
+  const colorSelect = document.createElement("select");
+  colorSelect.className = "highlight-rule-color";
+  colorSelect.setAttribute("aria-label", "色");
+  for (const availableColor of HIGHLIGHT_COLORS) {
+    const option = document.createElement("option");
+    option.value = availableColor;
+    option.textContent = availableColor;
+    colorSelect.appendChild(option);
+  }
+  colorSelect.value = color;
+  const applyColorPreview = (): void => {
+    patternInput.className = `highlight-rule-pattern highlight-${colorSelect.value}`;
+  };
+  applyColorPreview();
+  colorSelect.addEventListener("change", () => {
+    applyColorPreview();
+    postHighlightRulesChanged();
+  });
+  return colorSelect;
+}
+
+function createHighlightMoveButton(row: HTMLElement, direction: -1 | 1): HTMLButtonElement {
+  const movesUp = direction === -1;
+  const button = document.createElement("button");
+  button.type = "button";
+  button.textContent = movesUp ? "▲" : "▼";
+  button.title = movesUp ? "優先度を上げる" : "優先度を下げる";
+  button.setAttribute(
+    "aria-label",
+    movesUp ? "このルールの優先度を上げる" : "このルールの優先度を下げる"
+  );
+  button.addEventListener("click", () => {
+    moveHighlightRuleRow(row, direction);
+  });
+  return button;
+}
+
+function createHighlightRemoveButton(row: HTMLElement): HTMLButtonElement {
+  const button = document.createElement("button");
+  button.type = "button";
+  button.textContent = "✕";
+  button.title = "このルールを削除する";
+  button.setAttribute("aria-label", "このハイライトルールを削除する");
+  button.addEventListener("click", () => {
+    row.remove();
+    postHighlightRulesChanged();
+  });
+  return button;
+}
+
 /**
  * ハイライトルール1行分を作る（issue #238）。色を選ぶと、その色をパターン欄の
  * 文字色にも反映して結果が見えるようにする——`option` 自体への着色は環境差が
@@ -377,68 +447,22 @@ function createHighlightRuleRow(rule: HighlightRuleRow): HTMLElement {
   const row = document.createElement("div");
   row.className = "highlight-rule-row";
 
-  const nameInput = document.createElement("input");
-  nameInput.type = "text";
-  nameInput.className = "highlight-rule-name";
-  nameInput.value = rule.name;
-  nameInput.placeholder = "名前（任意）";
-  nameInput.setAttribute("aria-label", "ルール名（任意）");
-  nameInput.addEventListener("input", postHighlightRulesChangedDebounced);
-
-  const patternInput = document.createElement("input");
-  patternInput.type = "text";
-  patternInput.className = "highlight-rule-pattern";
-  patternInput.value = rule.pattern;
-  patternInput.placeholder = "正規表現";
-  patternInput.setAttribute("aria-label", "ハイライトするパターン（正規表現）");
-  patternInput.addEventListener("input", postHighlightRulesChangedDebounced);
-
-  const colorSelect = document.createElement("select");
-  colorSelect.className = "highlight-rule-color";
-  colorSelect.setAttribute("aria-label", "色");
-  for (const color of HIGHLIGHT_COLORS) {
-    const option = document.createElement("option");
-    option.value = color;
-    option.textContent = color;
-    colorSelect.appendChild(option);
-  }
-  colorSelect.value = rule.color;
-  const applyColorPreview = (): void => {
-    patternInput.className = `highlight-rule-pattern highlight-${colorSelect.value}`;
-  };
-  applyColorPreview();
-  colorSelect.addEventListener("change", () => {
-    applyColorPreview();
-    postHighlightRulesChanged();
-  });
-
-  const moveUpButton = document.createElement("button");
-  moveUpButton.type = "button";
-  moveUpButton.textContent = "▲";
-  moveUpButton.title = "優先度を上げる";
-  moveUpButton.setAttribute("aria-label", "このルールの優先度を上げる");
-  moveUpButton.addEventListener("click", () => {
-    moveHighlightRuleRow(row, -1);
-  });
-
-  const moveDownButton = document.createElement("button");
-  moveDownButton.type = "button";
-  moveDownButton.textContent = "▼";
-  moveDownButton.title = "優先度を下げる";
-  moveDownButton.setAttribute("aria-label", "このルールの優先度を下げる");
-  moveDownButton.addEventListener("click", () => {
-    moveHighlightRuleRow(row, 1);
-  });
-
-  const removeButton = document.createElement("button");
-  removeButton.type = "button";
-  removeButton.textContent = "✕";
-  removeButton.title = "このルールを削除する";
-  removeButton.setAttribute("aria-label", "このハイライトルールを削除する");
-  removeButton.addEventListener("click", () => {
-    row.remove();
-    postHighlightRulesChanged();
-  });
+  const nameInput = createHighlightRuleTextInput(
+    "highlight-rule-name",
+    rule.name,
+    "名前（任意）",
+    "ルール名（任意）"
+  );
+  const patternInput = createHighlightRuleTextInput(
+    "highlight-rule-pattern",
+    rule.pattern,
+    "正規表現",
+    "ハイライトするパターン（正規表現）"
+  );
+  const colorSelect = createHighlightColorSelect(patternInput, rule.color);
+  const moveUpButton = createHighlightMoveButton(row, -1);
+  const moveDownButton = createHighlightMoveButton(row, 1);
+  const removeButton = createHighlightRemoveButton(row);
 
   row.append(
     nameInput,
