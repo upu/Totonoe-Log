@@ -21,6 +21,13 @@ export default tseslint.config(
         tsconfigRootDir: import.meta.dirname,
       },
     },
+    rules: {
+      // 「なぜ」を説明するコメントを厚くしても関数長として罰しない。
+      "max-lines-per-function": [
+        "error",
+        { max: 60, skipBlankLines: true, skipComments: true },
+      ],
+    },
   },
   {
     // src/test/**: test mocks intentionally overwrite `vscode.window.*`
@@ -33,6 +40,9 @@ export default tseslint.config(
     // `require-await` is relaxed here too.
     files: ["src/test/**/*.ts"],
     rules: {
+      // suite()/test() のコールバックも関数として数えられるため、テスト用の
+      // max 200 を導入する issue #264 まではプロダクションコードの閾値から除外する。
+      "max-lines-per-function": "off",
       "@typescript-eslint/no-explicit-any": "off",
       "@typescript-eslint/no-unsafe-argument": "off",
       "@typescript-eslint/no-unsafe-assignment": "off",

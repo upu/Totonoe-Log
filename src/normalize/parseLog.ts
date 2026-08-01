@@ -1,5 +1,5 @@
 import { getDefaultTimestampFormats } from "./timestampFormats";
-import type { LogEntry, TimestampFormat } from "./types";
+import type { LogEntry, TimestampFormat, TimestampParseContext } from "./types";
 
 /**
  * 認識済みのセベリティ / レベルトークン（重大度の低い順）。
@@ -50,6 +50,12 @@ interface MutableEntry {
   matched: boolean;
 }
 
+interface TimestampMatch {
+  readonly format: TimestampFormat;
+  readonly match: RegExpExecArray;
+  readonly timestampMs: number;
+}
+
 function finalizeEntry(entry: MutableEntry): LogEntry {
   const continuationLines = entry.lines.slice(1);
   const message = [entry.firstLineMessage ?? entry.lines[0], ...continuationLines].join("\n");
@@ -66,6 +72,63 @@ function finalizeEntry(entry: MutableEntry): LogEntry {
   };
 }
 
+function findTimestampMatch(
+  line: string,
+  timestampFormats: readonly TimestampFormat[],
+  parseContext: TimestampParseContext
+): TimestampMatch | undefined {
+  for (const format of timestampFormats) {
+    // g / y フラグ付きの正規表現は lastIndex が状態を持つため、
+    // 毎回リセットして次の行で誤動作しないようにする。
+    format.regex.lastIndex = 0;
+    const match = format.regex.exec(line);
+    if (match && match.index === 0) {
+      const timestampMs = format.parse(match, parseContext);
+      if (timestampMs !== undefined) {
+        return { format, match, timestampMs };
+      }
+    }
+  }
+  return undefined;
+}
+
+function createMatchedEntry(
+  line: string,
+  lineNumber: number,
+  timestampMatch: TimestampMatch
+): MutableEntry {
+  const remainderAfterTimestamp = line.slice(timestampMatch.match[0].length);
+  const severityMatch = SEVERITY_REGEX.exec(remainderAfterTimestamp);
+  const severity = severityMatch ? normalizeSeverity(severityMatch[1]) : undefined;
+  const remainderAfterSeverity = severityMatch
+    ? remainderAfterTimestamp.slice(severityMatch[0].length)
+    : remainderAfterTimestamp.replace(/^[\s\-:|]+/, "");
+
+  return {
+    timestampMs: timestampMatch.timestampMs,
+    rawTimestamp: timestampMatch.match[0],
+    timestampFormat: timestampMatch.format.name,
+    severity,
+    firstLineMessage: remainderAfterSeverity,
+    startLine: lineNumber,
+    lines: [line],
+    matched: true,
+  };
+}
+
+function createUnmatchedEntry(line: string, lineNumber: number): MutableEntry {
+  return {
+    timestampMs: undefined,
+    rawTimestamp: undefined,
+    timestampFormat: undefined,
+    severity: undefined,
+    firstLineMessage: undefined,
+    startLine: lineNumber,
+    lines: [line],
+    matched: false,
+  };
+}
+
 /**
  * 生のログテキストを共通の正規化構造（{@link LogEntry} 参照）に分割する。
  * これが Totonoe Log の他の全機能（絞り込み・マージ・折りたたみ・比較）の
@@ -79,7 +142,9 @@ function finalizeEntry(entry: MutableEntry): LogEntry {
  */
 export function parseLog(text: string, options: ParseLogOptions = {}): LogEntry[] {
   const timestampFormats = options.timestampFormats ?? getDefaultTimestampFormats();
-  const parseContext = { fallbackUtcOffsetMinutes: options.sourceUtcOffsetMinutes };
+  const parseContext: TimestampParseContext = {
+    fallbackUtcOffsetMinutes: options.sourceUtcOffsetMinutes,
+  };
   const lines = text.length === 0 ? [] : text.split(/\r\n|\r|\n/);
 
   const entries: LogEntry[] = [];
@@ -88,61 +153,17 @@ export function parseLog(text: string, options: ParseLogOptions = {}): LogEntry[
   for (let lineIndex = 0; lineIndex < lines.length; lineIndex++) {
     const line = lines[lineIndex];
     const lineNumber = lineIndex + 1;
-    let matchedFormat: TimestampFormat | undefined;
-    let match: RegExpExecArray | undefined;
-    let timestampMs: number | undefined;
+    const timestampMatch = findTimestampMatch(line, timestampFormats, parseContext);
 
-    for (const format of timestampFormats) {
-      // g / y フラグ付きの正規表現は lastIndex が状態を持つため、
-      // 毎回リセットして次の行で誤動作しないようにする。
-      format.regex.lastIndex = 0;
-      const candidate = format.regex.exec(line);
-      if (candidate && candidate.index === 0) {
-        const epochMs = format.parse(candidate, parseContext);
-        if (epochMs !== undefined) {
-          matchedFormat = format;
-          match = candidate;
-          timestampMs = epochMs;
-          break;
-        }
-      }
-    }
-
-    if (matchedFormat && match) {
+    if (timestampMatch) {
       if (current) {
         entries.push(finalizeEntry(current));
       }
-
-      const remainderAfterTimestamp = line.slice(match[0].length);
-      const severityMatch = SEVERITY_REGEX.exec(remainderAfterTimestamp);
-      const severity = severityMatch ? normalizeSeverity(severityMatch[1]) : undefined;
-      const remainderAfterSeverity = severityMatch
-        ? remainderAfterTimestamp.slice(severityMatch[0].length)
-        : remainderAfterTimestamp.replace(/^[\s\-:|]+/, "");
-
-      current = {
-        timestampMs,
-        rawTimestamp: match[0],
-        timestampFormat: matchedFormat.name,
-        severity,
-        firstLineMessage: remainderAfterSeverity,
-        startLine: lineNumber,
-        lines: [line],
-        matched: true,
-      };
+      current = createMatchedEntry(line, lineNumber, timestampMatch);
     } else if (current) {
       current.lines.push(line);
     } else {
-      current = {
-        timestampMs: undefined,
-        rawTimestamp: undefined,
-        timestampFormat: undefined,
-        severity: undefined,
-        firstLineMessage: undefined,
-        startLine: lineNumber,
-        lines: [line],
-        matched: false,
-      };
+      current = createUnmatchedEntry(line, lineNumber);
     }
   }
 

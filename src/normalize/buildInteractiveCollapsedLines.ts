@@ -271,6 +271,134 @@ function distinctInOrder<T>(values: readonly T[]): T[] {
   return [...new Set(values)];
 }
 
+interface MergedDisplayLayout {
+  readonly fileNameWidth: number;
+  readonly kindWidth: number;
+  readonly gutterWidth: number;
+  readonly severityWidth: number;
+}
+
+function formatMergedColumnPrefix(
+  fileName: string,
+  kind: string,
+  layout: MergedDisplayLayout
+): string {
+  return `${fileName.padEnd(layout.fileNameWidth)} | ${kind.padEnd(layout.kindWidth)} | `;
+}
+
+/**
+ * 見出しガターは、グループが1ファイルに収まっているときだけ行番号の範囲に
+ * できる（複数ファイルにまたがる場合の理由は {@link multiFileGroupGutterLabel} 参照）。
+ */
+function mergedGroupGutterLabel(
+  item: Extract<CollapsedMergedItem, { kind: "group" }>
+): string {
+  const entries = item.entries.map((merged) => merged.entry);
+  return distinctInOrder(item.entries.map((merged) => merged.fileIndex)).length > 1
+    ? multiFileGroupGutterLabel(entries)
+    : rangeLabel(entries);
+}
+
+function computeMergedDisplayLayout(
+  mergedEntries: readonly MergedEntry[],
+  items: readonly CollapsedMergedItem[]
+): MergedDisplayLayout {
+  // 列に載りうる値（各行の値と、グループ見出しの代表値）を全て集めてから幅を決める。
+  const fileNameCandidates = mergedEntries.map((merged) => merged.fileName);
+  const kindCandidates = mergedEntries.map((merged) => merged.kind);
+  for (const item of items) {
+    if (item.kind === "group") {
+      const spansMultipleFiles =
+        distinctInOrder(item.entries.map((merged) => merged.fileIndex)).length > 1;
+      const kinds = item.entries.map((merged) => merged.kind);
+      fileNameCandidates.push(
+        formatGroupColumnValue(item.entries.map((merged) => merged.fileName), spansMultipleFiles)
+      );
+      kindCandidates.push(
+        formatGroupColumnValue(kinds, kinds.some((kind) => kind !== kinds[0]))
+      );
+    }
+  }
+
+  let gutterWidth = String(
+    computeMaxLineNumber(mergedEntries.map((merged) => merged.entry))
+  ).length;
+  for (const item of items) {
+    if (item.kind === "group") {
+      gutterWidth = Math.max(gutterWidth, mergedGroupGutterLabel(item).length);
+    }
+  }
+
+  return {
+    fileNameWidth: fileNameCandidates.reduce((max, value) => Math.max(max, value.length), 0),
+    kindWidth: kindCandidates.reduce((max, value) => Math.max(max, value.length), 0),
+    gutterWidth,
+    severityWidth: computeSeverityWidth(mergedEntries.map((merged) => merged.entry)),
+  };
+}
+
+function formatMergedSingleDisplayLines(
+  item: Extract<CollapsedMergedItem, { kind: "single" }>,
+  layout: MergedDisplayLayout,
+  displayTimezone: DisplayTimezone,
+  mask: DisplayMaskOptions | undefined
+): InteractiveDisplayItem[] {
+  const { entry, fileName, kind, fileIndex } = item.merged;
+  return formatEntryLines(
+    entry,
+    layout.gutterWidth,
+    layout.severityWidth,
+    displayTimezone,
+    mask,
+    fileIndex,
+    formatMergedColumnPrefix(fileName, kind, layout)
+  ).map(({ text, lineSource }): InteractiveDisplayItem => ({ kind: "line", text, lineSource }));
+}
+
+function formatMergedGroupDisplayItem(
+  item: Extract<CollapsedMergedItem, { kind: "group" }>,
+  layout: MergedDisplayLayout,
+  displayTimezone: DisplayTimezone,
+  mask: DisplayMaskOptions | undefined
+): InteractiveDisplayItem {
+  const entries = item.entries.map((merged) => merged.entry);
+  const groupLines = item.entries.flatMap((merged) =>
+    formatEntryLines(
+      merged.entry,
+      layout.gutterWidth,
+      layout.severityWidth,
+      displayTimezone,
+      mask,
+      merged.fileIndex,
+      formatMergedColumnPrefix(merged.fileName, merged.kind, layout)
+    )
+  );
+  const fileIndices = distinctInOrder(item.entries.map((merged) => merged.fileIndex));
+  const kinds = item.entries.map((merged) => merged.kind);
+  return {
+    kind: "group",
+    headerText: formatGroupHeaderText(
+      entries,
+      layout.gutterWidth,
+      layout.severityWidth,
+      displayTimezone,
+      mask,
+      formatMergedColumnPrefix(
+        formatGroupColumnValue(
+          item.entries.map((merged) => merged.fileName),
+          fileIndices.length > 1
+        ),
+        formatGroupColumnValue(kinds, kinds.some((kind) => kind !== kinds[0])),
+        layout
+      ),
+      mergedGroupGutterLabel(item)
+    ),
+    headerFileIndices: fileIndices,
+    lines: groupLines.map((line) => line.text),
+    lineSources: groupLines.map((line) => line.lineSource),
+  };
+}
+
 /**
  * {@link buildInteractiveCollapsedLines} のマージ版（issue #158）。
  * 単一ファイル表示と同じ折りたたみを、ファイル名/種別列付きのマージ表示でも
@@ -291,100 +419,15 @@ export function buildInteractiveMergedCollapsedLines(
     threshold: options.threshold ?? DEFAULT_COLLAPSE_THRESHOLD,
     mask: options.mask,
   });
-
-  // 列に載りうる値（各行の値と、グループ見出しの代表値）を全て集めてから幅を決める。
-  const fileNameCandidates: string[] = mergedEntries.map((merged) => merged.fileName);
-  const kindCandidates: string[] = mergedEntries.map((merged) => merged.kind);
-  for (const item of items) {
-    if (item.kind === "group") {
-      const spansMultipleFiles =
-        distinctInOrder(item.entries.map((merged) => merged.fileIndex)).length > 1;
-      const kinds = item.entries.map((merged) => merged.kind);
-      fileNameCandidates.push(
-        formatGroupColumnValue(item.entries.map((merged) => merged.fileName), spansMultipleFiles)
-      );
-      kindCandidates.push(
-        formatGroupColumnValue(kinds, kinds.some((kind) => kind !== kinds[0]))
-      );
-    }
-  }
-  const fileNameWidth = fileNameCandidates.reduce((max, value) => Math.max(max, value.length), 0);
-  const kindWidth = kindCandidates.reduce((max, value) => Math.max(max, value.length), 0);
-  const columnPrefixOf = (fileName: string, kind: string): string =>
-    `${fileName.padEnd(fileNameWidth)} | ${kind.padEnd(kindWidth)} | `;
-
-  // 見出しガターは、グループが1ファイルに収まっているときだけ行番号の範囲に
-  // できる（複数ファイルにまたがる場合の理由は multiFileGroupGutterLabel 参照）。
-  const gutterLabelOf = (item: Extract<CollapsedMergedItem, { kind: "group" }>): string => {
-    const entries = item.entries.map((merged) => merged.entry);
-    return distinctInOrder(item.entries.map((merged) => merged.fileIndex)).length > 1
-      ? multiFileGroupGutterLabel(entries)
-      : rangeLabel(entries);
-  };
-
-  let gutterWidth = String(
-    computeMaxLineNumber(mergedEntries.map((merged) => merged.entry))
-  ).length;
-  const severityWidth = computeSeverityWidth(mergedEntries.map((merged) => merged.entry));
-  for (const item of items) {
-    if (item.kind === "group") {
-      gutterWidth = Math.max(gutterWidth, gutterLabelOf(item).length);
-    }
-  }
+  const layout = computeMergedDisplayLayout(mergedEntries, items);
 
   const result: InteractiveDisplayItem[] = [];
   for (const item of items) {
     if (item.kind === "single") {
-      const { entry, fileName, kind, fileIndex } = item.merged;
-      for (const { text, lineSource } of formatEntryLines(
-        entry,
-        gutterWidth,
-        severityWidth,
-        displayTimezone,
-        options.mask,
-        fileIndex,
-        columnPrefixOf(fileName, kind)
-      )) {
-        result.push({ kind: "line", text, lineSource });
-      }
+      result.push(...formatMergedSingleDisplayLines(item, layout, displayTimezone, options.mask));
       continue;
     }
-
-    const entries = item.entries.map((merged) => merged.entry);
-    const groupLines = item.entries.flatMap((merged) =>
-      formatEntryLines(
-        merged.entry,
-        gutterWidth,
-        severityWidth,
-        displayTimezone,
-        options.mask,
-        merged.fileIndex,
-        columnPrefixOf(merged.fileName, merged.kind)
-      )
-    );
-    const fileIndices = distinctInOrder(item.entries.map((merged) => merged.fileIndex));
-    const kinds = item.entries.map((merged) => merged.kind);
-    result.push({
-      kind: "group",
-      headerText: formatGroupHeaderText(
-        entries,
-        gutterWidth,
-        severityWidth,
-        displayTimezone,
-        options.mask,
-        columnPrefixOf(
-          formatGroupColumnValue(
-            item.entries.map((merged) => merged.fileName),
-            fileIndices.length > 1
-          ),
-          formatGroupColumnValue(kinds, kinds.some((kind) => kind !== kinds[0]))
-        ),
-        gutterLabelOf(item)
-      ),
-      headerFileIndices: fileIndices,
-      lines: groupLines.map((line) => line.text),
-      lineSources: groupLines.map((line) => line.lineSource),
-    });
+    result.push(formatMergedGroupDisplayItem(item, layout, displayTimezone, options.mask));
   }
   return result;
 }

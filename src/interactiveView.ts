@@ -84,6 +84,13 @@ const WEBVIEW_SCRIPT_RELATIVE_PATH = ["out", "webview", "interactiveView", "main
 /** 折りたたみのしきい値を読み込むVSCode設定のセクション名。 */
 const COLLAPSE_CONFIG_SECTION = "totonoeLog.collapse";
 
+interface PreparedInteractiveState {
+  readonly criteria: FilterCriteria;
+  readonly warnings: readonly string[];
+  readonly collapsibleSupported: boolean;
+  readonly formatOptions: BuildInteractivePayloadOptions;
+}
+
 /**
  * チェック済みセベリティ・空の日付範囲・空の無視パターン・折りたたみONという
  * 初期状態を作る（issue #172、デフォルトON）。
@@ -585,6 +592,72 @@ export class InteractiveViewPanelController implements vscode.Disposable {
     return this.loadedFiles[0]?.uri;
   }
 
+  private prepareInteractiveState(
+    criteriaSnapshot: SerializedFilterCriteria
+  ): PreparedInteractiveState {
+    const displayTimezone = readDisplayTimezone();
+    const { criteria, errors } = toFilterCriteria(criteriaSnapshot, displayTimezone);
+    const maskPatterns = this.compileEnabledMaskPatterns();
+    // 認識率の警告（issue #186）は入力の不備と違い、読み込んだファイルの性質
+    // として出続けるものなので先頭に置き、後から増える入力エラーで位置が
+    // 動かないようにする。
+    const warnings = [...this.recognitionWarnings, ...errors, ...maskPatterns.errors];
+    // マージ表示（2ファイル以上）でも折りたたみが効く（issue #158）。
+    const collapsibleSupported = true;
+    return {
+      criteria,
+      warnings,
+      collapsibleSupported,
+      formatOptions: {
+        gapThresholdMs: readGapThresholdMs(),
+        displayTimezone,
+        collapseThreshold:
+          collapsibleSupported && criteriaSnapshot.collapseEnabled
+            ? readCollapseThreshold()
+            : undefined,
+        mask: toDisplayMaskOptions(criteriaSnapshot),
+        maskPatterns: maskPatterns.patterns,
+        visibleFileIndices: toVisibleFileIndices(criteriaSnapshot.visibleFiles),
+      },
+    };
+  }
+
+  private async postFallbackState(
+    failedPayload: Extract<InteractivePayloadResult, { ok: false }>,
+    prepared: PreparedInteractiveState,
+    criteriaSnapshot: SerializedFilterCriteria,
+    revision: number
+  ): Promise<void> {
+    // 失敗した結果はどちらのパターン段で起きたかを区別しないため、
+    // フォールバックでは両方を落とす（issue #182）。片方だけ残して再実行すると、
+    // 原因がそちらだった場合に同じ失敗を繰り返すだけになる。
+    const fallbackCriteria: FilterCriteria = {
+      ...prepared.criteria,
+      matchPatterns: undefined,
+      ignorePatterns: undefined,
+    };
+    const fallbackPayload = await this.computePayload(fallbackCriteria, prepared.formatOptions);
+    if (!this.refreshGate.isCurrent(revision) || !fallbackPayload.ok) {
+      return;
+    }
+
+    const reason =
+      failedPayload.reason === "timeout"
+        ? "入力されたパターンの処理に時間がかかりすぎたため、一致パターンと無視パターンを適用せずに表示しています。より単純なパターンをお試しください。"
+        : "パターンの評価中にエラーが発生したため、一致パターンと無視パターンを適用せずに表示しています。";
+    await this.sendState(
+      fallbackPayload,
+      [
+        ...prepared.warnings,
+        reason,
+        ...maskPatternFailureWarnings(fallbackPayload.maskPatternFailure, "表示しています"),
+      ],
+      prepared.collapsibleSupported,
+      criteriaSnapshot,
+      revision
+    );
+  }
+
   /**
    * 現在の `this.criteria` を実際に適用して結果を送り返す。無視パターンの
    * 評価がタイムアウト/エラーになった場合は、そのパターンだけを外して
@@ -602,29 +675,8 @@ export class InteractiveViewPanelController implements vscode.Disposable {
     // （書き換えではない）ため参照を保持すれば足りる。送信時に読み直すと、
     // 計算中に届いた新しい条件と、この計算の結果とが1つのメッセージに混ざる。
     const criteriaSnapshot = this.criteria;
-
-    const displayTimezone = readDisplayTimezone();
-    const { criteria, errors } = toFilterCriteria(criteriaSnapshot, displayTimezone);
-    const maskPatterns = this.compileEnabledMaskPatterns();
-    // 認識率の警告（issue #186）は入力の不備と違い、読み込んだファイルの性質
-    // として出続けるものなので先頭に置き、後から増える入力エラーで位置が
-    // 動かないようにする。
-    const warnings = [...this.recognitionWarnings, ...errors, ...maskPatterns.errors];
-    // マージ表示（2ファイル以上）でも折りたたみが効く（issue #158）。
-    const collapsibleSupported = true;
-    const formatOptions: BuildInteractivePayloadOptions = {
-      gapThresholdMs: readGapThresholdMs(),
-      displayTimezone,
-      collapseThreshold:
-        collapsibleSupported && criteriaSnapshot.collapseEnabled
-          ? readCollapseThreshold()
-          : undefined,
-      mask: toDisplayMaskOptions(criteriaSnapshot),
-      maskPatterns: maskPatterns.patterns,
-      visibleFileIndices: toVisibleFileIndices(criteriaSnapshot.visibleFiles),
-    };
-
-    const payload = await this.computePayload(criteria, formatOptions);
+    const prepared = this.prepareInteractiveState(criteriaSnapshot);
+    const payload = await this.computePayload(prepared.criteria, prepared.formatOptions);
     if (!this.refreshGate.isCurrent(revision)) {
       return;
     }
@@ -632,44 +684,17 @@ export class InteractiveViewPanelController implements vscode.Disposable {
     if (payload.ok) {
       await this.sendState(
         payload,
-        [...warnings, ...maskPatternFailureWarnings(payload.maskPatternFailure, "表示しています")],
-        collapsibleSupported,
-        criteriaSnapshot,
-        revision
-      );
-      return;
-    }
-
-    // 失敗した結果はどちらのパターン段で起きたかを区別しないため、
-    // フォールバックでは両方を落とす（issue #182）。片方だけ残して再実行すると、
-    // 原因がそちらだった場合に同じ失敗を繰り返すだけになる。
-    const fallbackCriteria: FilterCriteria = {
-      ...criteria,
-      matchPatterns: undefined,
-      ignorePatterns: undefined,
-    };
-    const fallbackPayload = await this.computePayload(fallbackCriteria, formatOptions);
-    if (!this.refreshGate.isCurrent(revision)) {
-      return;
-    }
-
-    if (fallbackPayload.ok) {
-      const reason =
-        payload.reason === "timeout"
-          ? "入力されたパターンの処理に時間がかかりすぎたため、一致パターンと無視パターンを適用せずに表示しています。より単純なパターンをお試しください。"
-          : "パターンの評価中にエラーが発生したため、一致パターンと無視パターンを適用せずに表示しています。";
-      await this.sendState(
-        fallbackPayload,
         [
-          ...warnings,
-          reason,
-          ...maskPatternFailureWarnings(fallbackPayload.maskPatternFailure, "表示しています"),
+          ...prepared.warnings,
+          ...maskPatternFailureWarnings(payload.maskPatternFailure, "表示しています"),
         ],
-        collapsibleSupported,
+        prepared.collapsibleSupported,
         criteriaSnapshot,
         revision
       );
+      return;
     }
+    await this.postFallbackState(payload, prepared, criteriaSnapshot, revision);
   }
 
   /**
