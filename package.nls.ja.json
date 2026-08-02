@@ -12,7 +12,7 @@
   "totonoeLog.copyMasked.maskHost.description": "Totonoe Log: マスク済みテキストをコピー 実行時にIPv4/IPv6アドレスと、syslog形式として認識できた行のホスト名トークンをマスクする（任意の形式のホスト名全般ではない）。",
   "totonoeLog.copyMasked.maskProcessId.description": "Totonoe Log: マスク済みテキストをコピー 実行時にプロセスIDをマスクする（syslog形式の sshd[1234]: と、pid=1234 のようにpidと明記された表記）。Interactive View のマスクパネルの初期値にもなる。",
   "totonoeLog.collapse.threshold.description": "Totonoe Log: Interactive View を表示 の「繰り返しを折りたたむ」で、何回以上連続で繰り返されたら1行に折りたたむかのしきい値。",
-  "totonoeLog.gap.thresholdSeconds.description": "「Totonoe Log: 仮想ドキュメントで開く」で生成したビューで、連続するエントリのタイムスタンプ差がこの秒数以上のときに「XX秒の空白」の区切り行を挿入する。絞り込み後にも再計算される。0 を指定すると無効化する。",
+  "totonoeLog.gap.thresholdSeconds.description": "仮想ドキュメントと Interactive View を含む Totonoe Log の各ビューで、連続するエントリのタイムスタンプ差がこの秒数以上のときに「XX秒の空白」の区切り行を挿入する。絞り込み後にも再計算される。0 を指定すると無効化する。",
   "totonoeLog.interactiveView.maxDisplayLines.description": "Totonoe Log: Interactive View を表示 が一度に描画する行数の上限。超えた場合は先頭のみを表示し、警告と全体を開く手段（Export as Virtual Document）を案内する。0 を指定すると無効化する。",
   "totonoeLog.timezone.display.description": "各ビューでタイムスタンプを表示するタイムゾーン。\"UTC\"、\"local\"（このマシンのローカルタイムゾーン）、または \"+09:00\" のような UTC オフセットを指定する。UTC 以外はオフセット付き（例: 2024-01-02T12:04:05.000+09:00）で表示される。",
   "totonoeLog.timezone.sourceOffset.description": "タイムゾーン表記を持たないタイムスタンプ（例: 2024-01-02 03:04:05）を解釈するときに仮定する UTC オフセット（例: \"+09:00\"）。明示的なオフセットや Z を持つタイムスタンプ、エポック形式には影響しない。",
