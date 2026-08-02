@@ -8,6 +8,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- Command Palette labels, Settings descriptions, and Marketplace metadata now
+  follow VS Code's display language, with English as the source language and a
+  Japanese localization, instead of showing Japanese Settings descriptions to
+  every user (issue #276).
+
 ## [0.10.0] - 2026-08-01
 
 ### Removed

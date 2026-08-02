@@ -8,8 +8,9 @@ feature is *for* is explained in the [README](../../README.md), and each entry
 links back to the relevant section there.
 
 All commands are prefixed with `Totonoe Log:` in the Command Palette
-(`Ctrl+Shift+P`). Settings are written here without their namespace —
-`gap.thresholdSeconds` means `totonoeLog.gap.thresholdSeconds` in
+(`Ctrl+Shift+P`). The labels follow VS Code's display language; this English
+page uses the English labels. Settings are written here without their
+namespace — `gap.thresholdSeconds` means `totonoeLog.gap.thresholdSeconds` in
 `settings.json`.
 
 ## At a glance

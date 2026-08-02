@@ -1,7 +1,7 @@
 {
   "name": "totonoe-log",
-  "displayName": "Totonoe Log",
-  "description": "Normalize, merge, filter, collapse, and compare messy logs.",
+  "displayName": "%displayName%",
+  "description": "%description%",
   "version": "0.10.0",
   "publisher": "upu",
   "icon": "media/icon.png",
@@ -39,31 +39,31 @@
     "commands": [
       {
         "command": "totonoeLog.openVirtualDocument",
-        "title": "Totonoe Log: Open in Virtual Document"
+        "title": "%command.totonoeLog.openVirtualDocument.title%"
       },
       {
         "command": "totonoeLog.setViewFilter",
-        "title": "Totonoe Log: Set Filter"
+        "title": "%command.totonoeLog.setViewFilter.title%"
       },
       {
         "command": "totonoeLog.compareLogs",
-        "title": "Totonoe Log: Compare Logs"
+        "title": "%command.totonoeLog.compareLogs.title%"
       },
       {
         "command": "totonoeLog.copyMaskedText",
-        "title": "Totonoe Log: Copy Masked Text"
+        "title": "%command.totonoeLog.copyMaskedText.title%"
       },
       {
         "command": "totonoeLog.goToSourceLine",
-        "title": "Totonoe Log: Go to Source Line"
+        "title": "%command.totonoeLog.goToSourceLine.title%"
       },
       {
         "command": "totonoeLog.showInteractiveView",
-        "title": "Totonoe Log: Show Interactive View"
+        "title": "%command.totonoeLog.showInteractiveView.title%"
       },
       {
         "command": "totonoeLog.goToSourceLineFromInteractiveView",
-        "title": "Totonoe Log: Go to Source Line"
+        "title": "%command.totonoeLog.goToSourceLineFromInteractiveView.title%"
       }
     ],
     "menus": {
@@ -111,50 +111,50 @@
         "totonoeLog.copyMasked.maskTimestamp": {
           "type": "boolean",
           "default": true,
-          "description": "Totonoe Log: Copy Masked Text 実行時にタイムスタンプをマスクする。"
+          "description": "%totonoeLog.copyMasked.maskTimestamp.description%"
         },
         "totonoeLog.copyMasked.maskHost": {
           "type": "boolean",
           "default": true,
-          "description": "Totonoe Log: Copy Masked Text 実行時にIPv4/IPv6アドレスと、syslog形式として認識できた行のホスト名トークンをマスクする（任意の形式のホスト名全般ではない）。"
+          "description": "%totonoeLog.copyMasked.maskHost.description%"
         },
         "totonoeLog.copyMasked.maskProcessId": {
           "type": "boolean",
           "default": false,
-          "description": "Totonoe Log: Copy Masked Text 実行時にプロセスIDをマスクする（syslog形式の sshd[1234]: と、pid=1234 のようにpidと明記された表記）。Interactive View のマスクパネルの初期値にもなる。"
+          "description": "%totonoeLog.copyMasked.maskProcessId.description%"
         },
         "totonoeLog.collapse.threshold": {
           "type": "number",
           "default": 3,
           "minimum": 2,
-          "description": "Totonoe Log: Show Interactive View の「繰り返しを折りたたむ」で、何回以上連続で繰り返されたら1行に折りたたむかのしきい値。"
+          "description": "%totonoeLog.collapse.threshold.description%"
         },
         "totonoeLog.gap.thresholdSeconds": {
           "type": "number",
           "default": 30,
           "minimum": 0,
-          "description": "Totonoe Log: Show Normalized View とその絞り込み系コマンドで、連続するエントリのタイムスタンプ差がこの秒数以上のときに「XX秒の空白」の区切り行を挿入する。0 を指定すると無効化する。"
+          "description": "%totonoeLog.gap.thresholdSeconds.description%"
         },
         "totonoeLog.interactiveView.maxDisplayLines": {
           "type": "number",
           "default": 20000,
           "minimum": 0,
-          "description": "Totonoe Log: Show Interactive View が一度に描画する行数の上限。超えた場合は先頭のみを表示し、警告と全体を開く手段（Export as Virtual Document）を案内する。0 を指定すると無効化する。"
+          "description": "%totonoeLog.interactiveView.maxDisplayLines.description%"
         },
         "totonoeLog.timezone.display": {
           "type": "string",
           "default": "UTC",
-          "description": "各ビューでタイムスタンプを表示するタイムゾーン。\"UTC\"、\"local\"（このマシンのローカルタイムゾーン）、または \"+09:00\" のような UTC オフセットを指定する。UTC 以外はオフセット付き（例: 2024-01-02T12:04:05.000+09:00）で表示される。"
+          "description": "%totonoeLog.timezone.display.description%"
         },
         "totonoeLog.timezone.sourceOffset": {
           "type": "string",
           "default": "UTC",
-          "description": "タイムゾーン表記を持たないタイムスタンプ（例: 2024-01-02 03:04:05）を解釈するときに仮定する UTC オフセット（例: \"+09:00\"）。明示的なオフセットや Z を持つタイムスタンプ、エポック形式には影響しない。"
+          "description": "%totonoeLog.timezone.sourceOffset.description%"
         },
         "totonoeLog.timezone.fileOffsets": {
           "type": "array",
           "default": [],
-          "markdownDescription": "ファイル名パターンごとに `totonoeLog.timezone.sourceOffset` を上書きする。マージ時にサーバごとのタイムゾーン違いを補正する用途。上から順に評価し、最初にマッチした規則を使う。",
+          "markdownDescription": "%totonoeLog.timezone.fileOffsets.description%",
           "items": {
             "type": "object",
             "required": [
@@ -164,11 +164,11 @@
             "properties": {
               "filePattern": {
                 "type": "string",
-                "description": "ファイル名（パスを除いたベース名）にマッチさせる正規表現。"
+                "description": "%totonoeLog.timezone.fileOffsets.filePattern.description%"
               },
               "offset": {
                 "type": "string",
-                "description": "適用する UTC オフセット（例: \"+09:00\"）。"
+                "description": "%totonoeLog.timezone.fileOffsets.offset.description%"
               }
             }
           }
@@ -176,7 +176,7 @@
         "totonoeLog.clockSkew.fileOffsets": {
           "type": "array",
           "default": [],
-          "markdownDescription": "時計がずれているホストのログの時刻を、ファイル名パターンごとに±N秒補正する。タイムゾーン表記の有無にかかわらず全タイムスタンプに適用され、マージ・正規化ビューは補正後の時刻を使う。上から順に評価し、最初にマッチした規則を使う。",
+          "markdownDescription": "%totonoeLog.clockSkew.fileOffsets.description%",
           "items": {
             "type": "object",
             "required": [
@@ -186,11 +186,11 @@
             "properties": {
               "filePattern": {
                 "type": "string",
-                "description": "ファイル名（パスを除いたベース名）にマッチさせる正規表現。"
+                "description": "%totonoeLog.clockSkew.fileOffsets.filePattern.description%"
               },
               "offsetSeconds": {
                 "type": "number",
-                "description": "適用する補正量（秒）。時計が進んでいるホストには負の値（例: -40）で戻す。"
+                "description": "%totonoeLog.clockSkew.fileOffsets.offsetSeconds.description%"
               }
             }
           }
@@ -198,7 +198,7 @@
         "totonoeLog.timestampFormats": {
           "type": "array",
           "default": [],
-          "markdownDescription": "組み込みで認識されないタイムスタンプ形式を、正規表現＋名前付きキャプチャグループで追加する。組み込み形式より先に試行される。カレンダー形式はグループ `y` `mo` `d` `h` `mi` `s`（任意で `ms` `tzs` `tzh` `tzm`）、エポック形式はグループ `epochMs` または `epochSec`（任意で `ms`）を含めること。詳細は README の「Custom timestamp formats」参照。",
+          "markdownDescription": "%totonoeLog.timestampFormats.description%",
           "items": {
             "type": "object",
             "required": [
@@ -207,11 +207,11 @@
             "properties": {
               "name": {
                 "type": "string",
-                "description": "この形式の表示名。省略時は custom-<連番>。"
+                "description": "%totonoeLog.timestampFormats.name.description%"
               },
               "pattern": {
                 "type": "string",
-                "description": "行頭のタイムスタンプにマッチする正規表現（自動的に行頭へアンカーされる）。名前付きキャプチャグループでパース方法を指定する。"
+                "description": "%totonoeLog.timestampFormats.pattern.description%"
               }
             }
           }
@@ -219,7 +219,7 @@
         "totonoeLog.highlightRules": {
           "type": "array",
           "default": [],
-          "markdownDescription": "Interactive View で目立たせたいキーワード/パターンを登録する。一致した箇所だけに色が付き、行は消えない（絞り込みとは別）。パターンは正規表現として解釈され、大文字小文字は区別しない。詳細は README の「Highlight rules」参照。",
+          "markdownDescription": "%totonoeLog.highlightRules.description%",
           "items": {
             "type": "object",
             "required": [
@@ -228,11 +228,11 @@
             "properties": {
               "name": {
                 "type": "string",
-                "description": "このルールの表示名。設定を見分けるためと、警告文言に使う。省略時は highlight-<連番>。"
+                "description": "%totonoeLog.highlightRules.name.description%"
               },
               "pattern": {
                 "type": "string",
-                "description": "色を付ける箇所にマッチする正規表現（大文字小文字は区別しない）。1行の中の一致箇所はすべて色が付く。"
+                "description": "%totonoeLog.highlightRules.pattern.description%"
               },
               "color": {
                 "type": "string",
@@ -245,7 +245,7 @@
                   "purple"
                 ],
                 "default": "yellow",
-                "description": "色。明るいテーマ・暗いテーマそれぞれで読める値が使われる。省略時は yellow。"
+                "description": "%totonoeLog.highlightRules.color.description%"
               }
             }
           }

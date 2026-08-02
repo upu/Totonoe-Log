@@ -20,6 +20,8 @@ const EXPECTED = [
   "out/extension.js",
   "out/webview/interactiveView/main.js",
   "package.json",
+  "package.nls.ja.json",
+  "package.nls.json",
 ];
 
 function listPackagedFiles() {
