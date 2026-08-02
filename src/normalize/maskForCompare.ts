@@ -167,12 +167,12 @@ export function maskLogTextForCopy(
     if (entry.matched && entry.rawTimestamp !== undefined) {
       let afterTimestamp = lines[0].slice(entry.rawTimestamp.length);
       if (entry.timestampFormat === "syslog") {
-        if (maskHost) {
-          afterTimestamp = afterTimestamp.replace(/^(\s*)(\S+)/, `$1${HOST_PLACEHOLDER}`);
-        }
-        if (maskProcessId) {
-          afterTimestamp = maskSyslogTagProcessId(afterTimestamp);
-        }
+        afterTimestamp = maskHost
+          ? afterTimestamp.replace(/^(\s*)(\S+)/, `$1${HOST_PLACEHOLDER}`)
+          : afterTimestamp;
+        afterTimestamp = maskProcessId
+          ? maskSyslogTagProcessId(afterTimestamp)
+          : afterTimestamp;
       }
       lines[0] = (maskTimestamp ? TIMESTAMP_PLACEHOLDER : entry.rawTimestamp) + afterTimestamp;
     }
