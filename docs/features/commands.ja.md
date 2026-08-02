@@ -7,6 +7,7 @@ Totonoe Log が提供する全コマンドを、コマンドID・起動導線・
 [README](../../README.ja.md) 側で説明しており、各項目からその節へリンクしている。
 
 コマンドパレット（`Ctrl+Shift+P`）では、すべて `Totonoe Log:` の接頭辞が付く。
+ラベルは VS Code の表示言語に従い、この日本語ページでは日本語ラベルを記載する。
 設定名はこのページでは名前空間を省いて書いている。`gap.thresholdSeconds` は
 `settings.json` 上の `totonoeLog.gap.thresholdSeconds` を指す。
 
@@ -14,20 +15,20 @@ Totonoe Log が提供する全コマンドを、コマンドID・起動導線・
 
 | コマンド | ID | 起動導線 | 対象 |
 | --- | --- | --- | --- |
-| Show Interactive View | `totonoeLog.showInteractiveView` | パレット、エクスプローラ右クリック | エクスプローラの選択、無ければアクティブエディタ |
-| Open in Virtual Document | `totonoeLog.openVirtualDocument` | パレット、エクスプローラ右クリック | エクスプローラの選択、無ければアクティブエディタ |
-| Set Filter | `totonoeLog.setViewFilter` | パレット、エディタ右クリック | 正規化ビュー／マージビューのアクティブなタブ |
-| Compare Logs | `totonoeLog.compareLogs` | パレット | ダイアログで選ぶ2ファイル |
-| Copy Masked Text | `totonoeLog.copyMaskedText` | パレット | アクティブエディタの選択範囲、無ければ全体 |
-| Go to Source Line | `totonoeLog.goToSourceLine` | パレット、エディタ右クリック | 正規化ビュー／マージビューのカーソル行 |
-| Go to Source Line | `totonoeLog.goToSourceLineFromInteractiveView` | Interactive View の右クリックのみ | パネル上で右クリックした行 |
+| Interactive View を表示 | `totonoeLog.showInteractiveView` | パレット、エクスプローラ右クリック | エクスプローラの選択、無ければアクティブエディタ |
+| 仮想ドキュメントで開く | `totonoeLog.openVirtualDocument` | パレット、エクスプローラ右クリック | エクスプローラの選択、無ければアクティブエディタ |
+| フィルターを設定 | `totonoeLog.setViewFilter` | パレット、エディタ右クリック | 正規化ビュー／マージビューのアクティブなタブ |
+| ログを比較 | `totonoeLog.compareLogs` | パレット | ダイアログで選ぶ2ファイル |
+| マスク済みテキストをコピー | `totonoeLog.copyMaskedText` | パレット | アクティブエディタの選択範囲、無ければ全体 |
+| 元の行へ移動 | `totonoeLog.goToSourceLine` | パレット、エディタ右クリック | 正規化ビュー／マージビューのカーソル行 |
+| 元の行へ移動 | `totonoeLog.goToSourceLineFromInteractiveView` | Interactive View の右クリックのみ | パネル上で右クリックした行 |
 
-`Show Interactive View` と `Open in Virtual Document` は入力の解決規則がまったく
+`Interactive View を表示` と `仮想ドキュメントで開く` は入力の解決規則がまったく
 同じで、違いは出力先（Webview パネルか、読み取り専用の仮想ドキュメントか）だけ。
 どちらも選択が2つ以上ならマージ表示に切り替わるので、**選択の数でコマンドを
 選び分ける必要は無い**。
 
-**Go to Source Line** という同じタイトルのコマンドが2つあるのは、同じ操作を別の
+**元の行へ移動** という同じタイトルのコマンドが2つあるのは、同じ操作を別の
 場所で提供しているため。Interactive View 用のほうはコマンドパレットから隠して
 あり（`when: false`）、パレットに出るのはもう一方だけ。
 
@@ -36,12 +37,12 @@ Totonoe Log が提供する全コマンドを、コマンドID・起動導線・
 - **コマンドパレット** — `totonoeLog.goToSourceLineFromInteractiveView` 以外の
   すべて
 - **エクスプローラ右クリック** — フォルダ以外（`!explorerResourceIsFolder`）に
-  `Open in Virtual Document` と `Show Interactive View`。単一選択でも出る
-- **エディタ右クリック** — `Go to Source Line` と `Set Filter`。どちらも
+  `仮想ドキュメントで開く` と `Interactive View を表示`。単一選択でも出る
+- **エディタ右クリック** — `元の行へ移動` と `フィルターを設定`。どちらも
   Totonoe Log が生成する読み取り専用ビュー（`totonoe-log-normalized` /
   `totonoe-log-merged`）の上でのみ出る
 - **Interactive View の右クリック** — パネル内のログ行に対する
-  `Go to Source Line`
+  `元の行へ移動`
 
 既定のキーバインドが割り当てられたコマンドは無い。割り当てるときは、上表の
 コマンドIDを **基本設定: キーボードショートカットを開く (JSON)** で使う。
@@ -50,9 +51,9 @@ Totonoe Log が提供する全コマンドを、コマンドID・起動導線・
 
 次のコマンドはアクティブエディタのログを読む（未保存の変更を含む）。
 
-- `Copy Masked Text`
-- `Open in Virtual Document`（エクスプローラの選択なしで実行した場合）
-- `Show Interactive View`（エクスプローラの選択なしで実行した場合）
+- `マスク済みテキストをコピー`
+- `仮想ドキュメントで開く`（エクスプローラの選択なしで実行した場合）
+- `Interactive View を表示`（エクスプローラの選択なしで実行した場合）
 
 いずれも Totonoe Log 自身の読み取り専用ビュー上では実行できず警告になる。
 整形済みのビューを再度パースすると誤読するため。
@@ -62,13 +63,13 @@ Totonoe Log が提供する全コマンドを、コマンドID・起動導線・
 でも未保存の変更は反映されない。未保存の変更ごと見たいときは、そのエディタを
 アクティブにしてコマンドパレットから実行する。
 
-`Set Filter` はこの逆で、**Totonoe Log 自身のビューの上でしか実行できない**。
+`フィルターを設定` はこの逆で、**Totonoe Log 自身のビューの上でしか実行できない**。
 元ログを読み直すのではなく、そのビューが保持している絞り込み前のエントリに
 条件を掛け直すため。
 
 ---
 
-### Show Interactive View
+### Interactive View を表示
 
 `totonoeLog.showInteractiveView`
 
@@ -80,7 +81,7 @@ Totonoe Log が提供する全コマンドを、コマンドID・起動導線・
   は開かず、既存のパネルを前面に出して読み込み直す
 - **補足** — 「+ Add Files...」で同じパネルにログを追加でき、2ファイル以上に
   なるとマージ表示へ切り替わる。「Export as Virtual Document」は現在の状態を
-  読み取り専用タブへ書き出す操作で、`Ctrl+F`・`Compare Logs`・表示上限を超える
+  読み取り専用タブへ書き出す操作で、`Ctrl+F`・`ログを比較`・表示上限を超える
   結果全体には、この書き出し経由で到達する
 - **関連設定** — `interactiveView.maxDisplayLines`・`collapse.threshold`・
   `gap.thresholdSeconds`・`copyMasked.*`（マスクパネルの初期選択）、および
@@ -88,7 +89,7 @@ Totonoe Log が提供する全コマンドを、コマンドID・起動導線・
   パネルへ即座に反映される
 - **詳細** — [Interactive View](../../README.ja.md#interactive-view)
 
-### Open in Virtual Document
+### 仮想ドキュメントで開く
 
 `totonoeLog.openVirtualDocument`
 
@@ -109,7 +110,7 @@ Totonoe Log が提供する全コマンドを、コマンドID・起動導線・
   よい。マージ結果が 50 MiB 以上になる場合は拡張機能の一時ストレージへ書き出し、
   通常のテキストタブとして開く（VS Code のドキュメント同期上限を避けるため）。
   その一時コピーを編集しても元ログは変わらず、タブを閉じると削除される。この
-  大容量結果では `Go to Source Line` と `Set Filter` は使えない。必要な情報は
+  大容量結果では `元の行へ移動` と `フィルターを設定` は使えない。必要な情報は
   仮想ドキュメントに対してのみ登録されるため
 - **関連設定** — `gap.thresholdSeconds`、および共通の解析・表示設定。複数ファイルを
   マージするときは `timezone.fileOffsets` と `clockSkew.fileOffsets` が効いてくる。
@@ -117,7 +118,7 @@ Totonoe Log が提供する全コマンドを、コマンドID・起動導線・
 - **詳細** — [1本のタイムラインに正規化する](../../README.ja.md#1本のタイムラインに正規化する)、
   [複数ファイルをマージする](../../README.ja.md#複数ファイルをマージする)
 
-### Set Filter
+### フィルターを設定
 
 `totonoeLog.setViewFilter`
 
@@ -141,7 +142,7 @@ Totonoe Log が提供する全コマンドを、コマンドID・起動導線・
 - **関連設定** — `gap.thresholdSeconds`、および共通の解析・表示設定
 - **詳細** — [ノイズを絞り込みで取り除く](../../README.ja.md#ノイズを絞り込みで取り除く)
 
-### Compare Logs
+### ログを比較
 
 `totonoeLog.compareLogs`
 
@@ -151,7 +152,7 @@ Totonoe Log が提供する全コマンドを、コマンドID・起動導線・
 - **出力** — VS Code 標準の diff エディタ。中身は読み取り専用の仮想ドキュメント
   2つ（`totonoe-log-compare` スキーム）で、日付やホストの違いが差分を埋めない
   よう、タイムスタンプ等の可変部分はマスクされている
-- **補足** — 比較ビューには行対応情報が無いため `Go to Source Line` は使えない。
+- **補足** — 比較ビューには行対応情報が無いため `元の行へ移動` は使えない。
   Interactive View で絞り込んだ結果を比較したい場合は、先に「Export as Virtual
   Document」で書き出してから、そのタブに対してこのコマンドを実行する。
   タイムスタンプは丸ごとマスクされるので、`timezone.*` と
@@ -159,7 +160,7 @@ Totonoe Log が提供する全コマンドを、コマンドID・起動導線・
 - **関連設定** — `timestampFormats`
 - **詳細** — [2つのログを比較する](../../README.ja.md#2つのログを比較する)
 
-### Copy Masked Text
+### マスク済みテキストをコピー
 
 `totonoeLog.copyMaskedText`
 
@@ -174,7 +175,7 @@ Totonoe Log が提供する全コマンドを、コマンドID・起動導線・
 - **詳細** — [2つのログを比較する](../../README.ja.md#2つのログを比較する) と
   [設定](../../README.ja.md#設定)の表
 
-### Go to Source Line
+### 元の行へ移動
 
 `totonoeLog.goToSourceLine`
 
@@ -188,7 +189,7 @@ Totonoe Log が提供する全コマンドを、コマンドID・起動導線・
   そしてギャップ行のような生成行で元の行が存在しない場合
 - **詳細** — [複数ファイルをマージする](../../README.ja.md#複数ファイルをマージする)
 
-### Go to Source Line（Interactive View）
+### 元の行へ移動（Interactive View）
 
 `totonoeLog.goToSourceLineFromInteractiveView`
 
@@ -217,5 +218,5 @@ Totonoe Log が提供する全コマンドを、コマンドID・起動導線・
 | `totonoeLog.timezone.display` | 各ビューがタイムスタンプを表示するタイムゾーン。日時プロンプトの入力もこの基準で解釈される |
 | `totonoeLog.clockSkew.fileOffsets` | 時計がずれていたホストのログを ±N 秒補正する |
 
-`Compare Logs` と `Copy Masked Text` は例外で、タイムラインを組み立てるのではなく
+`ログを比較` と `マスク済みテキストをコピー` は例外で、タイムラインを組み立てるのではなく
 元テキストをマスク・書き換えする処理のため、効くのは `timestampFormats` だけ。
