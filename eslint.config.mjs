@@ -23,6 +23,7 @@ export default tseslint.config(
     },
     rules: {
       "complexity": ["error", 15],
+      "max-depth": ["error", 3],
       // 「なぜ」を説明するコメントを厚くしても関数長として罰しない。
       "max-lines-per-function": [
         "error",
