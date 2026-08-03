@@ -21,7 +21,10 @@ export function createClockSkewResolver(): (fileName: string) => number {
   const { rules, errors } = compileClockSkewRules(settings ?? []);
   if (errors.length > 0) {
     vscode.window.showWarningMessage(
-      `Totonoe Log: totonoeLog.clockSkew.fileOffsets に不正な項目があるため無視しました — ${errors.join(" / ")}`
+      vscode.l10n.t(
+        "Totonoe Log: Ignored invalid entries in totonoeLog.clockSkew.fileOffsets — {0}",
+        errors.join(" / ")
+      )
     );
   }
 

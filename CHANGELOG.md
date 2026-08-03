@@ -14,6 +14,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   follow VS Code's display language, with English as the source language and a
   Japanese localization, instead of showing Japanese Settings descriptions to
   every user (issue #276).
+- Runtime notifications, warnings, prompts, picker labels, and dialog actions now
+  follow VS Code's display language too, including warnings passed into the
+  Interactive View, with English source messages and bundled Japanese
+  translations (issue #277).
 
 ## [0.10.0] - 2026-08-01
 

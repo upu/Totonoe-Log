@@ -24,7 +24,7 @@ async function promptForLogFile(dialogTitle: string): Promise<vscode.Uri | undef
   const selection = await vscode.window.showOpenDialog({
     canSelectMany: false,
     canSelectFolders: false,
-    openLabel: "選択",
+    openLabel: vscode.l10n.t("Select"),
     title: dialogTitle,
   });
   return selection?.[0];
@@ -65,12 +65,16 @@ export function createCompareLogsCommand(
   provider: CompareViewContentProvider
 ): () => Promise<void> {
   return async function compareLogs(): Promise<void> {
-    const firstFileUri = await promptForLogFile("比較する1つ目のログファイルを選択してください");
+    const firstFileUri = await promptForLogFile(
+      vscode.l10n.t("Select the first log file to compare")
+    );
     if (!firstFileUri) {
       return;
     }
 
-    const secondFileUri = await promptForLogFile("比較する2つ目のログファイルを選択してください");
+    const secondFileUri = await promptForLogFile(
+      vscode.l10n.t("Select the second log file to compare")
+    );
     if (!secondFileUri) {
       return;
     }

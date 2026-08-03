@@ -50,12 +50,14 @@ export function createOpenVirtualDocumentCommand(
       // 選択はあったがフォルダしか含まれていなかった。ここでアクティブ
       // エディタへ落とすと、選んだつもりの対象と関係ないログが開いてしまう。
       vscode.window.showWarningMessage(
-        "Totonoe Log: 選択にログファイルが含まれていません。フォルダではなくファイルを選んでください。"
+        vscode.l10n.t(
+          "Totonoe Log: The selection contains no log files. Select files instead of folders."
+        )
       );
       return;
     }
 
-    const sourceDocument = getSourceDocumentOrWarn("開く");
+    const sourceDocument = getSourceDocumentOrWarn("openVirtualDocument");
     if (!sourceDocument) {
       return;
     }

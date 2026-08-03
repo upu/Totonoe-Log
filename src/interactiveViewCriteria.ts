@@ -1,3 +1,4 @@
+import * as vscode from "vscode";
 import {
   getDistinctSeverities,
   parseDateBoundary,
@@ -84,7 +85,10 @@ export function buildIgnoredInputWarning(errors: readonly string[]): string | un
   if (errors.length === 0) {
     return undefined;
   }
-  return `${errors.join(" / ")}。該当の条件を適用せずに書き出しました。`;
+  return vscode.l10n.t(
+    "Invalid input: {0}. Exported without applying the affected criteria.",
+    errors.join(" / ")
+  );
 }
 
 /** {@link toFilterCriteria} の結果。 */
@@ -119,8 +123,8 @@ export function toFilterCriteria(
   const severities = new Set(serialized.severities);
 
   const dateRange = parseDateRange(serialized, displayTimezone, errors);
-  const matchPatterns = compilePatterns(serialized.matchPatterns, "一致パターン", errors);
-  const ignorePatterns = compilePatterns(serialized.ignorePatterns, "無視パターン", errors);
+  const matchPatterns = compilePatterns(serialized.matchPatterns, "match", errors);
+  const ignorePatterns = compilePatterns(serialized.ignorePatterns, "ignore", errors);
 
   return { criteria: { severities, dateRange, matchPatterns, ignorePatterns }, errors };
 }
@@ -139,9 +143,11 @@ export function toFilterCriteria(
  * 何件目かを添えるが、行が1つしか無いときは添えない（「1件目」とだけ言われても
  * 情報が増えないため）。
  */
+type PatternKind = "match" | "ignore" | "mask";
+
 function compilePatterns(
   inputs: readonly SerializedFilterPattern[],
-  label: string,
+  kind: "match" | "ignore",
   errors: string[]
 ): RegExp[] | undefined {
   const compiled: RegExp[] = [];
@@ -150,8 +156,8 @@ function compilePatterns(
     if (!input.enabled || input.source.trim() === "") {
       return;
     }
-    const position = inputs.length > 1 ? `（${index + 1}件目）` : "";
-    const pattern = compilePattern(input.source, `${label}${position}`, errors);
+    const position = inputs.length > 1 ? index + 1 : undefined;
+    const pattern = compilePattern(input.source, kind, errors, position);
     if (pattern !== undefined) {
       compiled.push(pattern);
     }
@@ -176,7 +182,7 @@ export interface CompileMaskPatternResult {
  */
 export function compileMaskPattern(input: string): CompileMaskPatternResult {
   const errors: string[] = [];
-  const pattern = compilePattern(input, "マスクパターン", errors, "gim");
+  const pattern = compilePattern(input, "mask", errors, undefined, "gim");
   return { pattern, errors };
 }
 
@@ -195,7 +201,9 @@ function parseDateRange(
   if (startInput !== "") {
     startMs = parseDateBoundary(startInput, "start", displayTimezone);
     if (startMs === undefined) {
-      errors.push(`開始日時を解釈できませんでした: "${startInput}"`);
+      errors.push(
+        vscode.l10n.t('Could not parse the start date and time: "{0}".', startInput)
+      );
     }
   }
 
@@ -203,7 +211,9 @@ function parseDateRange(
   if (endInput !== "") {
     endMs = parseDateBoundary(endInput, "end", displayTimezone);
     if (endMs === undefined) {
-      errors.push(`終了日時を解釈できませんでした: "${endInput}"`);
+      errors.push(
+        vscode.l10n.t('Could not parse the end date and time: "{0}".', endInput)
+      );
     }
   }
 
@@ -229,8 +239,9 @@ function parseDateRange(
  */
 function compilePattern(
   input: string,
-  label: string,
+  kind: PatternKind,
   errors: string[],
+  position?: number,
   flags = "im"
 ): RegExp | undefined {
   const trimmedInput = input.trim();
@@ -242,7 +253,48 @@ function compilePattern(
     return new RegExp(trimmedInput, flags);
   } catch (error) {
     const reason = error instanceof Error ? error.message : String(error);
-    errors.push(`${label}を正規表現として解釈できませんでした: "${trimmedInput}"（${reason}）`);
+    errors.push(buildPatternError(kind, trimmedInput, reason, position));
     return undefined;
   }
+}
+
+function buildPatternError(
+  kind: PatternKind,
+  input: string,
+  reason: string,
+  position?: number
+): string {
+  if (kind === "mask") {
+    return vscode.l10n.t(
+      'Could not parse the mask pattern as a regular expression: "{0}" ({1})',
+      input,
+      reason
+    );
+  }
+  if (kind === "match") {
+    return position === undefined
+      ? vscode.l10n.t(
+          'Could not parse the match pattern as a regular expression: "{0}" ({1})',
+          input,
+          reason
+        )
+      : vscode.l10n.t(
+          'Could not parse match pattern {0} as a regular expression: "{1}" ({2})',
+          position,
+          input,
+          reason
+        );
+  }
+  return position === undefined
+    ? vscode.l10n.t(
+        'Could not parse the ignore pattern as a regular expression: "{0}" ({1})',
+        input,
+        reason
+      )
+    : vscode.l10n.t(
+        'Could not parse ignore pattern {0} as a regular expression: "{1}" ({2})',
+        position,
+        input,
+        reason
+      );
 }

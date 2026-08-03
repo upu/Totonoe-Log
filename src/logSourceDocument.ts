@@ -13,15 +13,19 @@ import { warnIfLowTimestampRecognition } from "./timestampRecognitionWarning";
  * 正規化・フィルタ系・折りたたみ・アルファ版インタラクティブビューの全コマンドが
  * 冒頭で行う同一の手順を集約した。
  *
- * `actionLabel` は「正規化する」「絞り込む」「折りたたむ」等、警告文の
- * 「〜ログファイルが開かれていません。」に前置する動詞句。
+ * `action` は呼び出し元の操作を表す安定した識別子。翻訳済みの動詞句を
+ * 組み合わせず、操作ごとの完全な警告文を選ぶために使う。
  */
-export function getSourceDocumentOrWarn(actionLabel: string): vscode.TextDocument | undefined {
+export function getSourceDocumentOrWarn(
+  action: "openVirtualDocument" | "showInteractiveView"
+): vscode.TextDocument | undefined {
   const activeEditor = vscode.window.activeTextEditor;
   if (!activeEditor) {
-    vscode.window.showWarningMessage(
-      `Totonoe Log: ${actionLabel}ログファイルが開かれていません。`
-    );
+    const message =
+      action === "openVirtualDocument"
+        ? vscode.l10n.t("Totonoe Log: No log file is open to open in a virtual document.")
+        : vscode.l10n.t("Totonoe Log: No log file is open to show in the Interactive View.");
+    vscode.window.showWarningMessage(message);
     return undefined;
   }
 

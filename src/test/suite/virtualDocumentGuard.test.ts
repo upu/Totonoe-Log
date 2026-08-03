@@ -35,7 +35,7 @@ suite("Totonoe Log virtual document guard: unit behavior", () => {
         uri: vscode.Uri.parse("totonoe-log-merged:/sample.log"),
       } as vscode.TextDocument;
       assert.strictEqual(guardAgainstVirtualDocumentSource(virtualDocument), true);
-      assert.ok(warningMessage?.includes("元のログファイルに対して実行してください"));
+      assert.ok(warningMessage?.includes("Run it on the source log file instead"));
 
       warningMessage = undefined;
       const ordinaryDocument = { uri: vscode.Uri.parse("untitled:not-a-view") } as vscode.TextDocument;
@@ -77,7 +77,7 @@ suite("Totonoe Log virtual document guard: normalized views", () => {
     }
 
     assert.ok(
-      warningMessage?.includes("元のログファイルに対して実行してください"),
+      warningMessage?.includes("Run it on the source log file instead"),
       "a warning should be shown when the source is Totonoe Log's own view"
     );
     assert.strictEqual(
@@ -128,7 +128,7 @@ suite("Totonoe Log virtual document guard: normalized views", () => {
     }
 
     assert.ok(
-      warningMessage?.includes("元のログファイルに対して実行してください"),
+      warningMessage?.includes("Run it on the source log file instead"),
       "a warning should be shown when copying from a virtual view"
     );
     assert.strictEqual(
@@ -179,7 +179,7 @@ suite("Totonoe Log virtual document guard: merged and compare views", () => {
       }
 
       assert.ok(
-        warningMessage?.includes("元のログファイルに対して実行してください"),
+        warningMessage?.includes("Run it on the source log file instead"),
         "a warning should be shown when normalizing from a merged view"
       );
       assert.strictEqual(
@@ -241,7 +241,7 @@ suite("Totonoe Log virtual document guard: merged and compare views", () => {
       // （タイムスタンプごとマスクした diff 用のテキストで、元エントリから
       // 作り直せない）。「ビューが無い」ではなく「対応していない」と案内する。
       assert.ok(
-        warningMessage?.includes("このビューは絞り込みに対応していません"),
+        warningMessage?.includes("This view does not support filtering"),
         `a compare view should be reported as unsupported, got: ${warningMessage}`
       );
       assert.strictEqual(

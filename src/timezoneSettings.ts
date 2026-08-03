@@ -26,7 +26,10 @@ export function readDisplayTimezone(): DisplayTimezone {
   const offsetMinutes = parseUtcOffsetMinutes(value);
   if (offsetMinutes === undefined) {
     vscode.window.showWarningMessage(
-      `Totonoe Log: totonoeLog.timezone.display の値「${value}」が不正なため UTC で表示します（"UTC" / "local" / "+09:00" のように指定してください）。`
+      vscode.l10n.t(
+        'Totonoe Log: The totonoeLog.timezone.display value "{0}" is invalid, so timestamps will be displayed in UTC. Use a value such as "UTC", "local", or "+09:00".',
+        value
+      )
     );
     return 0;
   }
@@ -51,7 +54,10 @@ export function createSourceOffsetResolver(): (fileName: string) => number | und
   const { rules, errors } = compileFileOffsetRules(fileOffsetSettings ?? []);
   if (errors.length > 0) {
     vscode.window.showWarningMessage(
-      `Totonoe Log: totonoeLog.timezone.fileOffsets に不正な項目があるため無視しました — ${errors.join(" / ")}`
+      vscode.l10n.t(
+        "Totonoe Log: Ignored invalid entries in totonoeLog.timezone.fileOffsets — {0}",
+        errors.join(" / ")
+      )
     );
   }
 
@@ -59,7 +65,10 @@ export function createSourceOffsetResolver(): (fileName: string) => number | und
   const defaultOffsetMinutes = parseUtcOffsetMinutes(defaultValue);
   if (defaultOffsetMinutes === undefined) {
     vscode.window.showWarningMessage(
-      `Totonoe Log: totonoeLog.timezone.sourceOffset の値「${defaultValue}」が不正なため UTC として扱います（"+09:00" のように指定してください）。`
+      vscode.l10n.t(
+        'Totonoe Log: The totonoeLog.timezone.sourceOffset value "{0}" is invalid, so UTC will be used. Use a value such as "+09:00".',
+        defaultValue
+      )
     );
   }
 

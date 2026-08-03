@@ -148,16 +148,31 @@ function toDisplayMaskOptions(criteria: SerializedFilterCriteria): DisplayMaskOp
  */
 function maskPatternFailureWarnings(
   failure: "timeout" | "error" | undefined,
-  outcome: string
+  outcome: "display" | "export"
 ): string[] {
   if (!failure) {
     return [];
   }
-  const reason =
+  if (outcome === "display") {
+    return [
+      failure === "timeout"
+        ? vscode.l10n.t(
+            "Mask pattern processing took too long, so the content is displayed without applying that mask."
+          )
+        : vscode.l10n.t(
+            "An error occurred while evaluating the mask pattern, so the content is displayed without applying that mask."
+          ),
+    ];
+  }
+  return [
     failure === "timeout"
-      ? "マスクパターンの処理に時間がかかりすぎたため"
-      : "マスクパターンの評価中にエラーが発生したため";
-  return [`${reason}、そのマスクだけを適用せずに${outcome}。`];
+      ? vscode.l10n.t(
+          "Mask pattern processing took too long, so the content was exported without applying that mask."
+        )
+      : vscode.l10n.t(
+          "An error occurred while evaluating the mask pattern, so the content was exported without applying that mask."
+        ),
+  ];
 }
 
 /**
@@ -420,7 +435,7 @@ export class InteractiveViewPanelController implements vscode.Disposable {
       // 送信後にファイル集合が変わった場合など、`fileIndex` が現在の読み込み
       // 済みファイルに対応しないとき（`Go to Source Line` と同じ案内にする）。
       vscode.window.showWarningMessage(
-        "Totonoe Log: 元ログファイルの情報を解決できませんでした。"
+        vscode.l10n.t("Totonoe Log: Could not resolve the source log file.")
       );
       return;
     }
@@ -446,8 +461,8 @@ export class InteractiveViewPanelController implements vscode.Disposable {
     const picked = await vscode.window.showOpenDialog({
       canSelectMany: true,
       canSelectFolders: false,
-      title: "Totonoe Log: 追加するログファイルを選択",
-      openLabel: "追加",
+      title: vscode.l10n.t("Totonoe Log: Select log files to add"),
+      openLabel: vscode.l10n.t("Add"),
     });
     if (!picked) {
       return;
@@ -643,14 +658,18 @@ export class InteractiveViewPanelController implements vscode.Disposable {
 
     const reason =
       failedPayload.reason === "timeout"
-        ? "入力されたパターンの処理に時間がかかりすぎたため、一致パターンと無視パターンを適用せずに表示しています。より単純なパターンをお試しください。"
-        : "パターンの評価中にエラーが発生したため、一致パターンと無視パターンを適用せずに表示しています。";
+        ? vscode.l10n.t(
+            "Pattern processing took too long, so the content is displayed without applying match or ignore patterns. Try simpler patterns."
+          )
+        : vscode.l10n.t(
+            "An error occurred while evaluating patterns, so the content is displayed without applying match or ignore patterns."
+          );
     await this.sendState(
       fallbackPayload,
       [
         ...prepared.warnings,
         reason,
-        ...maskPatternFailureWarnings(fallbackPayload.maskPatternFailure, "表示しています"),
+        ...maskPatternFailureWarnings(fallbackPayload.maskPatternFailure, "display"),
       ],
       prepared.collapsibleSupported,
       criteriaSnapshot,
@@ -686,7 +705,7 @@ export class InteractiveViewPanelController implements vscode.Disposable {
         payload,
         [
           ...prepared.warnings,
-          ...maskPatternFailureWarnings(payload.maskPatternFailure, "表示しています"),
+          ...maskPatternFailureWarnings(payload.maskPatternFailure, "display"),
         ],
         prepared.collapsibleSupported,
         criteriaSnapshot,
@@ -806,11 +825,15 @@ export class InteractiveViewPanelController implements vscode.Disposable {
 
     const result = await highlightDisplayLines(collectDisplayLines(limited), rules);
     if (!result.ok) {
-      const reason =
+      const message =
         result.reason === "timeout"
-          ? "ハイライトルールの処理に時間がかかりすぎたため"
-          : "ハイライトルールの評価中にエラーが発生したため";
-      vscode.window.showWarningMessage(`Totonoe Log: ${reason}、色を付けずに表示しています。`);
+          ? vscode.l10n.t(
+              "Totonoe Log: Highlight rule processing took too long, so the content is displayed without colors."
+            )
+          : vscode.l10n.t(
+              "Totonoe Log: An error occurred while evaluating highlight rules, so the content is displayed without colors."
+            );
+      vscode.window.showWarningMessage(message);
       return undefined;
     }
     return result.highlights;
@@ -850,7 +873,7 @@ export class InteractiveViewPanelController implements vscode.Disposable {
     // 落として書き出すが、落としたことは通知で伝える（issue #217）。
     const ignoredInputWarning = buildIgnoredInputWarning([...errors, ...maskPatterns.errors]);
     if (ignoredInputWarning !== undefined) {
-      vscode.window.showWarningMessage(`Totonoe Log: ${ignoredInputWarning}`);
+      vscode.window.showWarningMessage(vscode.l10n.t("Totonoe Log: {0}", ignoredInputWarning));
     }
     // 表示側と同じく、マージ表示でも折りたたみが効く（issue #158）。
     const collapsibleSupported = true;
@@ -919,16 +942,22 @@ export class InteractiveViewPanelController implements vscode.Disposable {
         : await buildInteractiveMergedExportText(this.mergedEntries, fallbackCriteria, options);
     if (!fallbackResult.ok) {
       vscode.window.showWarningMessage(
-        "Totonoe Log: 書き出しに失敗しました。一致パターン・無視パターンを見直してから再度お試しください。"
+        vscode.l10n.t(
+          "Totonoe Log: Export failed. Review the match and ignore patterns, then try again."
+        )
       );
       return undefined;
     }
 
-    const reason =
+    const message =
       result.reason === "timeout"
-        ? "入力されたパターンの処理に時間がかかりすぎたため、一致パターンと無視パターンを適用せずに書き出しました。"
-        : "パターンの評価中にエラーが発生したため、一致パターンと無視パターンを適用せずに書き出しました。";
-    vscode.window.showWarningMessage(`Totonoe Log: ${reason}`);
+        ? vscode.l10n.t(
+            "Totonoe Log: Pattern processing took too long, so the content was exported without applying match or ignore patterns."
+          )
+        : vscode.l10n.t(
+            "Totonoe Log: An error occurred while evaluating patterns, so the content was exported without applying match or ignore patterns."
+          );
+    vscode.window.showWarningMessage(message);
     this.warnAboutMaskPatternFailure(fallbackResult.maskPatternFailure);
     return fallbackResult.formatted;
   }
@@ -939,8 +968,8 @@ export class InteractiveViewPanelController implements vscode.Disposable {
    * そのまま共有してしまわないようにするため。
    */
   private warnAboutMaskPatternFailure(failure: "timeout" | "error" | undefined): void {
-    for (const message of maskPatternFailureWarnings(failure, "書き出しました")) {
-      vscode.window.showWarningMessage(`Totonoe Log: ${message}`);
+    for (const message of maskPatternFailureWarnings(failure, "export")) {
+      vscode.window.showWarningMessage(vscode.l10n.t("Totonoe Log: {0}", message));
     }
   }
 
@@ -984,7 +1013,7 @@ export function createShowInteractiveViewCommand(
       return;
     }
 
-    const sourceDocument = getSourceDocumentOrWarn("表示する");
+    const sourceDocument = getSourceDocumentOrWarn("showInteractiveView");
     if (!sourceDocument) {
       return;
     }

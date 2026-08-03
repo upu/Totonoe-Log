@@ -1,25 +1,32 @@
 import * as assert from "node:assert";
 import * as vscode from "vscode";
+import type { FilterKind } from "../../filterPrompts";
 import { waitForDocumentText } from "./support/waitForDocumentText";
 
+interface TestQuickPickItem extends vscode.QuickPickItem {
+  readonly filterKind?: FilterKind;
+  readonly severityValue?: string;
+}
+
 /**
- * 「どの条件で絞り込むか」を尋ねる1回目の QuickPick と、選択した条件ごとの
- * 2回目以降の QuickPick（セベリティ選択）を、選択肢のラベルで区別する
- * モック。1回目は条件の種類のラベルだけを持つため、それで判別できる。
+ * 条件選択とセベリティ選択を、翻訳されないメタデータで区別するモック。
+ * 表示ラベルを参照しないため、VS Code の表示言語に依存しない。
  */
 function installQuickPickMock(
-  kindsToSelect: readonly string[],
+  kindsToSelect: readonly FilterKind[],
   severitiesToSelect: readonly string[] = ["ERROR"]
 ): () => void {
   const original = vscode.window.showQuickPick;
-  (vscode.window as any).showQuickPick = async (items: vscode.QuickPickItem[]) => {
-    const isKindPicker = items.some((item) =>
-      ["セベリティ", "日付範囲", "無視パターン"].includes(item.label)
-    );
+  (vscode.window as any).showQuickPick = async (items: TestQuickPickItem[]) => {
+    const isKindPicker = items.some((item) => item.filterKind !== undefined);
     if (isKindPicker) {
-      return items.filter((item) => kindsToSelect.includes(item.label));
+      return items.filter(
+        (item) => item.filterKind !== undefined && kindsToSelect.includes(item.filterKind)
+      );
     }
-    return items.filter((item) => severitiesToSelect.includes(item.label));
+    return items.filter(
+      (item) => item.severityValue !== undefined && severitiesToSelect.includes(item.severityValue)
+    );
   };
   return () => {
     (vscode.window as any).showQuickPick = original;
@@ -92,7 +99,7 @@ suite("Totonoe Log set filter on the normalized view (#248): criteria", () => {
     );
     const uriBefore = document.uri.toString();
 
-    const restoreQuickPick = installQuickPickMock(["セベリティ", "無視パターン"]);
+    const restoreQuickPick = installQuickPickMock(["severity", "ignorePattern"]);
     const originalShowInputBox = vscode.window.showInputBox;
     (vscode.window as any).showInputBox = async () => "heartbeat";
 
@@ -119,8 +126,62 @@ suite("Totonoe Log set filter on the normalized view (#248): criteria", () => {
       "the filter should rewrite the same tab instead of opening a new one"
     );
     assert.ok(
-      infoMessage?.includes("条件に合わない 2 行"),
+      infoMessage?.includes("Hid 2 lines"),
       "the hidden line count should be reported"
+    );
+  });
+
+  test("uses singular grammar when exactly one line is hidden", async () => {
+    const document = await openNormalizedView(
+      ["2024-01-02T03:04:05Z INFO starting", "2024-01-02T03:04:06Z ERROR boom"].join("\n")
+    );
+    const restoreQuickPick = installQuickPickMock(["severity"], ["ERROR"]);
+    const originalShowInformationMessage = vscode.window.showInformationMessage;
+    let infoMessage: string | undefined;
+    (vscode.window as any).showInformationMessage = async (message: string) => {
+      infoMessage = message;
+      return undefined;
+    };
+
+    try {
+      await vscode.commands.executeCommand("totonoeLog.setViewFilter");
+    } finally {
+      restoreQuickPick();
+      (vscode.window as any).showInformationMessage = originalShowInformationMessage;
+    }
+
+    const expected = "2 | 2024-01-02T03:04:06.000Z ERROR boom";
+    assert.strictEqual(await waitForDocumentText(document, (text) => text === expected), expected);
+    assert.strictEqual(
+      infoMessage,
+      "Totonoe Log: Hid 1 line that did not match (showing 1/2 lines)."
+    );
+  });
+
+  test("uses singular grammar when the unfiltered view contains one line", async () => {
+    const document = await openNormalizedView("2024-01-02T03:04:05Z INFO starting");
+    const restoreQuickPick = installQuickPickMock([]);
+    const originalShowInformationMessage = vscode.window.showInformationMessage;
+    let infoMessage: string | undefined;
+    (vscode.window as any).showInformationMessage = async (message: string) => {
+      infoMessage = message;
+      return undefined;
+    };
+
+    try {
+      await vscode.commands.executeCommand("totonoeLog.setViewFilter");
+    } finally {
+      restoreQuickPick();
+      (vscode.window as any).showInformationMessage = originalShowInformationMessage;
+    }
+
+    assert.strictEqual(
+      await waitForDocumentText(document, (text) => text.includes("INFO starting")),
+      "1 | 2024-01-02T03:04:05.000Z INFO starting"
+    );
+    assert.strictEqual(
+      infoMessage,
+      "Totonoe Log: No lines were hidden (showing the only line)."
     );
   });
 
@@ -135,7 +196,7 @@ suite("Totonoe Log set filter on the normalized view (#248): criteria", () => {
       ].join("\n")
     );
 
-    const restoreQuickPick = installQuickPickMock(["セベリティ", "日付範囲", "無視パターン"]);
+    const restoreQuickPick = installQuickPickMock(["severity", "dateRange", "ignorePattern"]);
     const originalShowInputBox = vscode.window.showInputBox;
     let inputBoxCallCount = 0;
     (vscode.window as any).showInputBox = async () => {
@@ -161,7 +222,7 @@ suite("Totonoe Log set filter on the normalized view (#248): criteria", () => {
       ["2024-01-02T03:04:05Z INFO starting", "2024-01-02T03:04:06Z ERROR boom"].join("\n")
     );
 
-    let restoreQuickPick = installQuickPickMock(["セベリティ"], ["ERROR"]);
+    let restoreQuickPick = installQuickPickMock(["severity"], ["ERROR"]);
     try {
       await vscode.commands.executeCommand("totonoeLog.setViewFilter");
     } finally {
@@ -174,7 +235,7 @@ suite("Totonoe Log set filter on the normalized view (#248): criteria", () => {
     );
 
     // 前回の結果に重ねるなら0行になるが、絞り込み前のエントリへ掛け直すので戻る。
-    restoreQuickPick = installQuickPickMock(["セベリティ"], ["INFO"]);
+    restoreQuickPick = installQuickPickMock(["severity"], ["INFO"]);
     try {
       await vscode.commands.executeCommand("totonoeLog.setViewFilter");
     } finally {
@@ -194,7 +255,7 @@ suite("Totonoe Log set filter on the normalized view (#248): criteria", () => {
       ["2024-01-02T03:04:05Z INFO starting", "2024-01-02T03:04:06Z ERROR boom"].join("\n")
     );
 
-    const restoreQuickPick = installQuickPickMock(["セベリティ"], ["ERROR"]);
+    const restoreQuickPick = installQuickPickMock(["severity"], ["ERROR"]);
     try {
       await vscode.commands.executeCommand("totonoeLog.setViewFilter");
     } finally {
@@ -223,7 +284,7 @@ suite("Totonoe Log set filter on the normalized view (#248): criteria", () => {
     );
     // 解除したのに「条件に合わない 0 行を非表示にしました」とは言わない。
     assert.ok(
-      infoMessage?.includes("非表示になった行はありません"),
+      infoMessage?.includes("No lines were hidden"),
       `clearing the filter should not read as filtering, got: ${infoMessage}`
     );
   });
@@ -258,7 +319,9 @@ suite("Totonoe Log set filter on the normalized view (#248): cancellation and gu
     (vscode.window as any).showQuickPick = async (items: vscode.QuickPickItem[]) => {
       callCount += 1;
       if (callCount === 1) {
-        return items.filter((item) => item.label === "セベリティ");
+        return items.filter(
+          (item) => (item as TestQuickPickItem).filterKind === "severity"
+        );
       }
       return undefined;
     };
@@ -276,7 +339,7 @@ suite("Totonoe Log set filter on the normalized view (#248): cancellation and gu
     const document = await openNormalizedView("2024-01-02T03:04:05Z INFO starting");
     const textBefore = document.getText();
 
-    const restoreQuickPick = installQuickPickMock(["日付範囲"]);
+    const restoreQuickPick = installQuickPickMock(["dateRange"]);
     const originalShowInputBox = vscode.window.showInputBox;
     (vscode.window as any).showInputBox = async () => undefined;
 
@@ -294,7 +357,7 @@ suite("Totonoe Log set filter on the normalized view (#248): cancellation and gu
     const document = await openNormalizedView("2024-01-02T03:04:05Z INFO starting");
     const textBefore = document.getText();
 
-    const restoreQuickPick = installQuickPickMock(["無視パターン"]);
+    const restoreQuickPick = installQuickPickMock(["ignorePattern"]);
     const originalShowInputBox = vscode.window.showInputBox;
     (vscode.window as any).showInputBox = async () => undefined;
 
@@ -362,7 +425,7 @@ suite("Totonoe Log set filter on the normalized view (#248): cancellation and gu
     const document = await openNormalizedView("2024-01-02T03:04:05Z INFO starting");
     const textBefore = document.getText();
 
-    const restoreQuickPick = installQuickPickMock(["日付範囲"]);
+    const restoreQuickPick = installQuickPickMock(["dateRange"]);
     const originalShowInputBox = vscode.window.showInputBox;
     (vscode.window as any).showInputBox = async () => "not a date";
 
@@ -393,7 +456,7 @@ suite("Totonoe Log set filter on the normalized view (#248): ignore patterns", (
       ].join("\n")
     );
 
-    const restoreQuickPick = installQuickPickMock(["無視パターン"]);
+    const restoreQuickPick = installQuickPickMock(["ignorePattern"]);
     const originalShowInputBox = vscode.window.showInputBox;
     (vscode.window as any).showInputBox = async () => "boom";
 
@@ -417,7 +480,7 @@ suite("Totonoe Log set filter on the normalized view (#248): ignore patterns", (
     // マッチしたエントリは2物理行分（ERROR行＋スタックトレースの継続行）
     // にまたがっており、"boom" を含むのは先頭行だけである点に注意。
     assert.ok(
-      infoMessage?.includes("条件に合わない 2 行"),
+      infoMessage?.includes("Hid 2 lines"),
       "the hidden line count should include the entry's continuation lines"
     );
   });
@@ -427,7 +490,7 @@ suite("Totonoe Log set filter on the normalized view (#248): ignore patterns", (
       ["2024-01-02T03:04:05Z INFO heartbeat ok", "2024-01-02T03:04:06Z ERROR boom"].join("\n")
     );
 
-    const restoreQuickPick = installQuickPickMock(["無視パターン"]);
+    const restoreQuickPick = installQuickPickMock(["ignorePattern"]);
     const originalShowInputBox = vscode.window.showInputBox;
     (vscode.window as any).showInputBox = async () => "  heartbeat  ";
 
@@ -446,7 +509,7 @@ suite("Totonoe Log set filter on the normalized view (#248): ignore patterns", (
     const document = await openNormalizedView("2024-01-02T03:04:05Z INFO starting");
     const textBefore = document.getText();
 
-    const restoreQuickPick = installQuickPickMock(["無視パターン"]);
+    const restoreQuickPick = installQuickPickMock(["ignorePattern"]);
     const originalShowInputBox = vscode.window.showInputBox;
     (vscode.window as any).showInputBox = async () => "(unclosed";
 

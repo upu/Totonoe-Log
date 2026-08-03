@@ -32,7 +32,7 @@ export async function copyMaskedLogText(): Promise<void> {
   const activeEditor = vscode.window.activeTextEditor;
   if (!activeEditor) {
     vscode.window.showWarningMessage(
-      "Totonoe Log: コピーするログファイルが開かれていません。"
+      vscode.l10n.t("Totonoe Log: No log file is open to copy from.")
     );
     return;
   }
@@ -50,6 +50,6 @@ export async function copyMaskedLogText(): Promise<void> {
   await vscode.env.clipboard.writeText(maskedText);
 
   vscode.window.showInformationMessage(
-    "Totonoe Log: マスク済みテキストをクリップボードにコピーしました。"
+    vscode.l10n.t("Totonoe Log: Copied masked text to the clipboard.")
   );
 }
