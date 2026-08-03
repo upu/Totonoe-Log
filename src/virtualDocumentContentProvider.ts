@@ -49,7 +49,9 @@ export function guardAgainstVirtualDocumentSource(
   }
 
   vscode.window.showWarningMessage(
-    "Totonoe Log: このビューに対しては実行できません。元のログファイルに対して実行してください。"
+    vscode.l10n.t(
+      "Totonoe Log: This action cannot run on this view. Run it on the source log file instead."
+    )
   );
   return true;
 }
@@ -63,8 +65,9 @@ export function guardAgainstVirtualDocumentSource(
  * 呼ばれない。従来は `?? ""` で無言の空白を返しており、ユーザーが内容消失に
  * 気付けなかった。無言の空白より、何が起きたか分かる文言を返す方が安全。
  */
-export const CONTENT_LOST_PLACEHOLDER =
-  "Totonoe Log: このビューの内容は失われました。コマンドを再実行して開き直してください。";
+export const CONTENT_LOST_PLACEHOLDER = vscode.l10n.t(
+  "Totonoe Log: The contents of this view were lost. Run the command again to reopen it."
+);
 
 /**
  * 仮想ドキュメントの表示行から元ログの該当行へ移動するための対応情報

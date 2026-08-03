@@ -24,7 +24,10 @@ export function readHighlightRules(resource?: vscode.Uri): HighlightRule[] {
   const { rules, errors } = compileHighlightRules(readRawHighlightRules(resource));
   if (errors.length > 0) {
     vscode.window.showWarningMessage(
-      `Totonoe Log: totonoeLog.highlightRules に不正な項目があるため無視しました — ${errors.join(" / ")}`
+      vscode.l10n.t(
+        "Totonoe Log: Ignored invalid entries in totonoeLog.highlightRules — {0}",
+        errors.join(" / ")
+      )
     );
   }
   return rules;
@@ -207,7 +210,7 @@ export async function writeHighlightRuleRows(
     // 開き直した時点で編集が消えたように見える。
     const reason = error instanceof Error ? error.message : String(error);
     vscode.window.showWarningMessage(
-      `Totonoe Log: ハイライトルールを設定に保存できませんでした（${reason}）`
+      vscode.l10n.t("Totonoe Log: Could not save highlight rules to Settings ({0})", reason)
     );
   }
 }

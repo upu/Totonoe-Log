@@ -17,6 +17,7 @@ const EXPECTED = [
   "LICENSE",
   "README.md",
   "media/icon.png",
+  "l10n/bundle.l10n.ja.json",
   "out/extension.js",
   "out/webview/interactiveView/main.js",
   "package.json",

@@ -27,7 +27,10 @@ export function readConfiguredTimestampFormats(): TimestampFormat[] {
   const { formats, errors } = compileCustomTimestampFormats(settings ?? []);
   if (errors.length > 0) {
     vscode.window.showWarningMessage(
-      `Totonoe Log: totonoeLog.timestampFormats に不正な項目があるため無視しました — ${errors.join(" / ")}`
+      vscode.l10n.t(
+        "Totonoe Log: Ignored invalid entries in totonoeLog.timestampFormats — {0}",
+        errors.join(" / ")
+      )
     );
   }
   return [...formats, ...getDefaultTimestampFormats()];

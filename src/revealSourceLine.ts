@@ -19,7 +19,9 @@ export async function revealSourceLine(sourceUri: vscode.Uri, line: number): Pro
   } catch {
     // 削除・移動・リネームや権限エラーなど、原因を問わず開けなかった場合。
     vscode.window.showWarningMessage(
-      "Totonoe Log: 元ログファイルを開けませんでした。ファイルが削除・移動されていないか確認してください。"
+      vscode.l10n.t(
+        "Totonoe Log: Could not open the source log file. Check whether it was deleted or moved."
+      )
     );
     return;
   }

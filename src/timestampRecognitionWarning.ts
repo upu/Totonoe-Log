@@ -36,7 +36,7 @@ export function warnIfLowTimestampRecognition(
   }
 
   warnedSourceKeys.add(sourceKey);
-  vscode.window.showWarningMessage(`Totonoe Log: ${warning}`);
+  vscode.window.showWarningMessage(vscode.l10n.t("Totonoe Log: {0}", warning));
 }
 
 /**
@@ -72,9 +72,17 @@ function buildWarningText(
     return undefined;
   }
   if (assessment.hasSuspiciousTimestampSwitch) {
-    return `${fileName} の${assessment.suspiciousContinuationLineCount}行が、未対応のタイムスタンプ形式で始まっている可能性があります。設定「totonoeLog.timestampFormats」でカスタム形式を追加すると認識できます。`;
+    return vscode.l10n.t(
+      "{0}: {1} lines may begin with an unsupported timestamp format. Add a custom format in the totonoeLog.timestampFormats setting to recognize them.",
+      fileName,
+      assessment.suspiciousContinuationLineCount
+    );
   }
 
   const percent = Math.round(assessment.unrecognizedRatio * 100);
-  return `${fileName} の行の約${percent}%でタイムスタンプ形式を認識できませんでした。組み込み形式に合わないログは、設定「totonoeLog.timestampFormats」でカスタム形式を追加すると認識できます。`;
+  return vscode.l10n.t(
+    "{0}: Could not recognize the timestamp format in about {1}% of lines. For logs that do not match built-in formats, add a custom format in the totonoeLog.timestampFormats setting.",
+    fileName,
+    percent
+  );
 }

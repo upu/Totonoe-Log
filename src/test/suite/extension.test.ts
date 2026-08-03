@@ -778,8 +778,9 @@ suite("Totonoe Log timezone settings (#13)", () => {
     await vscode.window.showTextDocument(source);
 
     const originalShowQuickPick = vscode.window.showQuickPick;
-    (vscode.window as any).showQuickPick = async (items: vscode.QuickPickItem[]) =>
-      items.filter((item) => item.label === "日付範囲");
+    (vscode.window as any).showQuickPick = async (
+      items: Array<vscode.QuickPickItem & { filterKind?: string }>
+    ) => items.filter((item) => item.filterKind === "dateRange");
 
     const originalShowInputBox = vscode.window.showInputBox;
     const prompts: string[] = [];
@@ -801,8 +802,8 @@ suite("Totonoe Log timezone settings (#13)", () => {
         expected
       );
       assert.ok(
-        prompts.every((prompt) => prompt.includes("表示タイムゾーン +09:00 基準")),
-        "both boundary prompts should explain the display-timezone basis"
+        prompts.every((prompt) => prompt.includes("display timezone +09:00")),
+        "both boundary prompts should explain the display-timezone basis in English"
       );
     } finally {
       (vscode.window as any).showQuickPick = originalShowQuickPick;
@@ -1074,7 +1075,7 @@ suite("Totonoe Log low timestamp recognition warning", () => {
 
   /** 認識率警告の通知本文を判定するパターン。 */
   const WARNING_PATTERN =
-    /タイムスタンプ形式(?:を認識できませんでした|で始まっている可能性があります)/;
+    /(?:Could not recognize the timestamp format|may begin with an unsupported timestamp format)/;
 
   /**
    * showWarningMessage をモックして action 実行中に表示された警告本文を集める。

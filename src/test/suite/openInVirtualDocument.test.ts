@@ -241,11 +241,13 @@ suite("Totonoe Log open in virtual document (#249): downstream commands", () => 
         const dbLogUri = vscode.Uri.file(paths["db.log"]);
 
         const originalShowQuickPick = vscode.window.showQuickPick;
-        (vscode.window as any).showQuickPick = async (items: vscode.QuickPickItem[]) => {
-          const isKindPicker = items.some((item) => item.label === "セベリティ");
+        (vscode.window as any).showQuickPick = async (
+          items: Array<vscode.QuickPickItem & { filterKind?: string; severityValue?: string }>
+        ) => {
+          const isKindPicker = items.some((item) => item.filterKind !== undefined);
           return isKindPicker
-            ? items.filter((item) => item.label === "セベリティ")
-            : items.filter((item) => item.label === "ERROR");
+            ? items.filter((item) => item.filterKind === "severity")
+            : items.filter((item) => item.severityValue === "ERROR");
         };
 
         try {

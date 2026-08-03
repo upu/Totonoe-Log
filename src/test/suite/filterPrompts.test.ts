@@ -14,6 +14,10 @@ const ENTRIES = parseLog(
 );
 
 /** テスト対象が出すプロンプトの呼び出し回数と、モックの後始末をまとめて扱う。 */
+interface TestSeverityQuickPickItem extends vscode.QuickPickItem {
+  readonly severityValue?: string;
+}
+
 interface PromptMock {
   readonly quickPickCalls: () => number;
   readonly inputBoxCalls: () => number;
@@ -38,12 +42,15 @@ function installPromptMocks(options: {
   let inputBoxCalls = 0;
   const warnings: string[] = [];
 
-  (vscode.window as any).showQuickPick = async (items: vscode.QuickPickItem[]) => {
+  (vscode.window as any).showQuickPick = async (items: TestSeverityQuickPickItem[]) => {
     quickPickCalls += 1;
     if (options.severityLabels === undefined) {
       return undefined;
     }
-    return items.filter((item) => options.severityLabels!.includes(item.label));
+    return items.filter(
+      (item) =>
+        item.severityValue !== undefined && options.severityLabels!.includes(item.severityValue)
+    );
   };
   (vscode.window as any).showInputBox = async () => {
     const input = options.inputs?.[inputBoxCalls];
@@ -215,7 +222,9 @@ suite("Totonoe Log filter prompts (shared)", () => {
       const criteria = await promptFilterCriteriaForKinds(kinds("dateRange"), ENTRIES, 0);
 
       assert.strictEqual(criteria, undefined);
-      assert.ok(mock.warnings().some((message) => message.includes("日時を解釈できませんでした")));
+      assert.deepStrictEqual(mock.warnings(), [
+        'Totonoe Log: Could not parse the date and time: "not-a-date".',
+      ]);
     } finally {
       mock.restore();
     }
@@ -241,8 +250,11 @@ suite("Totonoe Log filter prompts (shared)", () => {
       const criteria = await promptFilterCriteriaForKinds(kinds("ignorePattern"), ENTRIES, 0);
 
       assert.strictEqual(criteria, undefined);
+      assert.strictEqual(mock.warnings().length, 1);
       assert.ok(
-        mock.warnings().some((message) => message.includes("正規表現として解釈できませんでした"))
+        mock.warnings()[0].startsWith(
+          'Totonoe Log: Could not parse "(" as a regular expression ('
+        )
       );
     } finally {
       mock.restore();

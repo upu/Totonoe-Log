@@ -1,23 +1,29 @@
 import * as assert from "node:assert";
 import * as vscode from "vscode";
+import type { FilterKind } from "../../filterPrompts";
 import { waitForDocumentText } from "./support/waitForDocumentText";
 
+interface TestQuickPickItem extends vscode.QuickPickItem {
+  readonly filterKind?: FilterKind;
+  readonly severityValue?: string;
+}
+
 /**
- * 条件選択ピッカーとセベリティ選択ピッカーを、選択肢のラベルで区別する
- * モック。正規化ビュー側のスイートと同じ役割だが、対象のビューが違う
+ * 条件選択とセベリティ選択を、翻訳されないメタデータで区別するモック。
+ * 正規化ビュー側のスイートと同じ役割だが、対象のビューが違う
  * テストスイート間で暗黙の結合を作らないよう意図的に分けている。
  */
-function installFilterKindQuickPickMock(kindsToSelect: readonly string[]): () => void {
+function installFilterKindQuickPickMock(kindsToSelect: readonly FilterKind[]): () => void {
   const original = vscode.window.showQuickPick;
-  (vscode.window as any).showQuickPick = async (items: vscode.QuickPickItem[]) => {
-    const isKindPicker = items.some((item) =>
-      ["セベリティ", "日付範囲", "無視パターン"].includes(item.label)
-    );
+  (vscode.window as any).showQuickPick = async (items: TestQuickPickItem[]) => {
+    const isKindPicker = items.some((item) => item.filterKind !== undefined);
     if (isKindPicker) {
-      return items.filter((item) => kindsToSelect.includes(item.label));
+      return items.filter(
+        (item) => item.filterKind !== undefined && kindsToSelect.includes(item.filterKind)
+      );
     }
     // セベリティ選択ピッカー: ERROR のみ選択する。
-    return items.filter((item) => item.label === "ERROR");
+    return items.filter((item) => item.severityValue === "ERROR");
   };
   return () => {
     (vscode.window as any).showQuickPick = original;
@@ -78,7 +84,7 @@ suite("Totonoe Log set filter on the merged view (#248): filtering and navigatio
           vscode.Uri.file(paths["database_20240101.log"]),
         ]);
 
-        const restoreQuickPick = installFilterKindQuickPickMock(["セベリティ", "無視パターン"]);
+        const restoreQuickPick = installFilterKindQuickPickMock(["severity", "ignorePattern"]);
         const originalShowInputBox = vscode.window.showInputBox;
         (vscode.window as any).showInputBox = async () => "heartbeat";
 
@@ -105,7 +111,7 @@ suite("Totonoe Log set filter on the merged view (#248): filtering and navigatio
           expected
         );
         assert.ok(
-          infoMessage?.includes("条件に合わない 2 行"),
+          infoMessage?.includes("Hid 2 lines"),
           "the hidden line count should be reported"
         );
       }
@@ -125,7 +131,7 @@ suite("Totonoe Log set filter on the merged view (#248): filtering and navigatio
         const dbLogUri = vscode.Uri.file(paths["db.log"]);
         const document = await openMergedView([vscode.Uri.file(paths["app.log"]), dbLogUri]);
 
-        const restoreQuickPick = installFilterKindQuickPickMock(["セベリティ"]);
+        const restoreQuickPick = installFilterKindQuickPickMock(["severity"]);
         try {
           await vscode.commands.executeCommand("totonoeLog.setViewFilter");
         } finally {
@@ -163,7 +169,7 @@ suite("Totonoe Log set filter on the merged view (#248): clearing and cancellati
           vscode.Uri.file(paths["db.log"]),
         ]);
 
-        const restoreQuickPick = installFilterKindQuickPickMock(["セベリティ"]);
+        const restoreQuickPick = installFilterKindQuickPickMock(["severity"]);
         try {
           await vscode.commands.executeCommand("totonoeLog.setViewFilter");
         } finally {
@@ -238,7 +244,7 @@ suite("Totonoe Log set filter on the merged view (#248): clearing and cancellati
         ]);
         const textBefore = document.getText();
 
-        const restoreQuickPick = installFilterKindQuickPickMock(["無視パターン"]);
+        const restoreQuickPick = installFilterKindQuickPickMock(["ignorePattern"]);
         const originalShowInputBox = vscode.window.showInputBox;
         (vscode.window as any).showInputBox = async () => undefined;
 

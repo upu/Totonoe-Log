@@ -81,8 +81,12 @@ suite("Totonoe Log go to source line (#137): normalized views", () => {
 
     const originalShowQuickPick = vscode.window.showQuickPick;
     // 1回目は条件選択（セベリティのみ）、2回目はセベリティ選択（ERROR のみ）。
-    (vscode.window as any).showQuickPick = async (items: vscode.QuickPickItem[]) =>
-      items.filter((item) => item.label === "セベリティ" || item.label === "ERROR");
+    (vscode.window as any).showQuickPick = async (
+      items: Array<vscode.QuickPickItem & { filterKind?: string; severityValue?: string }>
+    ) =>
+      items.filter(
+        (item) => item.filterKind === "severity" || item.severityValue === "ERROR"
+      );
 
     await vscode.commands.executeCommand("totonoeLog.openVirtualDocument");
     const view = vscode.window.activeTextEditor!.document;
@@ -263,7 +267,7 @@ suite("Totonoe Log go to source line (#137): edge cases", () => {
           await vscode.commands.executeCommand("totonoeLog.goToSourceLine");
         });
         assert.ok(
-          warningMessage?.includes("元ログファイルを開けませんでした"),
+          warningMessage?.includes("Could not open the source log file"),
           `expected a warning about the missing source file, got: ${warningMessage}`
         );
       } finally {

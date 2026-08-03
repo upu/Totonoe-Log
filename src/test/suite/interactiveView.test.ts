@@ -101,7 +101,7 @@ suite("interactiveViewCriteria / toFilterCriteria (#166)", () => {
 
     assert.strictEqual(criteria.dateRange, undefined);
     assert.strictEqual(errors.length, 1);
-    assert.match(errors[0], /開始日時を解釈できませんでした/);
+    assert.match(errors[0], /Could not parse the start date and time/);
   });
 
   test("ignores the date condition when both boundaries are unparseable, reporting both (#220)", () => {
@@ -128,7 +128,7 @@ suite("interactiveViewCriteria / toFilterCriteria (#166)", () => {
       endMs: Date.UTC(2024, 0, 3, 23, 59, 59, 999),
     });
     assert.strictEqual(errors.length, 1);
-    assert.match(errors[0], /開始日時を解釈できませんでした/);
+    assert.match(errors[0], /Could not parse the start date and time/);
   });
 
   test("keeps a valid start when the end is the invalid one (#220)", () => {
@@ -142,7 +142,7 @@ suite("interactiveViewCriteria / toFilterCriteria (#166)", () => {
       endMs: undefined,
     });
     assert.strictEqual(errors.length, 1);
-    assert.match(errors[0], /終了日時を解釈できませんでした/);
+    assert.match(errors[0], /Could not parse the end date and time/);
   });
 
   test("applies a one-sided range when only one boundary was entered", () => {
@@ -175,7 +175,7 @@ suite("interactiveViewCriteria / toFilterCriteria (#166)", () => {
 
     assert.strictEqual(criteria.ignorePatterns, undefined);
     assert.strictEqual(errors.length, 1);
-    assert.match(errors[0], /正規表現として解釈できませんでした/);
+    assert.match(errors[0], /Could not parse the ignore pattern as a regular expression/);
   });
 
   test("omits matchPatterns when the only row is blank (#182)", () => {
@@ -208,9 +208,9 @@ suite("interactiveViewCriteria / toFilterCriteria (#166)", () => {
     assert.strictEqual(criteria.matchPatterns, undefined);
     assert.strictEqual(errors.length, 1);
     // 入力欄が2つになるため、どちらの欄が不正なのかがメッセージから分かること。
-    assert.match(errors[0], /一致パターン/);
+    assert.match(errors[0], /match pattern/);
     // 1件しか無いときは位置を添えない（「1件目」だけ言われても情報にならない）。
-    assert.doesNotMatch(errors[0], /件目/);
+    assert.doesNotMatch(errors[0], /pattern 1/);
   });
 
   test("compiles every enabled row, keeping the order they appear in (#206)", () => {
@@ -292,8 +292,8 @@ suite("interactiveViewCriteria / toFilterCriteria (#166)", () => {
       ["connection", "payment"]
     );
     assert.strictEqual(errors.length, 1);
-    assert.match(errors[0], /一致パターン/);
-    assert.match(errors[0], /2件目/);
+    assert.match(errors[0], /match pattern/);
+    assert.match(errors[0], /pattern 2/);
   });
 
   test("omits the field entirely when every row is blank or off (#206)", () => {
@@ -339,7 +339,7 @@ suite("interactiveViewCriteria / compileMaskPattern (#195)", () => {
     assert.strictEqual(pattern, undefined);
     assert.strictEqual(errors.length, 1);
     // 入力欄が3つ（一致・無視・マスク）になるため、どの欄が不正なのかが分かること。
-    assert.match(errors[0], /マスクパターン/);
+    assert.match(errors[0], /mask pattern/);
   });
 });
 
@@ -425,7 +425,7 @@ suite("interactiveViewCriteria / buildIgnoredInputWarning (#217)", () => {
 
     assert.ok(warning !== undefined);
     assert.match(warning, /マスクパターン/);
-    assert.match(warning, /適用せずに書き出しました/);
+    assert.match(warning, /Exported without applying the affected criteria/);
   });
 
   test("joins several ignored inputs into one warning", () => {
@@ -646,7 +646,7 @@ suite("timestampRecognitionWarning / buildLowTimestampRecognitionWarnings (#186)
     assert.strictEqual(warnings.length, 1);
     assert.ok(warnings[0].includes("switched.log"));
     assert.ok(
-      warnings[0].includes("未対応のタイムスタンプ形式で始まっている可能性があります"),
+      warnings[0].includes("may begin with an unsupported timestamp format"),
       "the format-switch warning should describe the suspicious lines"
     );
   });

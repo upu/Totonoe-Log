@@ -28,7 +28,9 @@ export function createSetViewFilterCommand(
       // Totonoe Log のビューですらない（元のログファイル、50MiB 超で通常の
       // ファイルタブとして開いたマージ結果、エディタ自体が無い場合）。
       vscode.window.showWarningMessage(
-        "Totonoe Log: 絞り込むビューがありません。Show Normalized View または Merge Selected Files で開いたビューに対して実行してください。"
+        vscode.l10n.t(
+          "Totonoe Log: No filterable view is open. Run Open in Virtual Document, then use this command on the resulting view."
+        )
       );
       return;
     }
@@ -39,7 +41,9 @@ export function createSetViewFilterCommand(
       // 内容が解放されたビュー（issue #92）。書き出しは折りたたみ・マスクを
       // 含むパネルの表示状態のスナップショットで、絞り込みはパネル側で行う。
       vscode.window.showWarningMessage(
-        "Totonoe Log: このビューは絞り込みに対応していません。Show Normalized View / Merge Selected Files で開いたビューか、Interactive View で絞り込んでください。"
+        vscode.l10n.t(
+          "Totonoe Log: This view does not support filtering. Open the log with Open in Virtual Document, or filter it in the Interactive View."
+        )
       );
       return;
     }
@@ -81,7 +85,9 @@ async function applyFilterToView(
     // 絞り込みなしへフォールバックすると、いま見えている絞り込み結果まで
     // 巻き戻ってしまうため、表示は変えずに警告だけ出す。
     vscode.window.showWarningMessage(
-      "Totonoe Log: 入力されたパターンの処理に時間がかかりすぎたため中断しました。より単純なパターンをお試しください。"
+      vscode.l10n.t(
+        "Totonoe Log: Pattern processing took too long and was stopped. Try a simpler pattern."
+      )
     );
     return;
   }
@@ -110,9 +116,29 @@ function reportHiddenLineCount(
   const totalLineCount = countLines(totalEntries);
   const visibleLineCount = countLines(visibleEntries);
   const hiddenLineCount = totalLineCount - visibleLineCount;
-  vscode.window.showInformationMessage(
-    hiddenLineCount === 0
-      ? `Totonoe Log: 非表示になった行はありません（全 ${totalLineCount} 行を表示）。`
-      : `Totonoe Log: 条件に合わない ${hiddenLineCount} 行を非表示にしました（${visibleLineCount}/${totalLineCount} 行を表示）。`
-  );
+  let message: string;
+  if (hiddenLineCount === 0) {
+    message =
+      totalLineCount === 1
+        ? vscode.l10n.t("Totonoe Log: No lines were hidden (showing the only line).")
+        : vscode.l10n.t(
+            "Totonoe Log: No lines were hidden (showing all {0} lines).",
+            totalLineCount
+          );
+  } else {
+    message =
+      hiddenLineCount === 1
+        ? vscode.l10n.t(
+            "Totonoe Log: Hid 1 line that did not match (showing {0}/{1} lines).",
+            visibleLineCount,
+            totalLineCount
+          )
+        : vscode.l10n.t(
+            "Totonoe Log: Hid {0} lines that did not match (showing {1}/{2} lines).",
+            hiddenLineCount,
+            visibleLineCount,
+            totalLineCount
+          );
+  }
+  vscode.window.showInformationMessage(message);
 }

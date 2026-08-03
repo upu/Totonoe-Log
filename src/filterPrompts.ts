@@ -17,8 +17,9 @@ import {
  * マージビューでも再利用するために抽出した）。
  */
 
-/** セベリティ選択ピッカーで、セベリティ未認識のエントリを表す選択肢のラベル。 */
-const UNRECOGNIZED_SEVERITY_LABEL = "(no severity)";
+interface SeverityQuickPickItem extends vscode.QuickPickItem {
+  readonly severityValue: string;
+}
 
 /**
  * エントリ群に登場するセベリティをチェックボックス的なピッカーで尋ね、
@@ -30,25 +31,22 @@ export async function promptSeveritySelection(
 ): Promise<Set<string> | undefined> {
   const distinctSeverities = getDistinctSeverities(entries);
 
-  const items: vscode.QuickPickItem[] = distinctSeverities.map((severity) => ({
-    label: severity === UNRECOGNIZED_SEVERITY_KEY ? UNRECOGNIZED_SEVERITY_LABEL : severity,
+  const items: SeverityQuickPickItem[] = distinctSeverities.map((severity) => ({
+    label: severity === UNRECOGNIZED_SEVERITY_KEY ? vscode.l10n.t("(no severity)") : severity,
+    severityValue: severity,
     picked: true,
   }));
 
   const selectedItems = await vscode.window.showQuickPick(items, {
     canPickMany: true,
-    placeHolder: "表示するセベリティを選択してください",
+    placeHolder: vscode.l10n.t("Select severities to display"),
   });
 
   if (selectedItems === undefined) {
     return undefined;
   }
 
-  return new Set(
-    selectedItems.map((item) =>
-      item.label === UNRECOGNIZED_SEVERITY_LABEL ? UNRECOGNIZED_SEVERITY_KEY : item.label
-    )
-  );
+  return new Set(selectedItems.map((item) => item.severityValue));
 }
 
 /**
@@ -63,20 +61,28 @@ export async function promptSeveritySelection(
  * ようにする。
  */
 export async function promptDateBoundary(
-  promptLabel: string,
   boundaryKind: DateBoundaryKind,
   displayTimezone: DisplayTimezone
 ): Promise<number | undefined | null> {
-  const timeHint = boundaryKind === "end" ? "終了 → 23:59:59.999" : "開始 → 00:00:00.000";
   const timezoneHint =
     displayTimezone === "local"
-      ? "local（このマシンのローカル時刻）"
+      ? vscode.l10n.t("local (this machine's local time)")
       : displayTimezone === 0
         ? "UTC"
         : formatOffset(displayTimezone);
+  const prompt =
+    boundaryKind === "end"
+      ? vscode.l10n.t(
+          "Enter the end date and time (based on display timezone {0}; YYYY-MM-DD or YYYY-MM-DD HH:mm[:ss]; optional; a date without a time uses 23:59:59.999)",
+          timezoneHint
+        )
+      : vscode.l10n.t(
+          "Enter the start date and time (based on display timezone {0}; YYYY-MM-DD or YYYY-MM-DD HH:mm[:ss]; optional; a date without a time uses 00:00:00.000)",
+          timezoneHint
+        );
   const input = await vscode.window.showInputBox({
-    prompt: `${promptLabel}（表示タイムゾーン ${timezoneHint} 基準。YYYY-MM-DD、または YYYY-MM-DD HH:mm[:ss]。省略可。時刻省略時は${timeHint}に補完）`,
-    placeHolder: "例: 2024-01-02 or 2024-01-02T03:04:05",
+    prompt,
+    placeHolder: vscode.l10n.t("Example: 2024-01-02 or 2024-01-02T03:04:05"),
   });
 
   if (input === undefined) {
@@ -88,7 +94,9 @@ export async function promptDateBoundary(
 
   const boundaryMs = parseDateBoundary(input, boundaryKind, displayTimezone);
   if (boundaryMs === undefined) {
-    vscode.window.showWarningMessage(`Totonoe Log: 日時を解釈できませんでした: "${input}"`);
+    vscode.window.showWarningMessage(
+      vscode.l10n.t('Totonoe Log: Could not parse the date and time: "{0}".', input)
+    );
     return null;
   }
 
@@ -115,8 +123,10 @@ function formatOffset(offsetMinutes: number): string {
  */
 export async function promptIgnorePattern(): Promise<RegExp | undefined> {
   const input = await vscode.window.showInputBox({
-    prompt: "非表示にする行のパターン（正規表現として解釈されます。大文字小文字は区別しません）",
-    placeHolder: "例: heartbeat または ^DEBUG",
+    prompt: vscode.l10n.t(
+      "Enter a pattern for lines to hide (interpreted as a regular expression; case-insensitive)"
+    ),
+    placeHolder: vscode.l10n.t("Example: heartbeat or ^DEBUG"),
   });
 
   const trimmedInput = input?.trim();
@@ -129,7 +139,11 @@ export async function promptIgnorePattern(): Promise<RegExp | undefined> {
   } catch (error) {
     const reason = error instanceof Error ? error.message : String(error);
     vscode.window.showWarningMessage(
-      `Totonoe Log: 正規表現として解釈できませんでした: "${trimmedInput}"（${reason}）`
+      vscode.l10n.t(
+        'Totonoe Log: Could not parse "{0}" as a regular expression ({1})',
+        trimmedInput,
+        reason
+      )
     );
     return undefined;
   }
@@ -159,14 +173,14 @@ interface FilterKindQuickPickItem extends vscode.QuickPickItem {
  */
 export async function promptFilterKinds(): Promise<Set<FilterKind> | undefined> {
   const items: FilterKindQuickPickItem[] = [
-    { label: "セベリティ", filterKind: "severity" },
-    { label: "日付範囲", filterKind: "dateRange" },
-    { label: "無視パターン", filterKind: "ignorePattern" },
+    { label: vscode.l10n.t("Severity"), filterKind: "severity" },
+    { label: vscode.l10n.t("Date Range"), filterKind: "dateRange" },
+    { label: vscode.l10n.t("Ignore Pattern"), filterKind: "ignorePattern" },
   ];
 
   const selectedItems = await vscode.window.showQuickPick(items, {
     canPickMany: true,
-    placeHolder: "絞り込みに使う条件を選択してください（複数選択可）",
+    placeHolder: vscode.l10n.t("Select filter criteria (multiple selections allowed)"),
   });
 
   if (selectedItems === undefined) {
@@ -208,13 +222,13 @@ export async function promptFilterCriteriaForKinds(
 
   let dateRange: FilterCriteria["dateRange"];
   if (selectedKinds.has("dateRange")) {
-    const startMs = await promptDateBoundary("開始日時", "start", displayTimezone);
+    const startMs = await promptDateBoundary("start", displayTimezone);
     // null はキャンセル、または不正な入力による中断を表す。
     if (startMs === null) {
       return undefined;
     }
 
-    const endMs = await promptDateBoundary("終了日時", "end", displayTimezone);
+    const endMs = await promptDateBoundary("end", displayTimezone);
     if (endMs === null) {
       return undefined;
     }

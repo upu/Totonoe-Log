@@ -72,7 +72,11 @@ function decodeLogFile(bytes: Uint8Array, fileUri: vscode.Uri): string {
 
   const fileName = fileUri.path.split("/").pop() ?? fileUri.toString();
   vscode.window.showWarningMessage(
-    `Totonoe Log: ${fileName} の files.encoding「${configuredEncoding}」はマージ時のデコードに対応していないため、UTF-8として読み込みます。`
+    vscode.l10n.t(
+      'Totonoe Log: files.encoding "{1}" for {0} is not supported when merging, so the file will be read as UTF-8.',
+      fileName,
+      configuredEncoding
+    )
   );
   return new TextDecoder("utf-8").decode(bytes);
 }

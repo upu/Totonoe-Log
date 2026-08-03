@@ -24,7 +24,7 @@ export function createGoToSourceLineCommand(
     const activeEditor = vscode.window.activeTextEditor;
     if (!activeEditor || !isTotonoeLogVirtualDocument(activeEditor.document)) {
       vscode.window.showWarningMessage(
-        "Totonoe Log: このコマンドは Totonoe Log のビュー上で実行してください。"
+        vscode.l10n.t("Totonoe Log: Run this command from a Totonoe Log view.")
       );
       return;
     }
@@ -41,7 +41,9 @@ export function createGoToSourceLineCommand(
       // 比較ビュー等の対象外ビュー、またはビュー内容の解放後（issue #92 と
       // 同じ状況）で対応情報が無い場合。
       vscode.window.showWarningMessage(
-        "Totonoe Log: このビューには元ログの行対応情報がありません。コマンドを再実行してビューを開き直してください。"
+        vscode.l10n.t(
+          "Totonoe Log: This view has no source-line mapping. Run the command again to reopen the view."
+        )
       );
       return;
     }
@@ -49,7 +51,9 @@ export function createGoToSourceLineCommand(
     const lineSource = sourceLineMap.lineSources[activeEditor.selection.active.line];
     if (!lineSource) {
       vscode.window.showInformationMessage(
-        "Totonoe Log: この行はギャップマーカー等の生成行のため、対応する元ログの行がありません。"
+        vscode.l10n.t(
+          "Totonoe Log: This generated line, such as a gap marker, has no corresponding source-log line."
+        )
       );
       return;
     }
@@ -57,7 +61,7 @@ export function createGoToSourceLineCommand(
     const sourceUri = sourceLineMap.sourceUris[lineSource.fileIndex];
     if (!sourceUri) {
       vscode.window.showWarningMessage(
-        "Totonoe Log: 元ログファイルの情報を解決できませんでした。"
+        vscode.l10n.t("Totonoe Log: Could not resolve the source log file.")
       );
       return;
     }
