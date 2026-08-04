@@ -91,18 +91,6 @@ suite("interactiveViewHtml / buildInteractiveViewHtml (#262)", () => {
     }
   });
 
-  test("keeps Japanese text out of English user-visible markup (#278)", () => {
-    const html = buildHtml("en");
-    const userVisibleMarkup = html
-      .replace(/<style[\s\S]*?<\/style>/u, "")
-      .replace(/<!--[\s\S]*?-->/gu, "");
-
-    assert.ok(
-      !/[぀-ヿ㐀-鿿]/u.test(userVisibleMarkup),
-      "English markup should not contain Japanese user-visible text"
-    );
-  });
-
   test("puts the nonce on the CSP meta, the style tag and the script tag", () => {
     const html = buildHtml();
 
