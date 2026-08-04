@@ -37,18 +37,30 @@ tags: [integration, vscode, webview]
 
 Webviewからは `ready`、`filterChanged`、`addFiles`、`removeFile`、`exportVirtualDocument`、`revealSourceLine`、`highlightRulesChanged` を送る。拡張側からはcriteria、本文またはcollapse items、件数、ファイル、行対応、warning、highlight、表示上限情報を含む単一 `state` を返す。
 
+`state.labels` は、Webviewが動的に生成する要素の翻訳済み文言である。`src/interactiveViewLabels.ts` が `vscode.l10n.t()` で一度構築し、Webviewは独自に表示言語を判定せず、受信したラベルだけを使う。静的コントロールは `src/interactiveViewHtml.ts` が同じAPIで翻訳し、`vscode.env.language` をHTMLの `lang` へ設定する。初回 `state` が届くまではフォームを無効化するため、controllerはHTMLを設定する前にmessage受信とpanel保持を完了しなければならない。この多言語化境界は[アーキテクチャ概要](/openwiki/architecture/overview.md)のInteractive View経路に対応する。
+
 protocol変更時は次を同時に確認する。
 
-1. `src/interactiveView.ts` の受信・送信。
-2. `src/webview/interactiveView/main.ts` のmessage handlerとUI state。
+1. `src/interactiveView.ts` の受信・送信と `src/interactiveViewLabels.ts` のラベル構築。
+2. `src/webview/interactiveView/main.ts` のmessage handler、UI state、初回状態までの操作抑止。
 3. `tsconfig.json` と `tsconfig.webview.json` の両型検査。
-4. `interactiveView.test.ts` と必要なら`normalize.test.ts`。
+4. `interactiveView.test.ts`, `interactiveViewLabels.test.ts`, `interactiveViewHtml.test.ts` と必要なら`normalize.test.ts`。
 
 `src/interactiveView.ts` は単一ファイルとマージ表示のどちらでも `collapsibleSupported` を有効にし、両方の折りたたみに対応する。仕様を変更する場合は、共有protocol、controller、payload builder、Webview UIを同時に確認する。
 
+## 多言語化の境界
+
+VS Codeの表示言語へ追従する文言は、用途ごとに3つの経路を使う。
+
+- manifestの表示名、説明、command title、設定説明: `package.json` は `%key%` だけを持ち、英語の正本を `package.nls.json`、日本語訳を `package.nls.ja.json` に置く。
+- 拡張ホストの通知、warning、prompt、QuickPick、ダイアログ: 英語リテラルを `vscode.l10n.t()` へ渡し、日本語訳を `l10n/bundle.l10n.ja.json` に置く。位置プレースホルダー `{0}`, `{1}` は翻訳前後で一致させる。
+- Interactive View: 静的HTML文言は `src/interactiveViewHtml.ts`、動的要素は `src/interactiveViewLabels.ts` で翻訳する。後者は共有protocolの `state.labels` を介してbrowser側へ渡す。
+
+翻訳対象を変更したら[テスト指針](/openwiki/testing/guide.md)の `packageLocalization.test.ts` を確認する。また3つの翻訳ファイルはVSIX同梱物なので、`scripts/check-package-contents.js` のallowlistも同期する。
+
 ## 設定統合
 
-設定は `totonoeLog` namespaceにあり、`package.json` がschemaと説明の正本である。主な群は次のとおり。
+設定は `totonoeLog` namespaceにあり、schemaの正本は `package.json`、表示文言の正本は `package.nls.json` と `package.nls.ja.json` である。主な群は次のとおり。
 
 - parse: `timestampFormats`, `timezone.sourceOffset`, `timezone.fileOffsets`, `clockSkew.fileOffsets`
 - display: `timezone.display`, `gap.thresholdSeconds`, `interactiveView.maxDisplayLines`
