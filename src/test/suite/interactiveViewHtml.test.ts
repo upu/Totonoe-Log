@@ -1,11 +1,27 @@
 import * as assert from "node:assert";
+import * as vscode from "vscode";
 import { buildInteractiveViewHtml } from "../../interactiveViewHtml";
 
 const NONCE = "TEST_NONCE_0123456789";
 const SCRIPT_URL = "https://file+.vscode-resource.vscode-cdn.net/out/webview/interactiveView/main.js";
 
-function buildHtml(language = "en"): string {
+const HTML_ENTITIES: Readonly<Record<string, string>> = {
+  "&": "&amp;",
+  "<": "&lt;",
+  ">": "&gt;",
+  '"': "&quot;",
+};
+
+function escapeHtml(value: string): string {
+  return value.replace(/[&<>"]/g, (character) => HTML_ENTITIES[character]);
+}
+
+function buildHtml(language = vscode.env.language): string {
   return buildInteractiveViewHtml({ nonce: NONCE, scriptUrl: SCRIPT_URL, language });
+}
+
+function localizedHtml(message: string): string {
+  return escapeHtml(vscode.l10n.t(message));
 }
 
 /**
@@ -69,21 +85,23 @@ suite("interactiveViewHtml / buildInteractiveViewHtml (#262)", () => {
   });
 
   test("renders localized static controls and accessibility text (#278)", () => {
-    const html = buildHtml("en");
+    const html = buildHtml();
     const expectedSnippets = [
-      ">Loaded files:</span>",
-      ">Start date and time ",
-      ">End date and time ",
-      ">Match patterns</span>",
-      ">Ignore patterns</span>",
-      ">Collapse repeated entries</label>",
-      ">+ Add</button>",
-      ">Highlight ▾</button>",
-      'placeholder="Regular expression"',
-      'title="Choose what to mask"',
-      'aria-label="Choose what to mask"',
-      "Replace matching text with &lt;MASKED&gt;.",
-      'aria-label="Add a highlight rule"',
+      `>${localizedHtml("Loaded files:")}</span>`,
+      `>${localizedHtml("Start date and time")} `,
+      `>${localizedHtml("End date and time")} `,
+      `>${localizedHtml("Match patterns")}</span>`,
+      `>${localizedHtml("Ignore patterns")}</span>`,
+      `>${localizedHtml("Collapse repeated entries")}</label>`,
+      `>${localizedHtml("+ Add")}</button>`,
+      `>${localizedHtml("Highlight ▾")}</button>`,
+      `placeholder="${localizedHtml("Regular expression")}"`,
+      `title="${localizedHtml("Choose what to mask")}"`,
+      `aria-label="${localizedHtml("Choose what to mask")}"`,
+      localizedHtml(
+        "Replace matching text with <MASKED>. To preserve a key name, use the Key field above instead."
+      ),
+      `aria-label="${localizedHtml("Add a highlight rule")}"`,
     ];
 
     for (const snippet of expectedSnippets) {

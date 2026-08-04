@@ -41,9 +41,9 @@ suite("interactiveViewLabels (#278)", () => {
       "statusMessage",
       "unrecognizedSeverity",
     ]);
-    assert.strictEqual(labels.unrecognizedSeverity, "(no severity)");
-    assert.strictEqual(labels.maskEnabledLabel, "🔒 Mask");
-    assert.strictEqual(labels.highlightCollapsedLabel, "Highlight ▾");
+    assert.ok(labels.unrecognizedSeverity.length > 0);
+    assert.ok(labels.maskEnabledLabel.startsWith("🔒"));
+    assert.ok(labels.highlightCollapsedLabel.endsWith("▾"));
     assert.ok(labels.removeFileLabel.includes("{0}"));
     assert.ok(labels.displayLimitMessage.includes("{0}"));
     assert.ok(labels.statusMessage.includes("{1}"));
