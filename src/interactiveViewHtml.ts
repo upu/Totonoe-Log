@@ -371,7 +371,7 @@ function buildFilesPanel(labels: InteractiveViewBodyLabels): string {
     <button id="export-button" type="button">${labels.exportVirtualDocument}</button>
     <div id="mask-container">
       <button id="mask-button" type="button" aria-pressed="false" title="${labels.maskTitle}">${labels.maskLabel}</button>
-      <button id="mask-options-button" type="button" aria-expanded="false" aria-controls="mask-panel" title="${labels.maskOptionsTitle}">▾</button>
+      <button id="mask-options-button" type="button" aria-expanded="false" aria-controls="mask-panel" aria-label="${labels.maskOptionsTitle}" title="${labels.maskOptionsTitle}">▾</button>
       <div id="mask-panel" hidden>
         <label><input type="checkbox" id="mask-timestamp">${labels.timestamp}</label>
         <label><input type="checkbox" id="mask-host">${labels.host}</label>

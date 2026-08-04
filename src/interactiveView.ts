@@ -309,7 +309,9 @@ export class InteractiveViewPanelController implements vscode.Disposable {
         ],
       }
     );
-    panel.webview.html = this.renderHtml(panel.webview, nonce);
+    // HTMLを設定するとWebview側のスクリプトがすぐ `ready` を送るため、受信準備と
+    // パネルの保持を先に済ませる。順序が逆だと初回メッセージを失い、状態が届かない。
+    this.panel = panel;
     panel.onDidDispose(() => {
       this.panel = undefined;
       this.disposeConfigWatcher();
@@ -322,7 +324,7 @@ export class InteractiveViewPanelController implements vscode.Disposable {
     this.configWatcher = vscode.workspace.onDidChangeConfiguration((event) => {
       void this.applyConfigurationChange(event);
     });
-    this.panel = panel;
+    panel.webview.html = this.renderHtml(panel.webview, nonce);
   }
 
   dispose(): void {

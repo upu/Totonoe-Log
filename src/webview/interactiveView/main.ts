@@ -68,6 +68,17 @@ const warningElement = document.getElementById("warning") as HTMLDivElement;
 const displayLimitElement = document.getElementById("display-limit") as HTMLDivElement;
 const logOutputElement = document.getElementById("log-output") as HTMLPreElement;
 
+function setControlsDisabled(disabled: boolean): void {
+  for (const control of document.querySelectorAll<
+    HTMLButtonElement | HTMLInputElement | HTMLSelectElement
+  >("button, input, select")) {
+    control.disabled = disabled;
+  }
+}
+
+// 初回の状態が届く前の空フォームを送信しないよう、描画が完了するまで操作を止める。
+setControlsDisabled(true);
+
 function debounce<Args extends unknown[]>(
   fn: (...args: Args) => void,
   waitMs: number
@@ -909,6 +920,7 @@ function renderDisplayLimit(displayLimit: ExtensionToWebviewMessage["displayLimi
 
 function renderState(state: ExtensionToWebviewMessage): void {
   labels = state.labels;
+  setControlsDisabled(false);
   // 本文の描画（ホバー表示・ハイライト）より先に更新する必要がある。
   sourceFilePaths = state.sourceFilePaths;
   // 組の配列から作り直す（issue #18）。プレーンなオブジェクトで受け取ると

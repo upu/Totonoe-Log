@@ -81,6 +81,7 @@ suite("interactiveViewHtml / buildInteractiveViewHtml (#262)", () => {
       ">Highlight ▾</button>",
       'placeholder="Regular expression"',
       'title="Choose what to mask"',
+      'aria-label="Choose what to mask"',
       "Replace matching text with &lt;MASKED&gt;.",
       'aria-label="Add a highlight rule"',
     ];
