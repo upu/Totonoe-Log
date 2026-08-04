@@ -18,6 +18,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   follow VS Code's display language too, including warnings passed into the
   Interactive View, with English source messages and bundled Japanese
   translations (issue #277).
+- Interactive View controls, tooltips, placeholders, and accessibility labels now
+  follow VS Code's display language, and the Webview document language matches it
+  for correct screen-reader pronunciation (issue #278).
 
 ## [0.10.0] - 2026-08-01
 

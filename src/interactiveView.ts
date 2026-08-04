@@ -37,6 +37,7 @@ import {
   type LoadedLogFile,
 } from "./logFileReading";
 import { buildInteractiveViewHtml } from "./interactiveViewHtml";
+import { buildInteractiveViewLabels } from "./interactiveViewLabels";
 import { classifyInteractiveViewConfigChange } from "./interactiveViewConfigWatch";
 import { RefreshRevisionGate } from "./interactiveViewRefresh";
 import {
@@ -261,6 +262,8 @@ export class InteractiveViewPanelController implements vscode.Disposable {
    * それらの経路すべてで古い結果の公開を止められる。
    */
   private readonly refreshGate = new RefreshRevisionGate();
+  /** 表示言語は Extension Development Host の再起動まで変わらないため、文言辞書も1度だけ作る。 */
+  private readonly labels = buildInteractiveViewLabels();
   /** 「仮想ドキュメントとして書き出す」操作（issue #175）で発行するマージ用URIの連番。 */
   private exportMergedCounter = 0;
 
@@ -783,6 +786,7 @@ export class InteractiveViewPanelController implements vscode.Disposable {
 
     const message: ExtensionToWebviewMessage = {
       type: "state",
+      labels: this.labels,
       criteria,
       distinctSeverities: payload.distinctSeverities,
       text: limited.text,
@@ -981,6 +985,7 @@ export class InteractiveViewPanelController implements vscode.Disposable {
     return buildInteractiveViewHtml({
       nonce,
       scriptUrl: scriptUri.toString(),
+      language: vscode.env.language,
     });
   }
 }

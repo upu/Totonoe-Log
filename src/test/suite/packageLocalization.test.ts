@@ -25,8 +25,16 @@ interface ExtensionManifest {
 
 const EXTENSION_ROOT = path.resolve(__dirname, "../../..");
 const EXTENSION_HOST_SOURCE_ROOT = path.join(EXTENSION_ROOT, "src");
+const WEBVIEW_MAIN_SOURCE_PATH = path.join(
+  EXTENSION_ROOT,
+  "src",
+  "webview",
+  "interactiveView",
+  "main.ts"
+);
 const EXCLUDED_TOP_LEVEL_DIRECTORIES = new Set(["normalize", "test", "webview"]);
-const EXCLUDED_TOP_LEVEL_FILES = new Set(["interactiveViewHtml.ts"]);
+const EXCLUDED_TOP_LEVEL_FILES = new Set<string>();
+const JAPANESE_CHARACTER_PATTERN = /[぀-ヿ㐀-鿿]/u;
 
 function readJson<T>(fileName: string): T {
   return JSON.parse(fs.readFileSync(path.join(EXTENSION_ROOT, fileName), "utf8")) as T;
@@ -110,6 +118,28 @@ function collectRuntimeLocalizationKeys(): string[] {
   return [...keys].sort();
 }
 
+function collectJapaneseStringLiterals(filePath: string): string[] {
+  const sourceText = fs.readFileSync(filePath, "utf8");
+  const sourceFile = ts.createSourceFile(filePath, sourceText, ts.ScriptTarget.Latest, true);
+  const matches: string[] = [];
+  const visit = (node: ts.Node): void => {
+    if (
+      (ts.isStringLiteral(node) ||
+        ts.isNoSubstitutionTemplateLiteral(node) ||
+        ts.isTemplateHead(node) ||
+        ts.isTemplateMiddle(node) ||
+        ts.isTemplateTail(node)) &&
+      JAPANESE_CHARACTER_PATTERN.test(node.text)
+    ) {
+      const { line } = sourceFile.getLineAndCharacterOfPosition(node.getStart(sourceFile));
+      matches.push(`${path.relative(EXTENSION_ROOT, filePath)}:${line + 1}: ${node.text}`);
+    }
+    ts.forEachChild(node, visit);
+  };
+  visit(sourceFile);
+  return matches;
+}
+
 function positionalPlaceholders(value: string): string[] {
   return [...value.matchAll(/\{(\d+)\}/g)].map((match) => match[1]).sort();
 }
@@ -138,6 +168,14 @@ suite("Package localization", () => {
       referencedKeys,
       englishKeys,
       "every localization key should be referenced exactly once"
+    );
+  });
+
+  test("keeps Japanese UI literals out of the Webview script (#278)", () => {
+    assert.deepStrictEqual(
+      collectJapaneseStringLiterals(WEBVIEW_MAIN_SOURCE_PATH),
+      [],
+      "Webview UI text should come from the localized labels sent by the extension host"
     );
   });
 
