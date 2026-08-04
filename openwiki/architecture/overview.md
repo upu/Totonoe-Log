@@ -70,7 +70,7 @@ sequenceDiagram
   WV->>CT: ready または filterChanged
   CT->>NM: filter mask collapse format
   NM-->>CT: 表示項目と行対応
-  CT-->>WV: state と翻訳済みラベル
+  CT-->>WV: state（labels含む）
   WV->>CT: exportVirtualDocument
   CT->>NM: 全件スナップショットを再構築
   CT->>VP: export結果を登録
