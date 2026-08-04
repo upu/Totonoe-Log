@@ -37,6 +37,7 @@ import {
   type LoadedLogFile,
 } from "./logFileReading";
 import { buildInteractiveViewHtml } from "./interactiveViewHtml";
+import { buildInteractiveViewLabels } from "./interactiveViewLabels";
 import { classifyInteractiveViewConfigChange } from "./interactiveViewConfigWatch";
 import { RefreshRevisionGate } from "./interactiveViewRefresh";
 import {
@@ -261,6 +262,8 @@ export class InteractiveViewPanelController implements vscode.Disposable {
    * それらの経路すべてで古い結果の公開を止められる。
    */
   private readonly refreshGate = new RefreshRevisionGate();
+  /** 表示言語は Extension Development Host の再起動まで変わらないため、文言辞書も1度だけ作る。 */
+  private readonly labels = buildInteractiveViewLabels();
   /** 「仮想ドキュメントとして書き出す」操作（issue #175）で発行するマージ用URIの連番。 */
   private exportMergedCounter = 0;
 
@@ -306,7 +309,9 @@ export class InteractiveViewPanelController implements vscode.Disposable {
         ],
       }
     );
-    panel.webview.html = this.renderHtml(panel.webview, nonce);
+    // HTMLを設定するとWebview側のスクリプトがすぐ `ready` を送るため、受信準備と
+    // パネルの保持を先に済ませる。順序が逆だと初回メッセージを失い、状態が届かない。
+    this.panel = panel;
     panel.onDidDispose(() => {
       this.panel = undefined;
       this.disposeConfigWatcher();
@@ -319,7 +324,7 @@ export class InteractiveViewPanelController implements vscode.Disposable {
     this.configWatcher = vscode.workspace.onDidChangeConfiguration((event) => {
       void this.applyConfigurationChange(event);
     });
-    this.panel = panel;
+    panel.webview.html = this.renderHtml(panel.webview, nonce);
   }
 
   dispose(): void {
@@ -783,6 +788,7 @@ export class InteractiveViewPanelController implements vscode.Disposable {
 
     const message: ExtensionToWebviewMessage = {
       type: "state",
+      labels: this.labels,
       criteria,
       distinctSeverities: payload.distinctSeverities,
       text: limited.text,
@@ -981,6 +987,7 @@ export class InteractiveViewPanelController implements vscode.Disposable {
     return buildInteractiveViewHtml({
       nonce,
       scriptUrl: scriptUri.toString(),
+      language: vscode.env.language,
     });
   }
 }

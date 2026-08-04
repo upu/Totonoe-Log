@@ -1,6 +1,7 @@
 import type {
   ExtensionToWebviewMessage,
   HighlightRuleRow,
+  InteractiveViewLabels,
   LineHighlight,
   SerializedFilterCriteria,
   SerializedFilterPattern,
@@ -14,8 +15,20 @@ import type {
  * レンダラーに徹する（issue #166）。
  */
 
-/** セベリティ未認識のエントリを表すチェックボックスのラベル（`normalize` の `UNRECOGNIZED_SEVERITY_KEY` に対応）。 */
-const UNRECOGNIZED_SEVERITY_LABEL = "(no severity)";
+let labels: InteractiveViewLabels | undefined;
+
+function currentLabels(): InteractiveViewLabels {
+  if (!labels) {
+    throw new Error("Interactive View labels have not been initialized");
+  }
+  return labels;
+}
+
+function formatLabel(template: string, ...values: readonly (string | number)[]): string {
+  return template.replace(/\{(\d+)\}/g, (match, index: string) => {
+    return String(values[Number(index)] ?? match);
+  });
+}
 
 /** {@link ExtensionToWebviewMessage.items} の要素の型（Webview側は `normalize` を直接importできないため、メッセージ型からの導出で参照する）。 */
 type DisplayItem = NonNullable<ExtensionToWebviewMessage["items"]>[number];
@@ -55,6 +68,17 @@ const warningElement = document.getElementById("warning") as HTMLDivElement;
 const displayLimitElement = document.getElementById("display-limit") as HTMLDivElement;
 const logOutputElement = document.getElementById("log-output") as HTMLPreElement;
 
+function setControlsDisabled(disabled: boolean): void {
+  for (const control of document.querySelectorAll<
+    HTMLButtonElement | HTMLInputElement | HTMLSelectElement
+  >("button, input, select")) {
+    control.disabled = disabled;
+  }
+}
+
+// 初回の状態が届く前の空フォームを送信しないよう、描画が完了するまで操作を止める。
+setControlsDisabled(true);
+
 function debounce<Args extends unknown[]>(
   fn: (...args: Args) => void,
   waitMs: number
@@ -88,29 +112,30 @@ function collectPatterns(list: HTMLDivElement): SerializedFilterPattern[] {
  * 消してしまうと打ち直しになるため（issue #206）。
  */
 function createPatternRow(patternSource: string, enabled: boolean): HTMLElement {
+  const localized = currentLabels();
   const row = document.createElement("span");
   row.className = "pattern-row";
 
   const toggle = document.createElement("input");
   toggle.type = "checkbox";
   toggle.checked = enabled;
-  toggle.title = "この行を一時的に外す（入力は残ります）";
-  toggle.setAttribute("aria-label", "このパターンを有効にする");
+  toggle.title = localized.patternToggleTitle;
+  toggle.setAttribute("aria-label", localized.patternEnabledAriaLabel);
   toggle.addEventListener("change", postFilterChanged);
 
   const input = document.createElement("input");
   input.type = "text";
   input.value = patternSource;
-  input.placeholder = "正規表現";
-  input.setAttribute("aria-label", "パターン（正規表現）");
+  input.placeholder = localized.regularExpressionPlaceholder;
+  input.setAttribute("aria-label", localized.patternAriaLabel);
   input.addEventListener("input", postFilterChangedDebounced);
 
   const removeButton = document.createElement("button");
   removeButton.type = "button";
   removeButton.className = "remove-pattern";
   removeButton.textContent = "✕";
-  removeButton.title = "この行を削除する";
-  removeButton.setAttribute("aria-label", "このパターンを削除する");
+  removeButton.title = localized.removePatternTitle;
+  removeButton.setAttribute("aria-label", localized.removePatternAriaLabel);
   removeButton.addEventListener("click", () => {
     // 親は取り出してから外す（`remove()` の後は `parentElement` が null になる）。
     const list = row.parentElement;
@@ -219,10 +244,14 @@ collapseToggle.addEventListener("change", postFilterChanged);
 // パターン行そのものの入力・チェックは行を作るときに配線する（issue #206）。
 // ここは行を増やすボタンだけ。
 addMatchPatternButton.addEventListener("click", () => {
-  appendPatternRow(matchPatternList);
+  if (labels) {
+    appendPatternRow(matchPatternList);
+  }
 });
 addIgnorePatternButton.addEventListener("click", () => {
-  appendPatternRow(ignorePatternList);
+  if (labels) {
+    appendPatternRow(ignorePatternList);
+  }
 });
 
 // ファイル選択ダイアログを開くのは拡張機能本体側の責務（Webviewからは
@@ -254,7 +283,8 @@ function setMaskEnabled(enabled: boolean): void {
   // ON/OFF が判別しづらかった）。ラベルに「: ON」「: OFF」と書き込んでいたのを
   // アイコンに寄せたのは、押下状態を文字で説明するのがVSCodeの作法から
   // 外れているため（issue #195）。
-  maskButton.textContent = enabled ? "🔒 Mask" : "🔓 Mask";
+  const localized = currentLabels();
+  maskButton.textContent = enabled ? localized.maskEnabledLabel : localized.maskDisabledLabel;
 }
 
 /** マスク対象の選択パネルの開閉。閉じても選択内容とマスクのON/OFFは保たれる。 */
@@ -268,8 +298,10 @@ function setMaskPanelExpanded(expanded: boolean): void {
 // Webviewでは実行できない）。ボタン・チェックボックスは離散的な操作なので、
 // 絞り込みのチェックボックスと同じくデバウンスせず即座に送る。
 maskButton.addEventListener("click", () => {
-  setMaskEnabled(maskButton.getAttribute("aria-pressed") !== "true");
-  postFilterChanged();
+  if (labels) {
+    setMaskEnabled(maskButton.getAttribute("aria-pressed") !== "true");
+    postFilterChanged();
+  }
 });
 
 maskOptionsButton.addEventListener("click", () => {
@@ -282,11 +314,16 @@ maskOptionsButton.addEventListener("click", () => {
 function setHighlightPanelExpanded(expanded: boolean): void {
   highlightPanel.hidden = !expanded;
   highlightOptionsButton.setAttribute("aria-expanded", String(expanded));
-  highlightOptionsButton.textContent = expanded ? "ハイライト ▴" : "ハイライト ▾";
+  const localized = currentLabels();
+  highlightOptionsButton.textContent = expanded
+    ? localized.highlightExpandedLabel
+    : localized.highlightCollapsedLabel;
 }
 
 highlightOptionsButton.addEventListener("click", () => {
-  setHighlightPanelExpanded(highlightOptionsButton.getAttribute("aria-expanded") !== "true");
+  if (labels) {
+    setHighlightPanelExpanded(highlightOptionsButton.getAttribute("aria-expanded") !== "true");
+  }
 });
 
 // 編集中に届いて保留したルールを、パネルからフォーカスが抜けた時点で反映する。
@@ -305,9 +342,11 @@ highlightPanel.addEventListener("focusout", (event) => {
 // 追加した空の行は、パターンが空なので設定には書かれない（拡張機能側が落とす）。
 // それでも送るのは、他の行の編集で送り直したときに行数が合うようにするため。
 addHighlightRuleButton.addEventListener("click", () => {
-  const row = createHighlightRuleRow({ name: "", pattern: "", color: "yellow" });
-  highlightRuleList.appendChild(row);
-  row.querySelector<HTMLInputElement>(".highlight-rule-pattern")?.focus();
+  if (labels) {
+    const row = createHighlightRuleRow({ name: "", pattern: "", color: "yellow" });
+    highlightRuleList.appendChild(row);
+    row.querySelector<HTMLInputElement>(".highlight-rule-pattern")?.focus();
+  }
 });
 
 maskTimestampToggle.addEventListener("change", postFilterChanged);
@@ -327,6 +366,17 @@ const HIGHLIGHT_COLORS: readonly HighlightRuleRow["color"][] = [
   "blue",
   "purple",
 ];
+
+const HIGHLIGHT_COLOR_LABEL_KEYS: Readonly<
+  Record<HighlightRuleRow["color"], keyof InteractiveViewLabels>
+> = {
+  red: "highlightColorRed",
+  orange: "highlightColorOrange",
+  yellow: "highlightColorYellow",
+  green: "highlightColorGreen",
+  blue: "highlightColorBlue",
+  purple: "highlightColorPurple",
+};
 
 /** ハイライトルール編集パネル（issue #238）の現在の行を集める。 */
 function collectHighlightRules(): HighlightRuleRow[] {
@@ -388,13 +438,14 @@ function createHighlightColorSelect(
   patternInput: HTMLInputElement,
   color: HighlightRuleRow["color"]
 ): HTMLSelectElement {
+  const localized = currentLabels();
   const colorSelect = document.createElement("select");
   colorSelect.className = "highlight-rule-color";
-  colorSelect.setAttribute("aria-label", "色");
+  colorSelect.setAttribute("aria-label", localized.highlightColorAriaLabel);
   for (const availableColor of HIGHLIGHT_COLORS) {
     const option = document.createElement("option");
     option.value = availableColor;
-    option.textContent = availableColor;
+    option.textContent = localized[HIGHLIGHT_COLOR_LABEL_KEYS[availableColor]];
     colorSelect.appendChild(option);
   }
   colorSelect.value = color;
@@ -410,14 +461,15 @@ function createHighlightColorSelect(
 }
 
 function createHighlightMoveButton(row: HTMLElement, direction: -1 | 1): HTMLButtonElement {
+  const localized = currentLabels();
   const movesUp = direction === -1;
   const button = document.createElement("button");
   button.type = "button";
   button.textContent = movesUp ? "▲" : "▼";
-  button.title = movesUp ? "優先度を上げる" : "優先度を下げる";
+  button.title = movesUp ? localized.moveRuleUpTitle : localized.moveRuleDownTitle;
   button.setAttribute(
     "aria-label",
-    movesUp ? "このルールの優先度を上げる" : "このルールの優先度を下げる"
+    movesUp ? localized.moveRuleUpAriaLabel : localized.moveRuleDownAriaLabel
   );
   button.addEventListener("click", () => {
     moveHighlightRuleRow(row, direction);
@@ -426,11 +478,12 @@ function createHighlightMoveButton(row: HTMLElement, direction: -1 | 1): HTMLBut
 }
 
 function createHighlightRemoveButton(row: HTMLElement): HTMLButtonElement {
+  const localized = currentLabels();
   const button = document.createElement("button");
   button.type = "button";
   button.textContent = "✕";
-  button.title = "このルールを削除する";
-  button.setAttribute("aria-label", "このハイライトルールを削除する");
+  button.title = localized.removeRuleTitle;
+  button.setAttribute("aria-label", localized.removeRuleAriaLabel);
   button.addEventListener("click", () => {
     row.remove();
     postHighlightRulesChanged();
@@ -444,20 +497,21 @@ function createHighlightRemoveButton(row: HTMLElement): HTMLButtonElement {
  * 大きいため頼らない。
  */
 function createHighlightRuleRow(rule: HighlightRuleRow): HTMLElement {
+  const localized = currentLabels();
   const row = document.createElement("div");
   row.className = "highlight-rule-row";
 
   const nameInput = createHighlightRuleTextInput(
     "highlight-rule-name",
     rule.name,
-    "名前（任意）",
-    "ルール名（任意）"
+    localized.ruleNamePlaceholder,
+    localized.ruleNameAriaLabel
   );
   const patternInput = createHighlightRuleTextInput(
     "highlight-rule-pattern",
     rule.pattern,
-    "正規表現",
-    "ハイライトするパターン（正規表現）"
+    localized.regularExpressionPlaceholder,
+    localized.highlightPatternAriaLabel
   );
   const colorSelect = createHighlightColorSelect(patternInput, rule.color);
   const moveUpButton = createHighlightMoveButton(row, -1);
@@ -540,7 +594,7 @@ function renderSeverities(distinctSeverities: readonly string[], checked: readon
     checkbox.checked = checkedSet.has(severity);
     label.appendChild(checkbox);
     label.appendChild(
-      document.createTextNode(severity === "" ? UNRECOGNIZED_SEVERITY_LABEL : severity)
+      document.createTextNode(severity === "" ? currentLabels().unrecognizedSeverity : severity)
     );
     severitiesContainer.appendChild(label);
   }
@@ -569,6 +623,7 @@ function renderLoadedFiles(
   filePaths: readonly string[],
   visibleFiles: readonly boolean[]
 ): void {
+  const localized = currentLabels();
   loadedFilesElement.textContent = "";
   fileNames.forEach((fileName, index) => {
     const label = document.createElement("label");
@@ -580,8 +635,8 @@ function renderLoadedFiles(
     const filePath = filePaths[index];
     label.title =
       filePath !== undefined
-        ? `${filePath}（チェックを外すとこのファイルの行を隠します）`
-        : "チェックを外すとこのファイルの行を隠します";
+        ? formatLabel(localized.hideFileWithPathTitle, filePath)
+        : localized.hideFileTitle;
 
     const removeButton = document.createElement("button");
     removeButton.type = "button";
@@ -589,8 +644,8 @@ function renderLoadedFiles(
     removeButton.textContent = "✕";
     removeButton.disabled = fileNames.length <= 1;
     const removeLabel = removeButton.disabled
-      ? "最後の1ファイルは取り消せません（一時的に隠すにはチェックを外してください）"
-      : `${fileName} を読み込みから取り消す`;
+      ? localized.cannotRemoveLastFileLabel
+      : formatLabel(localized.removeFileLabel, fileName);
     removeButton.title = removeLabel;
     removeButton.setAttribute("aria-label", removeLabel);
     removeButton.addEventListener("click", () => {
@@ -766,7 +821,10 @@ function appendGroupItem(item: Extract<DisplayItem, { kind: "group" }>): void {
     ?.map((fileIndex) => sourceFilePaths[fileIndex])
     .filter((filePath): filePath is string => filePath !== undefined);
   if (headerFilePaths && headerFilePaths.length > 0) {
-    collapsedRow.title = `由来ファイル:\n${headerFilePaths.join("\n")}`;
+    collapsedRow.title = formatLabel(
+      currentLabels().sourceFilesTitle,
+      headerFilePaths.join("\n")
+    );
   }
   appendDecoratedText(collapsedRow, item.headerText, COLLAPSED_PREFIX, "\n");
 
@@ -853,12 +911,16 @@ function renderDisplayLimit(displayLimit: ExtensionToWebviewMessage["displayLimi
     displayLimitElement.textContent = "";
     return;
   }
-  displayLimitElement.textContent =
-    `表示上限の ${displayLimit.maxDisplayLines} 行を超えたため、先頭 ${displayLimit.displayedLineCount} 行のみ表示しています。` +
-    "絞り込むと全体を表示できます。全体をそのまま扱うには「Export as Virtual Document」で開いてください。";
+  displayLimitElement.textContent = formatLabel(
+    currentLabels().displayLimitMessage,
+    displayLimit.maxDisplayLines,
+    displayLimit.displayedLineCount
+  );
 }
 
 function renderState(state: ExtensionToWebviewMessage): void {
+  labels = state.labels;
+  setControlsDisabled(false);
   // 本文の描画（ホバー表示・ハイライト）より先に更新する必要がある。
   sourceFilePaths = state.sourceFilePaths;
   // 組の配列から作り直す（issue #18）。プレーンなオブジェクトで受け取ると
@@ -880,7 +942,11 @@ function renderState(state: ExtensionToWebviewMessage): void {
   syncTextInputIfNotFocused(maskKeysInput, state.criteria.mask.keys);
   syncTextInputIfNotFocused(maskPatternInput, state.criteria.mask.pattern);
 
-  statusElement.textContent = `${state.visibleLineCount} / ${state.totalLineCount} 行を表示`;
+  statusElement.textContent = formatLabel(
+    state.labels.statusMessage,
+    state.visibleLineCount,
+    state.totalLineCount
+  );
   warningElement.textContent = state.warning ?? "";
   renderDisplayLimit(state.displayLimit);
   if (state.items) {

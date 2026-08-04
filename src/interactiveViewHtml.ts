@@ -1,3 +1,16 @@
+import * as vscode from "vscode";
+
+const HTML_ENTITIES: Readonly<Record<string, string>> = {
+  "&": "&amp;",
+  "<": "&lt;",
+  ">": "&gt;",
+  '"': "&quot;",
+};
+
+function escapeHtml(value: string): string {
+  return value.replace(/[&<>"]/g, (character) => HTML_ENTITIES[character]);
+}
+
 /**
  * 状態管理の流れを巨大なリテラルで隠さないため、Webview の文書だけを分離する。
  * 拡張機能側で組み立てる文書なので、ブラウザ用の別 tsconfig がある src/webview には置かない。
@@ -296,68 +309,138 @@ const INTERACTIVE_VIEW_STYLES = `  body {
     background-color: var(--vscode-list-hoverBackground);
   }`;
 
-const INTERACTIVE_VIEW_BODY = `  <div id="files-panel">
-    <button id="add-files-button" type="button">+ Add Files...</button>
-    <button id="export-button" type="button">Export as Virtual Document</button>
+function buildInteractiveViewBodyLabels() {
+  return {
+    addFiles: escapeHtml(vscode.l10n.t("+ Add Files...")),
+    exportVirtualDocument: escapeHtml(vscode.l10n.t("Export as Virtual Document")),
+    maskTitle: escapeHtml(
+      vscode.l10n.t("Mask the selected data in the display (the masked text can be copied as-is)")
+    ),
+    maskLabel: escapeHtml(vscode.l10n.t("🔓 Mask")),
+    maskOptionsTitle: escapeHtml(vscode.l10n.t("Choose what to mask")),
+    timestamp: escapeHtml(vscode.l10n.t("Timestamp")),
+    host: escapeHtml(vscode.l10n.t("Host name / IP address")),
+    processId: escapeHtml(vscode.l10n.t("Process ID")),
+    key: escapeHtml(vscode.l10n.t("Key")),
+    keyPlaceholder: escapeHtml(vscode.l10n.t("user, token")),
+    keyMaskTitle: escapeHtml(
+      vscode.l10n.t(
+        "Mask only the values of these keys (user=hoge → user=<MASKED>). Separate keys with commas or spaces. Both = and : separators and quoted values are supported."
+      )
+    ),
+    customPattern: escapeHtml(vscode.l10n.t("Custom pattern")),
+    regularExpression: escapeHtml(vscode.l10n.t("Regular expression")),
+    customPatternTitle: escapeHtml(
+      vscode.l10n.t(
+        "Replace matching text with <MASKED>. To preserve a key name, use the Key field above instead."
+      )
+    ),
+    highlightTitle: escapeHtml(
+      vscode.l10n.t("Register patterns to highlight (saved in Settings)")
+    ),
+    highlightLabel: escapeHtml(vscode.l10n.t("Highlight ▾")),
+    highlightRules: escapeHtml(vscode.l10n.t("Highlight rules")),
+    addHighlightRule: escapeHtml(vscode.l10n.t("Add a highlight rule")),
+    add: escapeHtml(vscode.l10n.t("+ Add")),
+    highlightHint: escapeHtml(
+      vscode.l10n.t("Higher rows take priority when ranges overlap.")
+    ),
+    loadedFiles: escapeHtml(vscode.l10n.t("Loaded files:")),
+    datePlaceholder: escapeHtml(vscode.l10n.t("YYYY-MM-DD")),
+    startDateTime: escapeHtml(vscode.l10n.t("Start date and time")),
+    endDateTime: escapeHtml(vscode.l10n.t("End date and time")),
+    matchPatterns: escapeHtml(vscode.l10n.t("Match patterns")),
+    matchPatternsTitle: escapeHtml(
+      vscode.l10n.t("Show only lines matching any of these patterns (multiple patterns use OR)")
+    ),
+    addMatchPattern: escapeHtml(vscode.l10n.t("Add a match pattern")),
+    ignorePatterns: escapeHtml(vscode.l10n.t("Ignore patterns")),
+    ignorePatternsTitle: escapeHtml(
+      vscode.l10n.t("Hide lines matching any of these patterns (multiple patterns use OR)")
+    ),
+    addIgnorePattern: escapeHtml(vscode.l10n.t("Add an ignore pattern")),
+    collapseRepeated: escapeHtml(vscode.l10n.t("Collapse repeated entries")),
+  };
+}
+
+type InteractiveViewBodyLabels = ReturnType<typeof buildInteractiveViewBodyLabels>;
+
+function buildFilesPanel(labels: InteractiveViewBodyLabels): string {
+  return `  <div id="files-panel">
+    <button id="add-files-button" type="button">${labels.addFiles}</button>
+    <button id="export-button" type="button">${labels.exportVirtualDocument}</button>
     <div id="mask-container">
-      <button id="mask-button" type="button" aria-pressed="false" title="選んだ対象を伏せて表示します（そのままコピーできます）">🔓 Mask</button>
-      <button id="mask-options-button" type="button" aria-expanded="false" aria-controls="mask-panel" title="マスクする対象を選ぶ">▾</button>
+      <button id="mask-button" type="button" aria-pressed="false" title="${labels.maskTitle}">${labels.maskLabel}</button>
+      <button id="mask-options-button" type="button" aria-expanded="false" aria-controls="mask-panel" aria-label="${labels.maskOptionsTitle}" title="${labels.maskOptionsTitle}">▾</button>
       <div id="mask-panel" hidden>
-        <label><input type="checkbox" id="mask-timestamp">タイムスタンプ</label>
-        <label><input type="checkbox" id="mask-host">ホスト名 / IPアドレス</label>
-        <label><input type="checkbox" id="mask-process-id">プロセスID</label>
+        <label><input type="checkbox" id="mask-timestamp">${labels.timestamp}</label>
+        <label><input type="checkbox" id="mask-host">${labels.host}</label>
+        <label><input type="checkbox" id="mask-process-id">${labels.processId}</label>
         <!-- キー指定・任意パターンにチェックボックスを添えないのは、入力欄が
              空かどうかがそのままON/OFFになるため（絞り込みのパターン欄と同じ
              扱い）。キー指定を上に置くのは、正規表現を書かずに済むこちらを
              先に目に入れてほしいため（issue #212）。 -->
-        <label><span class="mask-field-label">キー</span><input type="text" id="mask-keys" placeholder="user, token" title="ここに挙げたキーの値だけを伏せます（user=hoge → user=&lt;MASKED&gt;）。カンマまたは空白区切り。= と : の両方、クォート付きの値にも対応します"></label>
-        <label><span class="mask-field-label">任意パターン</span><input type="text" id="mask-pattern" placeholder="正規表現" title="一致した箇所を &lt;MASKED&gt; に置き換えます。キー名を残したいだけなら上の「キー」欄の方が簡単です"></label>
+        <label><span class="mask-field-label">${labels.key}</span><input type="text" id="mask-keys" placeholder="${labels.keyPlaceholder}" title="${labels.keyMaskTitle}"></label>
+        <label><span class="mask-field-label">${labels.customPattern}</span><input type="text" id="mask-pattern" placeholder="${labels.regularExpression}" title="${labels.customPatternTitle}"></label>
       </div>
     </div>
     <!-- ハイライトルール（issue #238）。マスクと同じ「▾」で開く折りたたみパネルに
          する。マスクと違いON/OFFボタンは無い——ルールは設定に保存され、あれば
          常に効く（issue #18）。 -->
     <div id="highlight-container">
-      <button id="highlight-options-button" type="button" aria-expanded="false" aria-controls="highlight-panel" title="ハイライトするパターンを登録する（設定に保存されます）">ハイライト ▾</button>
+      <button id="highlight-options-button" type="button" aria-expanded="false" aria-controls="highlight-panel" title="${labels.highlightTitle}">${labels.highlightLabel}</button>
       <div id="highlight-panel" hidden>
-        <div id="highlight-rules" role="group" aria-label="ハイライトルール"></div>
-        <button id="add-highlight-rule" type="button" class="add-pattern" aria-label="ハイライトルールを追加する">+ 追加</button>
-        <p id="highlight-panel-hint">上の行ほど優先されます（範囲が重なったとき）。</p>
+        <div id="highlight-rules" role="group" aria-label="${labels.highlightRules}"></div>
+        <button id="add-highlight-rule" type="button" class="add-pattern" aria-label="${labels.addHighlightRule}">${labels.add}</button>
+        <p id="highlight-panel-hint">${labels.highlightHint}</p>
       </div>
     </div>
-    <span id="loaded-files-label">読み込み済み:</span>
+    <span id="loaded-files-label">${labels.loadedFiles}</span>
     <div id="loaded-files"></div>
-  </div>
-  <div id="filter-panel">
+  </div>`;
+}
+
+function buildFilterPanel(labels: InteractiveViewBodyLabels): string {
+  return `  <div id="filter-panel">
     <div id="severities"></div>
-    <label>開始日時 <input type="text" id="date-start" placeholder="YYYY-MM-DD"></label>
-    <label>終了日時 <input type="text" id="date-end" placeholder="YYYY-MM-DD"></label>
+    <label>${labels.startDateTime} <input type="text" id="date-start" placeholder="${labels.datePlaceholder}"></label>
+    <label>${labels.endDateTime} <input type="text" id="date-end" placeholder="${labels.datePlaceholder}"></label>
     <!-- パターンは1行1件で、行ごとにチェックで外せる（issue #206）。同じ欄の中は
          OR、欄同士は AND。行の並びは main.ts が状態から描く。 -->
     <div class="pattern-field">
-      <span class="pattern-field-label" title="ここに挙げたどれかに一致する行だけを表示します（複数指定は OR）">一致パターン</span>
+      <span class="pattern-field-label" title="${labels.matchPatternsTitle}">${labels.matchPatterns}</span>
       <!-- 行ごとの入力欄は動的に増減するため <label> で囲めない。欄の名前は
            グループとして持たせ、行の中の各操作には aria-label を付ける。 -->
-      <div id="match-patterns" class="pattern-list" role="group" aria-label="一致パターン"></div>
-      <button id="add-match-pattern" type="button" class="add-pattern" aria-label="一致パターンを追加する">+ 追加</button>
+      <div id="match-patterns" class="pattern-list" role="group" aria-label="${labels.matchPatterns}"></div>
+      <button id="add-match-pattern" type="button" class="add-pattern" aria-label="${labels.addMatchPattern}">${labels.add}</button>
     </div>
     <div class="pattern-field">
-      <span class="pattern-field-label" title="ここに挙げたどれかに一致する行を隠します（複数指定は OR）">無視パターン</span>
-      <div id="ignore-patterns" class="pattern-list" role="group" aria-label="無視パターン"></div>
-      <button id="add-ignore-pattern" type="button" class="add-pattern" aria-label="無視パターンを追加する">+ 追加</button>
+      <span class="pattern-field-label" title="${labels.ignorePatternsTitle}">${labels.ignorePatterns}</span>
+      <div id="ignore-patterns" class="pattern-list" role="group" aria-label="${labels.ignorePatterns}"></div>
+      <button id="add-ignore-pattern" type="button" class="add-pattern" aria-label="${labels.addIgnorePattern}">${labels.add}</button>
     </div>
-    <label><input type="checkbox" id="collapse-toggle" checked>繰り返しを折りたたむ</label>
+    <label><input type="checkbox" id="collapse-toggle" checked>${labels.collapseRepeated}</label>
   </div>
   <div id="status"></div>
   <div id="warning"></div>
   <div id="display-limit"></div>
   <pre id="log-output"></pre>`;
+}
 
-export function buildInteractiveViewHtml(options: { nonce: string; scriptUrl: string }): string {
-  const { nonce, scriptUrl } = options;
+function buildInteractiveViewBody(): string {
+  const labels = buildInteractiveViewBodyLabels();
+  return `${buildFilesPanel(labels)}\n${buildFilterPanel(labels)}`;
+}
+
+export function buildInteractiveViewHtml(options: {
+  nonce: string;
+  scriptUrl: string;
+  language: string;
+}): string {
+  const { nonce, scriptUrl, language } = options;
 
   return `<!DOCTYPE html>
-<html lang="ja">
+<html lang="${escapeHtml(language)}">
 <head>
 <meta charset="UTF-8">
 <meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'nonce-${nonce}'; script-src 'nonce-${nonce}';">
@@ -366,7 +449,7 @@ ${INTERACTIVE_VIEW_STYLES}
 </style>
 </head>
 <body>
-${INTERACTIVE_VIEW_BODY}
+${buildInteractiveViewBody()}
   <script nonce="${nonce}" src="${scriptUrl}"></script>
 </body>
 </html>`;

@@ -209,6 +209,44 @@ export type WebviewToExtensionMessage =
    */
   | { readonly type: "highlightRulesChanged"; readonly rules: readonly HighlightRuleRow[] };
 
+/** Webview側で動的に作る要素へ使う、翻訳済みのUI文言。 */
+export interface InteractiveViewLabels {
+  readonly unrecognizedSeverity: string;
+  readonly patternToggleTitle: string;
+  readonly patternEnabledAriaLabel: string;
+  readonly regularExpressionPlaceholder: string;
+  readonly patternAriaLabel: string;
+  readonly removePatternTitle: string;
+  readonly removePatternAriaLabel: string;
+  readonly maskEnabledLabel: string;
+  readonly maskDisabledLabel: string;
+  readonly highlightExpandedLabel: string;
+  readonly highlightCollapsedLabel: string;
+  readonly highlightColorAriaLabel: string;
+  readonly highlightColorRed: string;
+  readonly highlightColorOrange: string;
+  readonly highlightColorYellow: string;
+  readonly highlightColorGreen: string;
+  readonly highlightColorBlue: string;
+  readonly highlightColorPurple: string;
+  readonly moveRuleUpTitle: string;
+  readonly moveRuleDownTitle: string;
+  readonly moveRuleUpAriaLabel: string;
+  readonly moveRuleDownAriaLabel: string;
+  readonly removeRuleTitle: string;
+  readonly removeRuleAriaLabel: string;
+  readonly ruleNamePlaceholder: string;
+  readonly ruleNameAriaLabel: string;
+  readonly highlightPatternAriaLabel: string;
+  readonly hideFileWithPathTitle: string;
+  readonly hideFileTitle: string;
+  readonly cannotRemoveLastFileLabel: string;
+  readonly removeFileLabel: string;
+  readonly sourceFilesTitle: string;
+  readonly displayLimitMessage: string;
+  readonly statusMessage: string;
+}
+
 /**
  * 拡張機能本体 → Webview のメッセージ。`criteria` は絞り込み条件の解析結果
  * （不正な入力は無視した後の状態）をエコーバックし、Webview側のフォームを
@@ -216,6 +254,7 @@ export type WebviewToExtensionMessage =
  */
 export interface ExtensionToWebviewMessage {
   readonly type: "state";
+  readonly labels: InteractiveViewLabels;
   readonly criteria: SerializedFilterCriteria;
   readonly distinctSeverities: readonly string[];
   readonly text: string;
