@@ -28,7 +28,8 @@ CI相当の順序とOS差は[運用ランブック](/openwiki/operations/runbook
 | `src/test/suite/openInVirtualDocument.test.ts`, `mergedView.test.ts` | 単一・複数入力から仮想文書を開く経路、encoding、大容量fallback |
 | `src/test/suite/setViewFilterNormalized.test.ts`, `setViewFilterMerged.test.ts` | 開いた仮想文書へのfilter適用と行対応 |
 | `src/test/suite/goToSourceLine.test.ts`, `virtualDocumentGuard.test.ts` | 元行ジャンプと、整形済み文書を入力へ再利用しないガード |
-| `src/test/suite/interactiveView.test.ts`, `interactiveViewHtml.test.ts` | panel、criteria、file visibility、export、HTML/CSP、Webview要素ID契約 |
+| `src/test/suite/interactiveView.test.ts`, `interactiveViewHtml.test.ts`, `interactiveViewLabels.test.ts` | panel、criteria、file visibility、export、HTML/CSP、Webview要素ID、表示言語、静的・動的ラベル契約 |
+| `src/test/suite/packageLocalization.test.ts` | manifest・実行時翻訳キー、英日bundle、位置プレースホルダー、Webview scriptの日本語リテラル排除 |
 | `src/test/suite/filterPrompts.test.ts` | QuickPick/InputBoxによるfilter入力 |
 | `src/test/suite/interactiveViewRefresh.test.ts` | latest-winsの世代管理 |
 
@@ -61,9 +62,13 @@ severity/date/match/ignoreのAND・OR、空条件、複数行message、構文エ
 
 `protocol.ts` 変更時はhostとbrowserの両型検査に加え、production buildでNode・`vscode` 依存の誤importがないことを確認する。export変更では押下直前のcriteria、特にmaskが欠けない回帰ケースを追加する。[VS Code統合](/openwiki/integrations/vscode.md)の共有契約を参照する。
 
+### 多言語化
+
+`packageLocalization.test.ts` は、`package.json` の `%key%` と `package.nls.json` / `package.nls.ja.json` のキー集合、拡張ホストの直接的な `vscode.l10n.t()` 呼び出しと `l10n/bundle.l10n.ja.json`、位置プレースホルダーを突き合わせる。runtimeのソース文言はキー抽出のため文字列リテラルを直接渡す。Interactive Viewでは `interactiveViewHtml.test.ts` で翻訳済み静的文言と `lang` のescape、`interactiveViewLabels.test.ts` でprotocolが要求する全ラベル、`packageLocalization.test.ts` でbrowser scriptに日本語UIリテラルが残らないことを確認する。設計上の3経路は[VS Code統合](/openwiki/integrations/vscode.md)を参照する。
+
 ### package・release
 
-`npm run check:package` は `vsce ls` と固定allowlistを比較し、release workflowの `.vsix` pathも検査する。同梱物を変える場合は `.vscodeignore` と `EXPECTED` を揃える。
+`npm run check:package` は `vsce ls` と固定allowlistを比較し、release workflowの `.vsix` pathも検査する。同梱物を変える場合は `.vscodeignore` と `EXPECTED` を揃える。`package.nls.json`, `package.nls.ja.json`, `l10n/bundle.l10n.ja.json` も配布対象であり、翻訳追加時はallowlistから欠落させない。
 
 ## 失敗の読み分け
 
