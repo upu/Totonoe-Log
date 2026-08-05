@@ -33,6 +33,7 @@ const WEBVIEW_MAIN_SOURCE_PATH = path.join(
   "main.ts"
 );
 const NORMALIZE_SOURCE_ROOT = path.join(EXTENSION_ROOT, "src", "normalize");
+const INTERACTIVE_VIEW_HTML_SOURCE_PATH = path.join(EXTENSION_ROOT, "src", "interactiveViewHtml.ts");
 const EXCLUDED_TOP_LEVEL_DIRECTORIES = new Set(["normalize", "test", "webview"]);
 const EXCLUDED_TOP_LEVEL_FILES = new Set<string>();
 const JAPANESE_CHARACTER_PATTERN = /[぀-ヿ㐀-鿿]/u;
@@ -165,6 +166,55 @@ function collectNormalizeSourceFiles(directory = NORMALIZE_SOURCE_ROOT): string[
   return sourceFiles.sort();
 }
 
+/**
+ * HTML コメントと CSS のブロックコメントを、同じ長さの空白へ潰す。消さずに
+ * 置き換えるのは、残った文字の位置がソース上の位置とずれず、報告する行番号が
+ * そのまま使えるようにするため。
+ */
+function blankMarkupComments(value: string): string {
+  return value.replace(/<!--[\s\S]*?-->|\/\*[\s\S]*?\*\//g, (comment) =>
+    comment.replace(/[^\n]/g, " ")
+  );
+}
+
+/**
+ * `src/interactiveViewHtml.ts` の文字列（テンプレート含む）から、HTML/CSS の
+ * コメントを除いた部分に残る日本語を拾う。
+ */
+function collectJapaneseHtmlDocumentText(): string[] {
+  const sourceText = fs.readFileSync(INTERACTIVE_VIEW_HTML_SOURCE_PATH, "utf8");
+  const sourceFile = ts.createSourceFile(
+    INTERACTIVE_VIEW_HTML_SOURCE_PATH,
+    sourceText,
+    ts.ScriptTarget.Latest,
+    true
+  );
+  const matches: string[] = [];
+  const visit = (node: ts.Node): void => {
+    const isTemplate = ts.isTemplateExpression(node) || ts.isNoSubstitutionTemplateLiteral(node);
+    if (isTemplate || ts.isStringLiteral(node)) {
+      const start = node.getStart(sourceFile);
+      const withoutComments = blankMarkupComments(node.getText(sourceFile));
+      const index = withoutComments.search(JAPANESE_CHARACTER_PATTERN);
+      if (index !== -1) {
+        const { line } = sourceFile.getLineAndCharacterOfPosition(start + index);
+        matches.push(
+          `${path.relative(EXTENSION_ROOT, INTERACTIVE_VIEW_HTML_SOURCE_PATH)}:${line + 1}: ` +
+            withoutComments.slice(index, index + 60).trim()
+        );
+      }
+      // ネストしたテンプレートは外側の getText に含まれているので、二重に
+      // 数えないようここで打ち切る。
+      if (isTemplate) {
+        return;
+      }
+    }
+    ts.forEachChild(node, visit);
+  };
+  visit(sourceFile);
+  return matches;
+}
+
 function positionalPlaceholders(value: string): string[] {
   return [...value.matchAll(/\{(\d+)\}/g)].map((match) => match[1]).sort();
 }
@@ -214,6 +264,19 @@ suite("Package localization", () => {
       ),
       [],
       "normalize layer output should be language-independent"
+    );
+  });
+
+  test("keeps Japanese out of the Webview document text, comments aside (#281)", () => {
+    // このファイルだけは eslint.config.mjs の no-restricted-syntax から
+    // TemplateElement を外している——HTML/CSS の文書をテンプレートリテラルで
+    // 組み立てており、その中の日本語は全て `<!-- -->` / ブロックコメントだが、
+    // ESLint のセレクタからは本文と区別が付かないため。外した分の穴を、
+    // コメントを空白へ潰してから見るこのテストで塞ぐ。
+    assert.deepStrictEqual(
+      collectJapaneseHtmlDocumentText(),
+      [],
+      "Webview document text should come from the localized labels, not literals"
     );
   });
 

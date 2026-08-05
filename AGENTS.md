@@ -83,6 +83,10 @@ VSCode 拡張機能「Totonoe Log」。コンセプトは「バラバラなロ�
   する都合上 `any` 関連ルールと `require-await` を緩和している。`scripts/**` は
   CommonJS の素の Node スクリプトとして別ルールセットを当てる（詳細は
   `eslint.config.mjs` のコメント参照）
+- `no-restricted-syntax` で、`src/**` に日本語の文字列リテラル・テンプレートを
+  直接書くことを禁止している（l10n が腐るのを防ぐ機械的なゲート）。文言は英語を
+  ソース言語として書き、訳は `package.nls.ja.json` / `l10n/bundle.l10n.ja.json`
+  に置く。コメント・正規表現リテラル・`src/test/**` は対象外
 
 ## ワークフロー
 
