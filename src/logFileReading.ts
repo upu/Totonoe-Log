@@ -8,7 +8,7 @@ import type { LogFileInput } from "./normalize";
  * ラベルが異なるものを対応付ける。TextDecoder が対応しないコードページは
  * あえて含めず、黙って文字化けさせずに警告＋UTF-8フォールバックへ回す。
  */
-const FILE_ENCODING_DECODER_LABELS: Readonly<Record<string, string>> = {
+const FILE_ENCODING_DECODER_LABELS: Readonly<Partial<Record<string, string>>> = {
   utf8: "utf-8",
   utf8bom: "utf-8",
   utf16le: "utf-16le",

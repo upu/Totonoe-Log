@@ -3,6 +3,6 @@
  * `@types/vscode` はNode/拡張機能本体側のAPIのみを型付けしており、
  * このWebview専用グローバルは含まれないため個別に宣言する。
  */
-declare function acquireVsCodeApi<T = unknown>(): {
-  postMessage(message: T): void;
+declare function acquireVsCodeApi(): {
+  postMessage(message: import("./protocol").WebviewToExtensionMessage): void;
 };

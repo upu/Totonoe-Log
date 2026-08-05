@@ -68,7 +68,7 @@ function rangeLabel(entries: readonly LogEntry[]): string {
   const first = entries[0].startLine;
   const lastEntry = entries[entries.length - 1];
   const last = lastEntry.startLine + lastEntry.lines.length - 1;
-  return `${first}-${last}`;
+  return `${String(first)}-${String(last)}`;
 }
 
 /**

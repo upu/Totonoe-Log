@@ -42,9 +42,10 @@ export function parseUtcOffsetMinutes(value: string): number | undefined {
     return undefined;
   }
 
+  const captures: readonly (string | undefined)[] = match;
   const sign = match[1] === "-" ? -1 : 1;
   const hours = Number(match[2]);
-  const minutes = Number(match[3] ?? "0");
+  const minutes = Number(captures[3] ?? "0");
   if (minutes > 59) {
     return undefined;
   }

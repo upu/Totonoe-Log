@@ -84,7 +84,7 @@ export async function openVirtualNormalizedDocument(
   const sourceNameWithoutExtension = sourceBaseName.replace(/(?<=[^.])\.[^./]+$/, "");
   const uri = vscode.Uri.from({
     scheme: NORMALIZED_VIEW_SCHEME,
-    path: `/${sourceNameWithoutExtension}.${fileTag}-${nextViewCounter(fileTag)}.log`,
+    path: `/${sourceNameWithoutExtension}.${fileTag}-${String(nextViewCounter(fileTag))}.log`,
   });
 
   provider.register(uri, formatted.text, {

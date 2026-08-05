@@ -5,7 +5,6 @@ import type {
   LineHighlight,
   SerializedFilterCriteria,
   SerializedFilterPattern,
-  WebviewToExtensionMessage,
 } from "./protocol";
 
 /**
@@ -30,13 +29,17 @@ function formatLabel(template: string, ...values: readonly (string | number)[]):
   });
 }
 
+function arrayValueAt<T>(values: readonly T[], index: number): T | undefined {
+  return values[index];
+}
+
 /** {@link ExtensionToWebviewMessage.items} の要素の型（Webview側は `normalize` を直接importできないため、メッセージ型からの導出で参照する）。 */
 type DisplayItem = NonNullable<ExtensionToWebviewMessage["items"]>[number];
 
 /** 行1件分の元ログ上の位置（{@link DisplayItem} と同じ理由でメッセージ型から導出する）。 */
 type LineSource = NonNullable<NonNullable<ExtensionToWebviewMessage["lineSources"]>[number]>;
 
-const vscodeApi = acquireVsCodeApi<WebviewToExtensionMessage>();
+const vscodeApi = acquireVsCodeApi();
 
 const addFilesButton = document.getElementById("add-files-button") as HTMLButtonElement;
 const exportButton = document.getElementById("export-button") as HTMLButtonElement;
@@ -88,7 +91,9 @@ function debounce<Args extends unknown[]>(
     if (timer !== undefined) {
       clearTimeout(timer);
     }
-    timer = setTimeout(() => fn(...args), waitMs);
+    timer = setTimeout(() => {
+      fn(...args);
+    }, waitMs);
   };
 }
 
@@ -632,7 +637,7 @@ function renderLoadedFiles(
     checkbox.checked = visibleFiles[index] ?? true;
     label.appendChild(checkbox);
     label.appendChild(document.createTextNode(fileName));
-    const filePath = filePaths[index];
+    const filePath = arrayValueAt(filePaths, index);
     label.title =
       filePath !== undefined
         ? formatLabel(localized.hideFileWithPathTitle, filePath)
@@ -756,9 +761,9 @@ function createSourceLineElement(
   row.className = "source-line";
   appendDecoratedText(row, text, prefix, suffix);
 
-  const sourceFilePath = sourceFilePaths[lineSource.fileIndex];
+  const sourceFilePath = arrayValueAt(sourceFilePaths, lineSource.fileIndex);
   if (sourceFilePath !== undefined) {
-    row.title = `${sourceFilePath}:${lineSource.line}`;
+    row.title = `${sourceFilePath}:${String(lineSource.line)}`;
   }
   row.dataset.vscodeContext = JSON.stringify({
     webviewSection: LINE_CONTEXT_SECTION,
@@ -818,7 +823,7 @@ function appendGroupItem(item: Extract<DisplayItem, { kind: "group" }>): void {
   // するのは、別フォルダの同名ファイルを見分けられるようにするため。
   // 折りたたんだ状態にだけ付けるのは、展開すれば各行にファイル名が並ぶため。
   const headerFilePaths = item.headerFileIndices
-    ?.map((fileIndex) => sourceFilePaths[fileIndex])
+    ?.map((fileIndex) => arrayValueAt(sourceFilePaths, fileIndex))
     .filter((filePath): filePath is string => filePath !== undefined);
   if (headerFilePaths && headerFilePaths.length > 0) {
     collapsedRow.title = formatLabel(
@@ -956,9 +961,15 @@ function renderState(state: ExtensionToWebviewMessage): void {
   }
 }
 
-window.addEventListener("message", (event: MessageEvent<ExtensionToWebviewMessage>) => {
-  if (event.data.type === "state") {
-    renderState(event.data);
+window.addEventListener("message", (event: MessageEvent<unknown>) => {
+  const message = event.data;
+  if (
+    typeof message === "object" &&
+    message !== null &&
+    "type" in message &&
+    message.type === "state"
+  ) {
+    renderState(message as ExtensionToWebviewMessage);
   }
 });
 

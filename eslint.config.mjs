@@ -45,38 +45,43 @@ const noHardcodedJapanese = [
   },
 ];
 
+const typescriptLanguageOptions = {
+  parserOptions: {
+    // src/webview/** は DOM lib を持つ別プログラム（tsconfig.webview.json）
+    // でチェックしているため、型情報を使うルールがどちらのプログラムに
+    // 属するファイルでも解決できるよう両方を渡す。
+    project: ["./tsconfig.json", "./tsconfig.webview.json"],
+    tsconfigRootDir: import.meta.dirname,
+  },
+};
+
+const commonTypeScriptRules = {
+  "complexity": ["error", 15],
+  "max-depth": ["error", 3],
+  // 「なぜ」を説明するコメントを厚くしても関数長として罰しない。
+  "max-lines-per-function": [
+    "error",
+    { max: 60, skipBlankLines: true, skipComments: true },
+  ],
+  // src/normalize/** も対象に含める。issue #281 は #279 の結論しだいで除外を
+  // 検討する余地を残していたが、#279 が「整形結果の本文は英語固定・設定
+  // バリデーションはメッセージコードを返す」に決まった（#286）ため、
+  // ここに日本語が残る理由がなくなった。
+  "no-restricted-syntax": ["error", ...noHardcodedJapanese],
+};
+
 export default tseslint.config(
   {
     ignores: ["out/**", "out-tsc/**", "dist/**"],
   },
   {
-    // src/**: TypeScript, type-checked lint (catches floating promises etc.,
-    // which matter a lot for a VS Code extension's async APIs).
+    // 本体コードには strictTypeChecked を適用する。テストは別ブロックで
+    // recommendedTypeChecked を維持し、同じファイルへプリセットを重ねない。
     files: ["src/**/*.ts"],
-    extends: [js.configs.recommended, ...tseslint.configs.recommendedTypeChecked],
-    languageOptions: {
-      parserOptions: {
-        // src/webview/** は DOM lib を持つ別プログラム（tsconfig.webview.json）
-        // でチェックしているため、型情報を使うルールがどちらのプログラムに
-        // 属するファイルでも解決できるよう両方を渡す。
-        project: ["./tsconfig.json", "./tsconfig.webview.json"],
-        tsconfigRootDir: import.meta.dirname,
-      },
-    },
-    rules: {
-      "complexity": ["error", 15],
-      "max-depth": ["error", 3],
-      // 「なぜ」を説明するコメントを厚くしても関数長として罰しない。
-      "max-lines-per-function": [
-        "error",
-        { max: 60, skipBlankLines: true, skipComments: true },
-      ],
-      // src/normalize/** も対象に含める。issue #281 は #279 の結論しだいで除外を
-      // 検討する余地を残していたが、#279 が「整形結果の本文は英語固定・設定
-      // バリデーションはメッセージコードを返す」に決まった（#286）ため、
-      // ここに日本語が残る理由がなくなった。
-      "no-restricted-syntax": ["error", ...noHardcodedJapanese],
-    },
+    ignores: ["src/test/**/*.ts"],
+    extends: [js.configs.recommended, ...tseslint.configs.strictTypeChecked],
+    languageOptions: typescriptLanguageOptions,
+    rules: commonTypeScriptRules,
   },
   {
     // src/interactiveViewHtml.ts: Webview の HTML/CSS 文書をテンプレート
@@ -103,7 +108,10 @@ export default tseslint.config(
     // `Thenable<...>` return type of the vscode.* method being replaced, so
     // `require-await` is relaxed here too.
     files: ["src/test/**/*.ts"],
+    extends: [js.configs.recommended, ...tseslint.configs.recommendedTypeChecked],
+    languageOptions: typescriptLanguageOptions,
     rules: {
+      ...commonTypeScriptRules,
       // suite()/test() のコールバックも関数として数えられ、suite は複数の test を
       // まとめるため、テストにはプロダクションコードより緩い max 200 を適用する。
       "max-lines-per-function": [

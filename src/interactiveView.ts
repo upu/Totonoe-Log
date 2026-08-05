@@ -381,7 +381,7 @@ export class InteractiveViewPanelController implements vscode.Disposable {
   /** 2件以上のときは先頭のファイル名に残り件数を添える（タブ幅に全部は収まらないため）。 */
   private buildTitle(): string {
     const [first, ...rest] = this.loadedFiles;
-    const suffix = rest.length > 0 ? ` +${rest.length}` : "";
+    const suffix = rest.length > 0 ? ` +${String(rest.length)}` : "";
     return `Totonoe Log: ${baseName(first.uri)}${suffix}`;
   }
 
@@ -435,7 +435,8 @@ export class InteractiveViewPanelController implements vscode.Disposable {
    * ここでURIに解決してから `Go to Source Line` と共通のジャンプ処理へ渡す。
    */
   private async revealClickedSourceLine(lineSource: LineSource): Promise<void> {
-    const sourceUri = this.loadedFiles[lineSource.fileIndex]?.uri;
+    const loadedFiles: readonly (LoadedLogFile | undefined)[] = this.loadedFiles;
+    const sourceUri = loadedFiles[lineSource.fileIndex]?.uri;
     if (!sourceUri) {
       // 送信後にファイル集合が変わった場合など、`fileIndex` が現在の読み込み
       // 済みファイルに対応しないとき（`Go to Source Line` と同じ案内にする）。
@@ -547,11 +548,13 @@ export class InteractiveViewPanelController implements vscode.Disposable {
    * 元ファイルと行順が変わってしまう。
    */
   private recomputeEntries(): void {
-    const [first, ...rest] = this.loadedFiles;
+    const loadedFiles: readonly (LoadedLogFile | undefined)[] = this.loadedFiles;
+    const first = loadedFiles[0];
     if (!first) {
       return;
     }
 
+    const rest = this.loadedFiles.slice(1);
     if (rest.length === 0) {
       this.singleEntries = parseLogFileEntries(first.input);
       this.mergedEntries = [];
@@ -631,10 +634,9 @@ export class InteractiveViewPanelController implements vscode.Disposable {
       formatOptions: {
         gapThresholdMs: readGapThresholdMs(),
         displayTimezone,
-        collapseThreshold:
-          collapsibleSupported && criteriaSnapshot.collapseEnabled
-            ? readCollapseThreshold()
-            : undefined,
+        collapseThreshold: criteriaSnapshot.collapseEnabled
+          ? readCollapseThreshold()
+          : undefined,
         mask: toDisplayMaskOptions(criteriaSnapshot),
         maskPatterns: maskPatterns.patterns,
         visibleFileIndices: toVisibleFileIndices(criteriaSnapshot.visibleFiles),
@@ -765,7 +767,8 @@ export class InteractiveViewPanelController implements vscode.Disposable {
     revision: number
   ): Promise<void> {
     // パネルが閉じられた後、および後から始まった再描画に追い越された後は送らない。
-    if (!this.panel || !this.refreshGate.isCurrent(revision)) {
+    const panel = this.panel;
+    if (!panel || !this.refreshGate.isCurrent(revision)) {
       return;
     }
 
@@ -782,7 +785,7 @@ export class InteractiveViewPanelController implements vscode.Disposable {
     // より前では計算できない。ワーカーを1回挟むぶん待ちが増えるため、追い越し
     // 判定はこの後にもう一度行う。
     const highlights = await this.computeHighlights(limited);
-    if (!this.panel || !this.refreshGate.isCurrent(revision)) {
+    if (this.panel !== panel || !this.refreshGate.isCurrent(revision)) {
       return;
     }
 
@@ -808,7 +811,7 @@ export class InteractiveViewPanelController implements vscode.Disposable {
           ? { maxDisplayLines, displayedLineCount: limited.displayedLineCount }
           : undefined,
     };
-    await this.panel.webview.postMessage(message);
+    await panel.webview.postMessage(message);
   }
 
   /**
@@ -864,7 +867,8 @@ export class InteractiveViewPanelController implements vscode.Disposable {
   private async exportVirtualDocument(
     requestedCriteria: SerializedFilterCriteria
   ): Promise<void> {
-    const [firstFile] = this.loadedFiles;
+    const loadedFiles: readonly (LoadedLogFile | undefined)[] = this.loadedFiles;
+    const firstFile = loadedFiles[0];
     if (!firstFile) {
       return;
     }
@@ -882,12 +886,10 @@ export class InteractiveViewPanelController implements vscode.Disposable {
       vscode.window.showWarningMessage(vscode.l10n.t("Totonoe Log: {0}", ignoredInputWarning));
     }
     // 表示側と同じく、マージ表示でも折りたたみが効く（issue #158）。
-    const collapsibleSupported = true;
     const options: BuildInteractiveExportTextOptions = {
       gapThresholdMs: readGapThresholdMs(),
       displayTimezone,
-      collapseThreshold:
-        collapsibleSupported && this.criteria.collapseEnabled ? readCollapseThreshold() : undefined,
+      collapseThreshold: this.criteria.collapseEnabled ? readCollapseThreshold() : undefined,
       // 書き出しは表示の状態を引き継ぐ（issue #194、絞り込み・折りたたみと同じ扱い）。
       mask: toDisplayMaskOptions(this.criteria),
       maskPatterns: maskPatterns.patterns,
@@ -913,7 +915,7 @@ export class InteractiveViewPanelController implements vscode.Disposable {
     await this.mergedViewProvider.openDocument(
       formatted,
       this.loadedFiles.map((file) => file.uri),
-      `/interactive-export-merged-${this.exportMergedCounter}.log`
+      `/interactive-export-merged-${String(this.exportMergedCounter)}.log`
     );
   }
 
