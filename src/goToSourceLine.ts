@@ -58,7 +58,8 @@ export function createGoToSourceLineCommand(
       return;
     }
 
-    const sourceUri = sourceLineMap.sourceUris[lineSource.fileIndex];
+    const sourceUris: readonly (vscode.Uri | undefined)[] = sourceLineMap.sourceUris;
+    const sourceUri = sourceUris[lineSource.fileIndex];
     if (!sourceUri) {
       vscode.window.showWarningMessage(
         vscode.l10n.t("Totonoe Log: Could not resolve the source log file.")

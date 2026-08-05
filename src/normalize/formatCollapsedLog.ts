@@ -34,7 +34,7 @@ function rangeLabel(entries: readonly LogEntry[]): string {
   // エントリは複数物理行（スタックトレース等）にまたがりうるため、末尾の
   // 行番号は startLine ではなく、継続行を含めた最終物理行にする。
   const last = lastEntry.startLine + lastEntry.lines.length - 1;
-  return `${first}-${last}`;
+  return `${String(first)}-${String(last)}`;
 }
 
 /**

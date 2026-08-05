@@ -83,12 +83,12 @@ export function createCompareLogsCommand(
     const leftUri = await buildMaskedVirtualDocument(
       provider,
       firstFileUri,
-      `${compareViewCounter}-left`
+      `${String(compareViewCounter)}-left`
     );
     const rightUri = await buildMaskedVirtualDocument(
       provider,
       secondFileUri,
-      `${compareViewCounter}-right`
+      `${String(compareViewCounter)}-right`
     );
 
     const leftName = leftUri.path.split("/").pop();
@@ -97,7 +97,7 @@ export function createCompareLogsCommand(
       "vscode.diff",
       leftUri,
       rightUri,
-      `${leftName} ↔ ${rightName}`
+      `${String(leftName)} ↔ ${String(rightName)}`
     );
   };
 }

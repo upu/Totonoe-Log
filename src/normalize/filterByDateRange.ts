@@ -35,11 +35,12 @@ function parseDateBoundaryParts(
     return undefined;
   }
 
+  const captures: readonly (string | undefined)[] = match;
   let hour = 0;
   let minute = 0;
   let second = 0;
   let millisecond = 0;
-  if (match[4] === undefined) {
+  if (captures[4] === undefined) {
     if (boundaryKind === "end") {
       hour = 23;
       minute = 59;
@@ -47,9 +48,9 @@ function parseDateBoundaryParts(
       millisecond = 999;
     }
   } else {
-    hour = Number(match[4]);
+    hour = Number(captures[4]);
     minute = Number(match[5]);
-    second = match[6] === undefined ? 0 : Number(match[6]);
+    second = captures[6] === undefined ? 0 : Number(captures[6]);
   }
 
   const parts = {

@@ -18,7 +18,7 @@ const CLOCK_SKEW_CONFIG_SECTION = "totonoeLog.clockSkew";
 export function createClockSkewResolver(): (fileName: string) => number {
   const config = vscode.workspace.getConfiguration(CLOCK_SKEW_CONFIG_SECTION);
 
-  const settings = config.get<unknown[]>("fileOffsets", []);
+  const settings = config.get<unknown[] | null>("fileOffsets");
   const { rules, errors } = compileClockSkewRules(settings ?? []);
   if (errors.length > 0) {
     vscode.window.showWarningMessage(

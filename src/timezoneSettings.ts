@@ -51,7 +51,7 @@ export function readDisplayTimezone(): DisplayTimezone {
 export function createSourceOffsetResolver(): (fileName: string) => number | undefined {
   const config = vscode.workspace.getConfiguration(TIMEZONE_CONFIG_SECTION);
 
-  const fileOffsetSettings = config.get<unknown[]>("fileOffsets", []);
+  const fileOffsetSettings = config.get<unknown[] | null>("fileOffsets");
   const { rules, errors } = compileFileOffsetRules(fileOffsetSettings ?? []);
   if (errors.length > 0) {
     vscode.window.showWarningMessage(

@@ -26,9 +26,9 @@ export function formatGroupSuffix(
   endText: string | undefined
 ): string {
   if (startText === undefined || endText === undefined || endText === startText) {
-    return ` (x${count})`;
+    return ` (x${String(count)})`;
   }
-  return ` (x${count}, ~${shortenEndTimestamp(startText, endText)})`;
+  return ` (x${String(count)}, ~${shortenEndTimestamp(startText, endText)})`;
 }
 
 /** 開始と日付が同じなら、終了時刻から日付部分（`T` まで）を落とす。 */

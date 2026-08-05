@@ -24,7 +24,7 @@ const TIMESTAMP_FORMATS_CONFIG_KEY = "timestampFormats";
 export function readConfiguredTimestampFormats(): TimestampFormat[] {
   const settings = vscode.workspace
     .getConfiguration(TIMESTAMP_FORMATS_CONFIG_SECTION)
-    .get<unknown[]>(TIMESTAMP_FORMATS_CONFIG_KEY, []);
+    .get<unknown[] | null>(TIMESTAMP_FORMATS_CONFIG_KEY);
   const { formats, errors } = compileCustomTimestampFormats(settings ?? []);
   if (errors.length > 0) {
     vscode.window.showWarningMessage(

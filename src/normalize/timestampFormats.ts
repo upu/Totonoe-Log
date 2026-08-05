@@ -2,7 +2,7 @@ import type { TimestampFormat } from "./types";
 import { parseUtcOffsetMinutes } from "./timezone";
 
 /** syslog 形式のタイムスタンプで使う月の3文字略称。 */
-const MONTH_ABBREVIATIONS: Record<string, number> = {
+const MONTH_ABBREVIATIONS: Record<string, number | undefined> = {
   jan: 0,
   feb: 1,
   mar: 2,
@@ -213,7 +213,7 @@ export const APACHE_ACCESS_LOG_FORMAT: TimestampFormat = {
   regex:
     /^\[(?<d>\d{2})\/(?<mon>[A-Za-z]{3})\/(?<y>\d{4}):(?<h>\d{2}):(?<mi>\d{2}):(?<s>\d{2})(?: (?<tzs>[+-])(?<tzh>\d{2})(?<tzm>\d{2}))?\]/,
   parse(match, context) {
-    const groups = match.groups ?? {};
+    const groups: Record<string, string | undefined> = match.groups ?? {};
     const month = MONTH_ABBREVIATIONS[(groups.mon ?? "").toLowerCase()];
     if (month === undefined) {
       return undefined;
@@ -301,7 +301,7 @@ export function createSyslogFormat(options: SyslogFormatOptions = {}): Timestamp
     name: "syslog",
     regex: /^(?<mon>[A-Za-z]{3})\s+(?<d>\d{1,2})\s(?<h>\d{2}):(?<mi>\d{2}):(?<s>\d{2})/,
     parse(match, context) {
-      const groups = match.groups ?? {};
+      const groups: Record<string, string | undefined> = match.groups ?? {};
       const month = MONTH_ABBREVIATIONS[(groups.mon ?? "").toLowerCase()];
       if (month === undefined) {
         return undefined;

@@ -67,7 +67,7 @@ function createParseFunction(groupNames: readonly string[]): TimestampFormat["pa
   const hasEpochMs = groupNames.includes("epochMs");
   const hasEpochSec = groupNames.includes("epochSec");
   return (match, context) => {
-    const groups = match.groups ?? {};
+    const groups: Record<string, string | undefined> = match.groups ?? {};
     if (hasEpochMs && groups.epochMs) {
       return toValidEpochMs(Number(groups.epochMs));
     }
@@ -109,7 +109,8 @@ export function compileCustomTimestampFormats(
     }
 
     const { name: rawName, pattern } = setting as Partial<CustomTimestampFormatSetting>;
-    const name = typeof rawName === "string" && rawName !== "" ? rawName : `custom-${index + 1}`;
+    const name =
+      typeof rawName === "string" && rawName !== "" ? rawName : `custom-${String(index + 1)}`;
 
     if (typeof pattern !== "string" || pattern === "") {
       errors.push({ code: "missingNamedPattern", name });

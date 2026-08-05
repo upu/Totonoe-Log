@@ -121,16 +121,16 @@ class LargeMergedResultStore implements vscode.Disposable {
     }
 
     this.nextId += 1;
-    const baseName = path.split("/").pop() ?? `merged-${this.nextId}.log`;
+    const baseName = path.split("/").pop() ?? `merged-${String(this.nextId)}.log`;
     const uri = vscode.Uri.joinPath(
       this.directoryUri,
-      `${Date.now()}-${process.pid}-${this.nextId}-${baseName}`
+      `${String(Date.now())}-${String(process.pid)}-${String(this.nextId)}-${baseName}`
     );
     await vscode.workspace.fs.writeFile(uri, new TextEncoder().encode(content));
     this.trackedUris.add(uri.toString());
 
     try {
-      await vscode.commands.executeCommand<void>("vscode.open", uri, { preview: false });
+      await vscode.commands.executeCommand("vscode.open", uri, { preview: false });
     } catch (error: unknown) {
       await this.deleteTrackedResult(uri);
       throw error instanceof Error ? error : new Error(String(error));
@@ -241,7 +241,7 @@ export async function openMergedView(
   await provider.openDocument(
     formatted,
     fileUris,
-    `/merged-${mergedViewCounter}.log`,
+    `/merged-${String(mergedViewCounter)}.log`,
     createMergedFilterSource(mergedEntries)
   );
 }
@@ -319,7 +319,8 @@ export function createMergedViewFilenameHoverProvider(
         return undefined;
       }
 
-      const sourceUri = sourceLineMap.sourceUris[lineSource.fileIndex];
+      const sourceUris: readonly (vscode.Uri | undefined)[] = sourceLineMap.sourceUris;
+      const sourceUri = sourceUris[lineSource.fileIndex];
       if (!sourceUri) {
         return undefined;
       }

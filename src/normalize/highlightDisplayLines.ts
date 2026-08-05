@@ -137,7 +137,7 @@ export function highlightDisplayLines(
       finish({ ok: false, reason: "timeout" });
     }, timeoutMs);
 
-    worker.once("message", (matched: LineHighlight[][]) => {
+    worker.once("message", (matched: (LineHighlight[] | undefined)[]) => {
       // タイムアウト済みなら、捨てられると分かっている結果は組み立てない
       // （issue #237。`filterByIgnorePattern` と同じ理由）。
       if (settled) {

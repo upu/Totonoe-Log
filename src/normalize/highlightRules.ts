@@ -82,7 +82,8 @@ export function compileHighlightRules(
     }
 
     const { name: rawName, pattern, color: rawColor } = setting as Partial<HighlightRuleSetting>;
-    const name = typeof rawName === "string" && rawName !== "" ? rawName : `highlight-${index + 1}`;
+    const name =
+      typeof rawName === "string" && rawName !== "" ? rawName : `highlight-${String(index + 1)}`;
 
     if (typeof pattern !== "string" || pattern === "") {
       errors.push({ code: "missingNamedPattern", name });
