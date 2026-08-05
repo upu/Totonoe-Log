@@ -64,7 +64,7 @@ Process-ID masking, available here and in `Copy Masked Text`, covers syslog-styl
 
 Common timestamp formats are recognized out of the box: ISO 8601 (plain and bracketed), classic syslog, slash-separated dates (`2024/01/02 03:04:05`), Apache/Nginx access-log timestamps (`[02/Jan/2024:03:04:05 +0900]`), and leading epoch seconds/milliseconds. Formats not covered by the built-ins can be added via the `totonoeLog.timestampFormats` setting (see [Custom timestamp formats](#custom-timestamp-formats)).
 
-Long silent stretches are marked, too: when the timestamp gap between consecutive entries exceeds a threshold, a "XX seconds of silence" separator line is inserted so the quiet periods stand out during an incident investigation (applies to the normalized view and the merged view, and is recalculated after filtering; configure with `totonoeLog.gap.thresholdSeconds`).
+Long silent stretches are marked, too: when the timestamp gap between consecutive entries exceeds a threshold, a `XXs gap` separator line is inserted so the quiet periods stand out during an incident investigation (applies to the normalized view and the merged view, and is recalculated after filtering; configure with `totonoeLog.gap.thresholdSeconds`). Text generated into the log body stays English regardless of your display language, so the same log always produces the same output to paste into a ticket or diff.
 
 ## Filter out the noise
 
@@ -107,13 +107,13 @@ changes the source logs, and the stored result is removed after its tab closes.
 
 The merged view can be filtered too: run `Totonoe Log: Set Filter` against the open merged view and you get exactly the same flow as the normalized view (see [Filter out the noise](#filter-out-the-noise)). The fileName/kind columns and the `Go to Source Line` mapping survive filtering. Results above 50 MiB that opened as an ordinary tab are the exception — as with the source mapping, the information filtering needs can only be attached to a virtual document. Use the Interactive View for those.
 
-The same "XX seconds of silence" gap detection described above applies here too, spotting silent stretches across all merged source files (see [Normalize into one timeline](#normalize-into-one-timeline)).
+The same `XXs gap` detection described above applies here too, spotting silent stretches across all merged source files (see [Normalize into one timeline](#normalize-into-one-timeline)).
 
 Logs from servers in different timezones, or from a host whose clock is off, can be corrected per file so they still merge into the true chronological order (see [Timezone normalization](#timezone-normalization) and [Clock skew correction](#clock-skew-correction)).
 
 ## Collapse repeated lines
 
-The Interactive View folds consecutive repeated patterns into a single line with a repeat count (e.g. "×5"), so repetitive noise stops burying the interesting entries (threshold configurable with `totonoeLog.collapse.threshold`). A group whose start and end differ also carries its end time as `(×5, 〜03:04:09.000Z)`, so you can tell a burst that happened in seconds from one spread over hours without expanding the group (a group crossing midnight shows the date too; one that starts and ends on the same instant omits it, since repeating the timestamp adds nothing). It is on by default — untick "繰り返しを折りたたむ" to see every line — and it applies to the merged display too, which is where it earns the most. Click a group's header to expand it in place, or use "Export as Virtual Document" to get the folded result as a read-only document you can search and diff.
+The Interactive View folds consecutive repeated patterns into a single line with a repeat count (e.g. `(x5)`), so repetitive noise stops burying the interesting entries (threshold configurable with `totonoeLog.collapse.threshold`). A group whose start and end differ also carries its end time as `(x5, ~03:04:09.000Z)`, so you can tell a burst that happened in seconds from one spread over hours without expanding the group (a group crossing midnight shows the date too; one that starts and ends on the same instant omits it, since repeating the timestamp adds nothing). It is on by default — untick "繰り返しを折りたたむ" to see every line — and it applies to the merged display too, which is where it earns the most. Click a group's header to expand it in place, or use "Export as Virtual Document" to get the folded result as a read-only document you can search and diff.
 
 Masking feeds into what counts as a repeat: lines that become identical once masked are folded together. IP addresses are always ignored for this comparison, and everything the mask panel hides while it is on — host names, process IDs, and the values you name in the "キー" / "任意パターン" fields — counts too. So a heartbeat that carries a per-server identifier (`heartbeat ok (node=a-01)`) stops collapsing on its own, but turning the mask on and listing `node` in the "キー" field folds every server's copy into one group.
 
@@ -230,7 +230,7 @@ All settings live under the `totonoeLog` namespace.
 
 | Setting | Type | Default | Description |
 | --- | --- | --- | --- |
-| `totonoeLog.gap.thresholdSeconds` | number | `30` | Insert a "XX seconds of silence" separator line in the views `Open in Virtual Document` produces when the timestamp gap between consecutive entries is at least this many seconds. It also applies to the ordering left after `Set Filter`. `0` disables it. |
+| `totonoeLog.gap.thresholdSeconds` | number | `30` | Insert a `XXs gap` separator line in the views `Open in Virtual Document` produces when the timestamp gap between consecutive entries is at least this many seconds. It also applies to the ordering left after `Set Filter`. `0` disables it. |
 | `totonoeLog.collapse.threshold` | number | `3` | How many consecutive repeats it takes before the Interactive View folds them into one line. |
 | `totonoeLog.interactiveView.maxDisplayLines` | number | `20000` | Maximum number of lines `Show Interactive View` renders at once. Beyond this, only the leading lines are rendered and a notice suggests narrowing the filters or opening the whole log with "Export as Virtual Document". `0` disables the cap. |
 | `totonoeLog.copyMasked.maskTimestamp` | boolean | `true` | Mask timestamps when running `Copy Masked Text`. |

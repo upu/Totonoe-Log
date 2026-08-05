@@ -1,3 +1,4 @@
+import { describeThrownError, type SettingsValidationError } from "./settingsErrors";
 import type { LogEntry } from "./types";
 
 /**
@@ -41,8 +42,8 @@ export interface ClockSkewRule {
  */
 export interface CompileClockSkewRulesResult {
   readonly rules: ClockSkewRule[];
-  /** 無効だった項目ごとの、ユーザー向けエラーメッセージ。 */
-  readonly errors: string[];
+  /** 無効だった項目ごとのエラー（文言は呼び出し側が組み立てる。issue #279）。 */
+  readonly errors: SettingsValidationError[];
 }
 
 /**
@@ -53,18 +54,18 @@ export function compileClockSkewRules(
   settings: readonly unknown[]
 ): CompileClockSkewRulesResult {
   const rules: ClockSkewRule[] = [];
-  const errors: string[] = [];
+  const errors: SettingsValidationError[] = [];
 
   settings.forEach((setting, index) => {
     if (typeof setting !== "object" || setting === null) {
-      errors.push(`${index + 1}番目の項目: オブジェクトではありません`);
+      errors.push({ code: "notAnObject", index });
       return;
     }
 
     const { filePattern, offsetSeconds } = setting as Partial<ClockSkewRuleSetting>;
 
     if (typeof filePattern !== "string" || filePattern === "") {
-      errors.push(`${index + 1}番目の項目: filePattern（文字列）が指定されていません`);
+      errors.push({ code: "missingStringProperty", index, property: "filePattern" });
       return;
     }
 
@@ -72,15 +73,17 @@ export function compileClockSkewRules(
     try {
       regex = new RegExp(filePattern);
     } catch (error) {
-      const reason = error instanceof Error ? error.message : String(error);
-      errors.push(`${index + 1}番目の項目: filePattern が正規表現として不正です（${reason}）`);
+      errors.push({
+        code: "invalidRegexProperty",
+        index,
+        property: "filePattern",
+        reason: describeThrownError(error),
+      });
       return;
     }
 
     if (typeof offsetSeconds !== "number" || !Number.isFinite(offsetSeconds)) {
-      errors.push(
-        `${index + 1}番目の項目: offsetSeconds が不正です（-40 や 1.5 のような秒数を数値で指定してください）`
-      );
+      errors.push({ code: "invalidOffsetSeconds", index });
       return;
     }
 

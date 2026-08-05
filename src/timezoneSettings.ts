@@ -5,6 +5,7 @@ import {
   resolveFileOffsetMinutes,
   type DisplayTimezone,
 } from "./normalize";
+import { formatSettingsValidationErrors } from "./settingsErrorMessages";
 
 /** タイムゾーン関連設定のVSCode設定セクション名。 */
 const TIMEZONE_CONFIG_SECTION = "totonoeLog.timezone";
@@ -56,7 +57,7 @@ export function createSourceOffsetResolver(): (fileName: string) => number | und
     vscode.window.showWarningMessage(
       vscode.l10n.t(
         "Totonoe Log: Ignored invalid entries in totonoeLog.timezone.fileOffsets — {0}",
-        errors.join(" / ")
+        formatSettingsValidationErrors(errors)
       )
     );
   }

@@ -32,11 +32,16 @@ export function computeGapMs(
 }
 
 /**
- * ギャップの長さ（ミリ秒）を「XX秒の空白」の区切り行テキストへ変換する。
+ * ギャップの長さ（ミリ秒）を `XXs gap` の区切り行テキストへ変換する。
  * 秒数は小数第1位までに丸め、整数秒であれば小数点以下を表示しない。
+ *
+ * 表示言語に追従させず英語で固定する（issue #279）。整形結果は仮想ドキュメント
+ * の本文として選択・コピーされ、チケットや issue に貼られるうえ、Compare Logs
+ * の比較対象にもなる。ここが環境の表示言語で変わると、同じログから作った出力が
+ * 人によって違う文字列になり、貼り付け先での再現性と差分比較が壊れる。
  */
 export function formatGapMarkerText(gapMs: number): string {
   const rounded = Math.round(gapMs / 100) / 10;
   const secondsText = Number.isInteger(rounded) ? String(rounded) : rounded.toFixed(1);
-  return `${secondsText}秒の空白`;
+  return `${secondsText}s gap`;
 }

@@ -6,6 +6,7 @@ import {
   type HighlightRule,
   type HighlightRuleSetting,
 } from "./normalize";
+import { formatSettingsValidationErrors } from "./settingsErrorMessages";
 import type { HighlightRuleRow } from "./webview/interactiveView/protocol";
 
 /** ハイライトルールを読み込むVSCode設定のキー。 */
@@ -26,7 +27,7 @@ export function readHighlightRules(resource?: vscode.Uri): HighlightRule[] {
     vscode.window.showWarningMessage(
       vscode.l10n.t(
         "Totonoe Log: Ignored invalid entries in totonoeLog.highlightRules — {0}",
-        errors.join(" / ")
+        formatSettingsValidationErrors(errors)
       )
     );
   }

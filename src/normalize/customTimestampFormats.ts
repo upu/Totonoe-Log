@@ -1,3 +1,4 @@
+import { describeThrownError, type SettingsValidationError } from "./settingsErrors";
 import { isoLikeGroupsToEpochMs } from "./timestampFormats";
 import type { TimestampFormat } from "./types";
 
@@ -27,7 +28,8 @@ export interface CustomTimestampFormatSetting {
 export interface CompileCustomTimestampFormatsResult {
   readonly formats: TimestampFormat[];
   /** 無効だった項目ごとの、ユーザー向けエラーメッセージ。 */
-  readonly errors: string[];
+  /** 無効だった項目ごとのエラー（文言は呼び出し側が組み立てる。issue #279）。 */
+  readonly errors: SettingsValidationError[];
 }
 
 /** カレンダー形式のパースに最低限必要な名前付きキャプチャグループ。 */
@@ -98,11 +100,11 @@ export function compileCustomTimestampFormats(
   settings: readonly unknown[]
 ): CompileCustomTimestampFormatsResult {
   const formats: TimestampFormat[] = [];
-  const errors: string[] = [];
+  const errors: SettingsValidationError[] = [];
 
   settings.forEach((setting, index) => {
     if (typeof setting !== "object" || setting === null) {
-      errors.push(`${index + 1}番目の項目: オブジェクトではありません`);
+      errors.push({ code: "notAnObject", index });
       return;
     }
 
@@ -110,7 +112,7 @@ export function compileCustomTimestampFormats(
     const name = typeof rawName === "string" && rawName !== "" ? rawName : `custom-${index + 1}`;
 
     if (typeof pattern !== "string" || pattern === "") {
-      errors.push(`${name}: pattern（文字列）が指定されていません`);
+      errors.push({ code: "missingNamedPattern", name });
       return;
     }
 
@@ -118,8 +120,7 @@ export function compileCustomTimestampFormats(
     try {
       regex = new RegExp(`^(?:${pattern})`);
     } catch (error) {
-      const reason = error instanceof Error ? error.message : String(error);
-      errors.push(`${name}: 正規表現として不正です（${reason}）`);
+      errors.push({ code: "invalidNamedRegex", name, reason: describeThrownError(error) });
       return;
     }
 
@@ -129,10 +130,11 @@ export function compileCustomTimestampFormats(
       groupNames.includes(group)
     );
     if (!hasEpochGroup && !hasCalendarGroups) {
-      errors.push(
-        `${name}: 名前付きキャプチャグループが不足しています` +
-          `（${REQUIRED_CALENDAR_GROUPS.join(" ")} をすべて、または epochMs / epochSec を含めてください）`
-      );
+      errors.push({
+        code: "missingTimestampGroups",
+        name,
+        requiredGroups: REQUIRED_CALENDAR_GROUPS,
+      });
       return;
     }
 

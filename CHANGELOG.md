@@ -8,8 +8,24 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+
+- **Text generated into the log body is now English and no longer depends on your
+  display language.** The gap separator reads `3.5s gap` instead of `3.5秒の空白`,
+  a collapsed group's suffix reads `(x12, ~03:04:07.000Z)` instead of
+  `(×12, 〜03:04:07.000Z)`, and a group spanning several files reads
+  `app.log and others` instead of `app.log 他`. Formatted output is selected,
+  pasted into tickets, and compared with Compare Logs, so the same log now
+  produces the same text everywhere instead of varying by environment
+  (issue #279).
+
 ### Fixed
 
+- Settings validation warnings for `totonoeLog.timezone.fileOffsets`,
+  `totonoeLog.clockSkew.fileOffsets`, `totonoeLog.timestampFormats`, and
+  `totonoeLog.highlightRules` now follow VS Code's display language. They were
+  built inside the VS Code-independent normalize layer and stayed Japanese even
+  after the runtime messages around them were localized (issue #279).
 - Command Palette labels, Settings descriptions, and Marketplace metadata now
   follow VS Code's display language, with English as the source language and a
   Japanese localization, instead of showing Japanese Settings descriptions to

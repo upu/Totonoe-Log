@@ -8,8 +8,22 @@
 
 ## [Unreleased]
 
+### Changed
+
+- **整形結果の本文に入る文字列を英語で固定し、表示言語に依存しないようにした。**
+  ギャップ区切り行は `3.5秒の空白` から `3.5s gap` に、折りたたみグループの末尾は
+  `(×12, 〜03:04:07.000Z)` から `(x12, ~03:04:07.000Z)` に、複数ファイルにまたがる
+  グループの由来は `app.log 他` から `app.log and others` になる。整形結果は選択して
+  チケットに貼られ、Compare Logs の比較対象にもなるテキストなので、環境ごとに変わる
+  より同じログから常に同じ文字列が出るほうを採った（issue #279）。
+
 ### Fixed
 
+- `totonoeLog.timezone.fileOffsets`・`totonoeLog.clockSkew.fileOffsets`・
+  `totonoeLog.timestampFormats`・`totonoeLog.highlightRules` の設定バリデーション
+  警告が VS Code の表示言語に従うようにした。文言の実体が VS Code に依存しない
+  normalize 層にあったため、周りの実行時メッセージを多言語化した後も日本語のまま
+  だった（issue #279）。
 - コマンドパレットのラベル、設定画面の説明、Marketplace のメタデータが VS Code の
   表示言語に従うようにした。英語をソース言語、日本語を上書きとして提供し、全ユーザーの
   設定画面に日本語の説明が表示されていた問題を修正した（issue #276）。

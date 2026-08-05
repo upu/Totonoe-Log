@@ -876,11 +876,11 @@ suite("Totonoe Log timezone settings (#13)", () => {
       const activeEditor = vscode.window.activeTextEditor;
       assert.ok(activeEditor, "a merged view editor should be shown");
       // オフセット適用後、両エントリの間は3時間空いており、既定のギャップ検出
-      // しきい値（30秒）を超えるため「XX秒の空白」の区切り行が挿入される
+      // しきい値（30秒）を超えるため「XX s gap」のギャップ区切り行が挿入される
       // （issue #102、マージビューへのギャップ検出追加）。
       const expected = [
         "tokyo.log | tokyo | 1 | 2024-01-02T00:00:00.000Z INFO tokyo-entry",
-        "          |       | ... | 10800秒の空白",
+        "          |       | ... | 10800s gap",
         "utc.log   | utc   | 1 | 2024-01-02T03:00:00.000Z INFO utc-entry",
       ].join("\n");
       assert.strictEqual(activeEditor!.document.getText(), expected);

@@ -55,7 +55,7 @@ export async function filterMergedEntriesByCriteria(
         // 返す実装のため通常は到達しないが、行がサイレントに消えるより
         // 検出しやすくするためのフェイルセーフとして例外にする。
         throw new Error(
-          "filterMergedEntriesByCriteria: 絞り込み結果に対応する MergedEntry が見つかりませんでした。"
+          "filterMergedEntriesByCriteria: no MergedEntry matched an entry in the filtered result."
         );
       }
       return merged;

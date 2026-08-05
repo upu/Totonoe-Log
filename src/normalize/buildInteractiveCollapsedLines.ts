@@ -247,8 +247,12 @@ export function buildInteractiveCollapsedLines(
   return result;
 }
 
-/** 複数ファイル由来のグループで、代表のファイル名/種別に添える印（issue #158）。 */
-const MULTIPLE_SOURCES_SUFFIX = " 他";
+/**
+ * 複数ファイル由来のグループで、代表のファイル名/種別に添える印（issue #158）。
+ * 整形結果の本文なので表示言語に追従させず英語で固定する（issue #279、
+ * 理由は `gapDetection.ts` の `formatGapMarkerText` 参照）。
+ */
+const MULTIPLE_SOURCES_SUFFIX = " and others";
 
 /**
  * グループの列に出す代表値を決める。代表1件しか出せない以上どれかに寄せる

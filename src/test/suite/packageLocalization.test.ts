@@ -32,9 +32,17 @@ const WEBVIEW_MAIN_SOURCE_PATH = path.join(
   "interactiveView",
   "main.ts"
 );
+const NORMALIZE_SOURCE_ROOT = path.join(EXTENSION_ROOT, "src", "normalize");
 const EXCLUDED_TOP_LEVEL_DIRECTORIES = new Set(["normalize", "test", "webview"]);
 const EXCLUDED_TOP_LEVEL_FILES = new Set<string>();
 const JAPANESE_CHARACTER_PATTERN = /[぀-ヿ㐀-鿿]/u;
+/**
+ * normalize 層の出力に許さない文字（issue #279）。日本語に加えて、本文の安定性の
+ * ために ASCII へ寄せた記号も見る——`×`（U+00D7）と波ダッシュ / 全角チルダは
+ * 日本語の文字範囲に入らないため、`JAPANESE_CHARACTER_PATTERN` だけでは
+ * 出戻りを検出できない。
+ */
+const NON_PORTABLE_CHARACTER_PATTERN = /[぀-ヿ㐀-鿿×〜～]/u;
 
 function readJson<T>(fileName: string): T {
   return JSON.parse(fs.readFileSync(path.join(EXTENSION_ROOT, fileName), "utf8")) as T;
@@ -118,7 +126,7 @@ function collectRuntimeLocalizationKeys(): string[] {
   return [...keys].sort();
 }
 
-function collectJapaneseStringLiterals(filePath: string): string[] {
+function collectMatchingStringLiterals(filePath: string, pattern: RegExp): string[] {
   const sourceText = fs.readFileSync(filePath, "utf8");
   const sourceFile = ts.createSourceFile(filePath, sourceText, ts.ScriptTarget.Latest, true);
   const matches: string[] = [];
@@ -129,7 +137,7 @@ function collectJapaneseStringLiterals(filePath: string): string[] {
         ts.isTemplateHead(node) ||
         ts.isTemplateMiddle(node) ||
         ts.isTemplateTail(node)) &&
-      JAPANESE_CHARACTER_PATTERN.test(node.text)
+      pattern.test(node.text)
     ) {
       const { line } = sourceFile.getLineAndCharacterOfPosition(node.getStart(sourceFile));
       matches.push(`${path.relative(EXTENSION_ROOT, filePath)}:${line + 1}: ${node.text}`);
@@ -138,6 +146,23 @@ function collectJapaneseStringLiterals(filePath: string): string[] {
   };
   visit(sourceFile);
   return matches;
+}
+
+function collectJapaneseStringLiterals(filePath: string): string[] {
+  return collectMatchingStringLiterals(filePath, JAPANESE_CHARACTER_PATTERN);
+}
+
+function collectNormalizeSourceFiles(directory = NORMALIZE_SOURCE_ROOT): string[] {
+  const sourceFiles: string[] = [];
+  for (const entry of fs.readdirSync(directory, { withFileTypes: true })) {
+    const entryPath = path.join(directory, entry.name);
+    if (entry.isDirectory()) {
+      sourceFiles.push(...collectNormalizeSourceFiles(entryPath));
+    } else if (entry.isFile() && entry.name.endsWith(".ts")) {
+      sourceFiles.push(entryPath);
+    }
+  }
+  return sourceFiles.sort();
 }
 
 function positionalPlaceholders(value: string): string[] {
@@ -176,6 +201,19 @@ suite("Package localization", () => {
       collectJapaneseStringLiterals(WEBVIEW_MAIN_SOURCE_PATH),
       [],
       "Webview UI text should come from the localized labels sent by the extension host"
+    );
+  });
+
+  test("keeps language-dependent literals out of the normalize layer (#279)", () => {
+    // `src/normalize/` は VSCode API に依存できない（AGENTS.md）ため、ここに
+    // 文言が残っていると `vscode.l10n.t()` で訳す手立てが無い。整形結果の本文は
+    // 英語固定、設定バリデーションはメッセージコードを返す方針（#279）の担保。
+    assert.deepStrictEqual(
+      collectNormalizeSourceFiles().flatMap((filePath) =>
+        collectMatchingStringLiterals(filePath, NON_PORTABLE_CHARACTER_PATTERN)
+      ),
+      [],
+      "normalize layer output should be language-independent"
     );
   });
 

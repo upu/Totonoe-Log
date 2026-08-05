@@ -15,6 +15,10 @@
  * `endText` が `startText` と同じになる場合（グループ内が同一タイムスタンプ、
  * またはマスクで両端とも `<TIMESTAMP>` になる場合）は、繰り返して表示しても
  * 情報が増えないので省く。
+ *
+ * 記号は ASCII に寄せる（issue #279）。整形結果の本文は貼り付け・差分比較の
+ * 対象なので、環境ごとにフォントや表記が揺れる `×`（U+00D7）・`〜`（U+301C）
+ * より、どこでも同じ字形で出る `x` / `~` を使う。
  */
 export function formatGroupSuffix(
   count: number,
@@ -22,9 +26,9 @@ export function formatGroupSuffix(
   endText: string | undefined
 ): string {
   if (startText === undefined || endText === undefined || endText === startText) {
-    return ` (×${count})`;
+    return ` (x${count})`;
   }
-  return ` (×${count}, 〜${shortenEndTimestamp(startText, endText)})`;
+  return ` (x${count}, ~${shortenEndTimestamp(startText, endText)})`;
 }
 
 /** 開始と日付が同じなら、終了時刻から日付部分（`T` まで）を落とす。 */
