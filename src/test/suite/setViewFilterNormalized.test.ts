@@ -1,6 +1,7 @@
 import * as assert from "node:assert";
 import * as vscode from "vscode";
 import type { FilterKind } from "../../filterPrompts";
+import { activateTotonoeLogExtension } from "./support/activateTotonoeLogExtension";
 import { waitForDocumentText } from "./support/waitForDocumentText";
 
 interface TestQuickPickItem extends vscode.QuickPickItem {
@@ -39,14 +40,15 @@ function installQuickPickMock(
  * ドキュメントで、`Set Filter` はこれを開いたまま書き換える。
  */
 async function openNormalizedView(content: string): Promise<vscode.TextDocument> {
-  const extension = vscode.extensions.getExtension("upu.totonoe-log");
-  await extension!.activate();
+  await activateTotonoeLogExtension();
 
   const source = await vscode.workspace.openTextDocument({ content, language: "log" });
   await vscode.window.showTextDocument(source);
   await vscode.commands.executeCommand("totonoeLog.openVirtualDocument");
 
-  const document = vscode.window.activeTextEditor!.document;
+  const activeEditor = vscode.window.activeTextEditor;
+  assert.ok(activeEditor, "a normalized view editor should be shown");
+  const document = activeEditor.document;
   assert.strictEqual(document.uri.scheme, "totonoe-log-normalized");
   return document;
 }
@@ -57,8 +59,7 @@ suite("Totonoe Log set filter on the normalized view (#248): command surface", (
   });
 
   test("registers the setViewFilter command", async () => {
-    const extension = vscode.extensions.getExtension("upu.totonoe-log");
-    await extension!.activate();
+    await activateTotonoeLogExtension();
 
     const commands = await vscode.commands.getCommands(true);
     assert.ok(
@@ -68,17 +69,16 @@ suite("Totonoe Log set filter on the normalized view (#248): command surface", (
   });
 
   test("contributes an editor/context entry limited to the normalized and merged views", async () => {
-    const extension = vscode.extensions.getExtension("upu.totonoe-log");
-    await extension!.activate();
+    const extension = await activateTotonoeLogExtension();
 
-    const editorContext = extension!.packageJSON.contributes.menus["editor/context"] as Array<{
+    const editorContext = extension.packageJSON.contributes.menus["editor/context"] as Array<{
       command: string;
       when: string;
     }>;
     const entry = editorContext.find((item) => item.command === "totonoeLog.setViewFilter");
     assert.ok(entry, "setViewFilter should appear in the editor context menu");
     assert.ok(
-      entry!.when.includes("totonoe-log-normalized") && entry!.when.includes("totonoe-log-merged"),
+      entry.when.includes("totonoe-log-normalized") && entry.when.includes("totonoe-log-merged"),
       "the entry should be limited to the views it can actually filter"
     );
   });
@@ -120,8 +120,10 @@ suite("Totonoe Log set filter on the normalized view (#248): criteria", () => {
 
     const expected = "2 | 2024-01-02T03:04:06.000Z ERROR boom";
     assert.strictEqual(await waitForDocumentText(document, (text) => text === expected), expected);
+    const activeEditor = vscode.window.activeTextEditor;
+    assert.ok(activeEditor, "the filtered view editor should remain active");
     assert.strictEqual(
-      vscode.window.activeTextEditor!.document.uri.toString(),
+      activeEditor.document.uri.toString(),
       uriBefore,
       "the filter should rewrite the same tab instead of opening a new one"
     );
@@ -285,7 +287,7 @@ suite("Totonoe Log set filter on the normalized view (#248): criteria", () => {
     // 解除したのに「条件に合わない 0 行を非表示にしました」とは言わない。
     assert.ok(
       infoMessage?.includes("No lines were hidden"),
-      `clearing the filter should not read as filtering, got: ${infoMessage}`
+      `clearing the filter should not read as filtering, got: ${String(infoMessage)}`
     );
   });
 });
@@ -372,8 +374,7 @@ suite("Totonoe Log set filter on the normalized view (#248): cancellation and gu
   });
 
   test("warns and does nothing when the active editor is not a Totonoe Log view", async () => {
-    const extension = vscode.extensions.getExtension("upu.totonoe-log");
-    await extension!.activate();
+    await activateTotonoeLogExtension();
 
     const source = await vscode.workspace.openTextDocument({
       content: "2024-01-02T03:04:05Z INFO starting",
@@ -404,15 +405,16 @@ suite("Totonoe Log set filter on the normalized view (#248): cancellation and gu
 
     assert.ok(warningMessage, "a warning should explain that the command needs a Totonoe Log view");
     assert.strictEqual(quickPickShown, false, "the prompts should not start at all");
+    const activeEditor = vscode.window.activeTextEditor;
+    assert.ok(activeEditor, "the original editor should remain active");
     assert.strictEqual(
-      vscode.window.activeTextEditor!.document.getText(),
+      activeEditor.document.getText(),
       "2024-01-02T03:04:05Z INFO starting"
     );
   });
 
   test("shows a warning when there is no active editor at all", async () => {
-    const extension = vscode.extensions.getExtension("upu.totonoe-log");
-    await extension!.activate();
+    await activateTotonoeLogExtension();
 
     await vscode.commands.executeCommand("workbench.action.closeAllEditors");
 

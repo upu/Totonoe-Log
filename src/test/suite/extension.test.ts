@@ -3,14 +3,12 @@ import * as vscode from "vscode";
 import { createClockSkewResolver } from "../../clockSkewSettings";
 import { readConfiguredTimestampFormats } from "../../timestampFormatSettings";
 import { createSourceOffsetResolver } from "../../timezoneSettings";
+import { activateTotonoeLogExtension } from "./support/activateTotonoeLogExtension";
 import { waitForDocumentText } from "./support/waitForDocumentText";
 
 suite("Totonoe Log extension", () => {
   test("activates and registers the openVirtualDocument command", async () => {
-    const extension = vscode.extensions.getExtension("upu.totonoe-log");
-    assert.ok(extension, "extension should be discoverable by id");
-
-    await extension!.activate();
+    await activateTotonoeLogExtension();
 
     const commands = await vscode.commands.getCommands(true);
     assert.ok(
@@ -20,8 +18,7 @@ suite("Totonoe Log extension", () => {
   });
 
   test("no longer offers the commands the Interactive View replaced (#184, #233)", async () => {
-    const extension = vscode.extensions.getExtension("upu.totonoe-log");
-    await extension!.activate();
+    const packageExtension = await activateTotonoeLogExtension();
 
     // Interactive View のライブトグルで代替できるため廃止した4コマンド。
     const removedCommands = [
@@ -41,7 +38,7 @@ suite("Totonoe Log extension", () => {
 
     const commands = await vscode.commands.getCommands(true);
     const contributed = (
-      extension!.packageJSON.contributes.commands as Array<{ command: string }>
+      packageExtension.packageJSON.contributes.commands as Array<{ command: string }>
     ).map((item) => item.command);
 
     for (const removed of removedCommands) {
@@ -62,8 +59,7 @@ suite("Totonoe Log extension", () => {
 
 suite("Totonoe Log normalized view", () => {
   test("opens a read-only virtual document with the normalized content", async () => {
-    const extension = vscode.extensions.getExtension("upu.totonoe-log");
-    await extension!.activate();
+    await activateTotonoeLogExtension();
 
     const source = await vscode.workspace.openTextDocument({
       content: "2024-01-02T03:04:05Z ERROR boom",
@@ -75,16 +71,15 @@ suite("Totonoe Log normalized view", () => {
 
     const activeEditor = vscode.window.activeTextEditor;
     assert.ok(activeEditor, "a normalized view editor should be shown");
-    assert.strictEqual(activeEditor!.document.uri.scheme, "totonoe-log-normalized");
+    assert.strictEqual(activeEditor.document.uri.scheme, "totonoe-log-normalized");
     assert.strictEqual(
-      activeEditor!.document.getText(),
+      activeEditor.document.getText(),
       "1 | 2024-01-02T03:04:05.000Z ERROR boom"
     );
   });
 
   test("does not duplicate the file extension in the virtual document name", async () => {
-    const extension = vscode.extensions.getExtension("upu.totonoe-log");
-    await extension!.activate();
+    await activateTotonoeLogExtension();
 
     const fs = await import("node:fs/promises");
     const os = await import("node:os");
@@ -102,7 +97,7 @@ suite("Totonoe Log normalized view", () => {
 
       const activeEditor = vscode.window.activeTextEditor;
       assert.ok(activeEditor, "a normalized view editor should be shown");
-      assert.match(activeEditor!.document.uri.path, /^\/app\.normalized-\d+\.log$/);
+      assert.match(activeEditor.document.uri.path, /^\/app\.normalized-\d+\.log$/);
     } finally {
       await vscode.commands.executeCommand("workbench.action.closeAllEditors");
       // Windows CI では、直前の closeAllEditors がファイルハンドルを解放し
@@ -115,8 +110,7 @@ suite("Totonoe Log normalized view", () => {
   });
 
   test("keeps a leading dot intact for dotfiles with no other extension", async () => {
-    const extension = vscode.extensions.getExtension("upu.totonoe-log");
-    await extension!.activate();
+    await activateTotonoeLogExtension();
 
     const fs = await import("node:fs/promises");
     const os = await import("node:os");
@@ -134,7 +128,7 @@ suite("Totonoe Log normalized view", () => {
 
       const activeEditor = vscode.window.activeTextEditor;
       assert.ok(activeEditor, "a normalized view editor should be shown");
-      assert.match(activeEditor!.document.uri.path, /^\/\.env\.normalized-\d+\.log$/);
+      assert.match(activeEditor.document.uri.path, /^\/\.env\.normalized-\d+\.log$/);
     } finally {
       await vscode.commands.executeCommand("workbench.action.closeAllEditors");
       await fs.rm(tempDir, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 });
@@ -200,8 +194,7 @@ suite("Totonoe Log normalized view", () => {
   });
 
   test("shows a warning when there is no active editor to normalize", async () => {
-    const extension = vscode.extensions.getExtension("upu.totonoe-log");
-    await extension!.activate();
+    await activateTotonoeLogExtension();
 
     await vscode.commands.executeCommand("workbench.action.closeAllEditors");
 
@@ -215,8 +208,7 @@ suite("Totonoe Log normalized view", () => {
 
 suite("Totonoe Log compare view", () => {
   test("registers the compareLogs command", async () => {
-    const extension = vscode.extensions.getExtension("upu.totonoe-log");
-    await extension!.activate();
+    await activateTotonoeLogExtension();
 
     const commands = await vscode.commands.getCommands(true);
     assert.ok(
@@ -226,8 +218,7 @@ suite("Totonoe Log compare view", () => {
   });
 
   test("opens a diff between masked versions of the two selected files", async () => {
-    const extension = vscode.extensions.getExtension("upu.totonoe-log");
-    await extension!.activate();
+    await activateTotonoeLogExtension();
 
     const fs = await import("node:fs/promises");
     const os = await import("node:os");
@@ -255,9 +246,9 @@ suite("Totonoe Log compare view", () => {
 
       const activeEditor = vscode.window.activeTextEditor;
       assert.ok(activeEditor, "a diff editor should be shown");
-      assert.strictEqual(activeEditor!.document.uri.scheme, "totonoe-log-compare");
+      assert.strictEqual(activeEditor.document.uri.scheme, "totonoe-log-compare");
       assert.strictEqual(
-        activeEditor!.document.getText(),
+        activeEditor.document.getText(),
         "1 | <TIMESTAMP> ERROR connect to <HOST> failed"
       );
     } finally {
@@ -267,8 +258,7 @@ suite("Totonoe Log compare view", () => {
   });
 
   test("does nothing when the first file picker is cancelled", async () => {
-    const extension = vscode.extensions.getExtension("upu.totonoe-log");
-    await extension!.activate();
+    await activateTotonoeLogExtension();
 
     const source = await vscode.workspace.openTextDocument({
       content: "2024-01-02T03:04:05Z INFO starting",
@@ -288,12 +278,11 @@ suite("Totonoe Log compare view", () => {
 
     const activeEditor = vscode.window.activeTextEditor;
     assert.ok(activeEditor, "the original editor should remain active");
-    assert.notStrictEqual(activeEditor!.document.uri.scheme, "totonoe-log-compare");
+    assert.notStrictEqual(activeEditor.document.uri.scheme, "totonoe-log-compare");
   });
 
   test("does nothing when the second file picker is cancelled", async () => {
-    const extension = vscode.extensions.getExtension("upu.totonoe-log");
-    await extension!.activate();
+    await activateTotonoeLogExtension();
 
     const fs = await import("node:fs/promises");
     const os = await import("node:os");
@@ -326,7 +315,7 @@ suite("Totonoe Log compare view", () => {
 
       const activeEditor = vscode.window.activeTextEditor;
       assert.ok(activeEditor, "the original editor should remain active");
-      assert.notStrictEqual(activeEditor!.document.uri.scheme, "totonoe-log-compare");
+      assert.notStrictEqual(activeEditor.document.uri.scheme, "totonoe-log-compare");
     } finally {
       await vscode.commands.executeCommand("workbench.action.closeAllEditors");
       await fs.rm(tempDir, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 });
@@ -336,8 +325,7 @@ suite("Totonoe Log compare view", () => {
 
 suite("Totonoe Log copy masked text", () => {
   test("registers the copyMaskedText command", async () => {
-    const extension = vscode.extensions.getExtension("upu.totonoe-log");
-    await extension!.activate();
+    await activateTotonoeLogExtension();
 
     const commands = await vscode.commands.getCommands(true);
     assert.ok(
@@ -347,8 +335,7 @@ suite("Totonoe Log copy masked text", () => {
   });
 
   test("copies masked text of the whole document when there is no selection", async () => {
-    const extension = vscode.extensions.getExtension("upu.totonoe-log");
-    await extension!.activate();
+    await activateTotonoeLogExtension();
 
     const source = await vscode.workspace.openTextDocument({
       content: "2024-01-02T03:04:05Z INFO connect to 192.168.1.10 failed",
@@ -364,8 +351,7 @@ suite("Totonoe Log copy masked text", () => {
   });
 
   test("copies masked text of only the selected range when there is a selection", async () => {
-    const extension = vscode.extensions.getExtension("upu.totonoe-log");
-    await extension!.activate();
+    await activateTotonoeLogExtension();
 
     const source = await vscode.workspace.openTextDocument({
       content: [
@@ -385,8 +371,7 @@ suite("Totonoe Log copy masked text", () => {
   });
 
   test("shows a warning when there is no active editor to copy from", async () => {
-    const extension = vscode.extensions.getExtension("upu.totonoe-log");
-    await extension!.activate();
+    await activateTotonoeLogExtension();
 
     await vscode.commands.executeCommand("workbench.action.closeAllEditors");
 
@@ -397,8 +382,7 @@ suite("Totonoe Log copy masked text", () => {
 
   test("does not mask hosts when totonoeLog.copyMasked.maskHost is disabled", async function () {
     this.timeout(10000);
-    const extension = vscode.extensions.getExtension("upu.totonoe-log");
-    await extension!.activate();
+    await activateTotonoeLogExtension();
 
     const config = vscode.workspace.getConfiguration("totonoeLog.copyMasked");
     await config.update("maskHost", false, vscode.ConfigurationTarget.Global);
@@ -424,8 +408,7 @@ suite("Totonoe Log copy masked text", () => {
 suite("Totonoe Log merged view filename hover (#150)", () => {
   test("shows the full source path when hovering the file name column", async function () {
     this.timeout(10000);
-    const extension = vscode.extensions.getExtension("upu.totonoe-log");
-    await extension!.activate();
+    await activateTotonoeLogExtension();
 
     const fs = await import("node:fs/promises");
     const os = await import("node:os");
@@ -449,7 +432,7 @@ suite("Totonoe Log merged view filename hover (#150)", () => {
 
       const viewEditor = vscode.window.activeTextEditor;
       assert.ok(viewEditor, "a merged view editor should be shown");
-      const viewUri = viewEditor!.document.uri;
+      const viewUri = viewEditor.document.uri;
 
       // 時系列マージ後の表示2行目（0始まりで1）は b/app.log 由来のエントリ。
       const hovers = (await vscode.commands.executeCommand(
@@ -459,8 +442,13 @@ suite("Totonoe Log merged view filename hover (#150)", () => {
       )) as vscode.Hover[];
 
       assert.strictEqual(hovers.length, 1, "exactly one hover should be provided");
-      const hoverText = hovers[0].contents
-        .map((content) => (typeof content === "string" ? content : content.value))
+      const [hover] = hovers;
+      assert.ok(hover, "exactly one hover should be provided");
+      const hoverText = hover.contents
+        .map((content) => {
+          if (typeof content === "string") return content;
+          return content instanceof vscode.MarkdownString ? content.value : "";
+        })
         .join("\n");
       // vscode.Uri.fsPath はWindowsでドライブレターを小文字化するため、
       // 大文字小文字を無視して比較する（パス自体は大小文字を区別しない）。
@@ -476,8 +464,7 @@ suite("Totonoe Log merged view filename hover (#150)", () => {
 
   test("shows no hover outside the file name column", async function () {
     this.timeout(10000);
-    const extension = vscode.extensions.getExtension("upu.totonoe-log");
-    await extension!.activate();
+    await activateTotonoeLogExtension();
 
     const fs = await import("node:fs/promises");
     const os = await import("node:os");
@@ -496,8 +483,8 @@ suite("Totonoe Log merged view filename hover (#150)", () => {
 
       const viewEditor = vscode.window.activeTextEditor;
       assert.ok(viewEditor, "a merged view editor should be shown");
-      const viewUri = viewEditor!.document.uri;
-      const lineText = viewEditor!.document.lineAt(0).text;
+      const viewUri = viewEditor.document.uri;
+      const lineText = viewEditor.document.lineAt(0).text;
       const afterColumnCharacter = lineText.length - 1;
 
       const hovers = (await vscode.commands.executeCommand(
@@ -520,8 +507,7 @@ suite("Totonoe Log merged view filename hover (#150)", () => {
 
 suite("Totonoe Log merge from the explorer context menu", () => {
   test("merges the files passed as the explorer multi-selection, without prompting a file picker", async () => {
-    const extension = vscode.extensions.getExtension("upu.totonoe-log");
-    await extension!.activate();
+    await activateTotonoeLogExtension();
 
     const fs = await import("node:fs/promises");
     const os = await import("node:os");
@@ -556,12 +542,12 @@ suite("Totonoe Log merge from the explorer context menu", () => {
 
       const activeEditor = vscode.window.activeTextEditor;
       assert.ok(activeEditor, "a merged view editor should be shown");
-      assert.strictEqual(activeEditor!.document.uri.scheme, "totonoe-log-merged");
+      assert.strictEqual(activeEditor.document.uri.scheme, "totonoe-log-merged");
 
       const fileNameWidth = "database_20240101.log".length;
       const kindWidth = "database".length;
       assert.strictEqual(
-        activeEditor!.document.getText(),
+        activeEditor.document.getText(),
         [
           `${"database_20240101.log".padEnd(fileNameWidth)} | ${"database".padEnd(kindWidth)} | 1 | 2024-01-02T03:04:04.000Z ERROR boom`,
           `${"app.log".padEnd(fileNameWidth)} | ${"app".padEnd(kindWidth)} | 1 | 2024-01-02T03:04:05.000Z INFO  hello`,
@@ -574,8 +560,7 @@ suite("Totonoe Log merge from the explorer context menu", () => {
   });
 
   test("opens a single selected file as a normalized view instead of warning (#249)", async () => {
-    const extension = vscode.extensions.getExtension("upu.totonoe-log");
-    await extension!.activate();
+    await activateTotonoeLogExtension();
 
     const fs = await import("node:fs/promises");
     const os = await import("node:os");
@@ -592,9 +577,10 @@ suite("Totonoe Log merge from the explorer context menu", () => {
       await vscode.commands.executeCommand("totonoeLog.openVirtualDocument", appUri, [appUri]);
 
       const activeEditor = vscode.window.activeTextEditor;
-      assert.strictEqual(activeEditor!.document.uri.scheme, "totonoe-log-normalized");
+      assert.ok(activeEditor, "a normalized view editor should be shown");
+      assert.strictEqual(activeEditor.document.uri.scheme, "totonoe-log-normalized");
       assert.strictEqual(
-        activeEditor!.document.getText(),
+        activeEditor.document.getText(),
         "1 | 2024-01-02T03:04:05.000Z INFO hello"
       );
     } finally {
@@ -604,8 +590,7 @@ suite("Totonoe Log merge from the explorer context menu", () => {
   });
 
   test("ignores folders included in the selection and merges the remaining files", async () => {
-    const extension = vscode.extensions.getExtension("upu.totonoe-log");
-    await extension!.activate();
+    await activateTotonoeLogExtension();
 
     const fs = await import("node:fs/promises");
     const os = await import("node:os");
@@ -632,12 +617,12 @@ suite("Totonoe Log merge from the explorer context menu", () => {
 
       const activeEditor = vscode.window.activeTextEditor;
       assert.ok(activeEditor, "a merged view editor should be shown");
-      assert.strictEqual(activeEditor!.document.uri.scheme, "totonoe-log-merged");
+      assert.strictEqual(activeEditor.document.uri.scheme, "totonoe-log-merged");
 
       const fileNameWidth = "database_20240101.log".length;
       const kindWidth = "database".length;
       assert.strictEqual(
-        activeEditor!.document.getText(),
+        activeEditor.document.getText(),
         [
           `${"database_20240101.log".padEnd(fileNameWidth)} | ${"database".padEnd(kindWidth)} | 1 | 2024-01-02T03:04:04.000Z ERROR boom`,
           `${"app.log".padEnd(fileNameWidth)} | ${"app".padEnd(kindWidth)} | 1 | 2024-01-02T03:04:05.000Z INFO  hello`,
@@ -679,8 +664,7 @@ suite("Totonoe Log configuration value guards", () => {
 suite("Totonoe Log custom timestamp formats", () => {
   test("recognizes a custom format configured via totonoeLog.timestampFormats", async function () {
     this.timeout(10000);
-    const extension = vscode.extensions.getExtension("upu.totonoe-log");
-    await extension!.activate();
+    await activateTotonoeLogExtension();
 
     const config = vscode.workspace.getConfiguration("totonoeLog");
     await config.update(
@@ -707,7 +691,7 @@ suite("Totonoe Log custom timestamp formats", () => {
       const activeEditor = vscode.window.activeTextEditor;
       assert.ok(activeEditor, "a normalized view editor should be shown");
       assert.strictEqual(
-        activeEditor!.document.getText(),
+        activeEditor.document.getText(),
         "1 | 2024-01-02T03:04:05.000Z INFO custom format entry"
       );
     } finally {
@@ -717,8 +701,7 @@ suite("Totonoe Log custom timestamp formats", () => {
 
   test("warns about invalid custom format entries and keeps parsing with the rest", async function () {
     this.timeout(10000);
-    const extension = vscode.extensions.getExtension("upu.totonoe-log");
-    await extension!.activate();
+    await activateTotonoeLogExtension();
 
     const config = vscode.workspace.getConfiguration("totonoeLog");
     await config.update(
@@ -748,8 +731,9 @@ suite("Totonoe Log custom timestamp formats", () => {
         "a warning should be shown for the invalid custom format entry"
       );
       const activeEditor = vscode.window.activeTextEditor;
+      assert.ok(activeEditor, "a normalized view editor should be shown");
       assert.strictEqual(
-        activeEditor!.document.getText(),
+        activeEditor.document.getText(),
         "1 | 2024-01-02T03:04:05.000Z INFO built-in still works"
       );
     } finally {
@@ -762,8 +746,7 @@ suite("Totonoe Log custom timestamp formats", () => {
 suite("Totonoe Log timezone settings (#13)", () => {
   test("renders normalized timestamps in the timezone configured via totonoeLog.timezone.display", async function () {
     this.timeout(10000);
-    const extension = vscode.extensions.getExtension("upu.totonoe-log");
-    await extension!.activate();
+    await activateTotonoeLogExtension();
 
     const config = vscode.workspace.getConfiguration("totonoeLog.timezone");
     await config.update("display", "+09:00", vscode.ConfigurationTarget.Global);
@@ -780,7 +763,7 @@ suite("Totonoe Log timezone settings (#13)", () => {
       const activeEditor = vscode.window.activeTextEditor;
       assert.ok(activeEditor, "a normalized view editor should be shown");
       assert.strictEqual(
-        activeEditor!.document.getText(),
+        activeEditor.document.getText(),
         "1 | 2024-01-02T12:04:05.000+09:00 INFO hello"
       );
     } finally {
@@ -790,8 +773,7 @@ suite("Totonoe Log timezone settings (#13)", () => {
 
   test("filters by the wall-clock time shown in the configured display timezone (issue #134)", async function () {
     this.timeout(10000);
-    const extension = vscode.extensions.getExtension("upu.totonoe-log");
-    await extension!.activate();
+    await activateTotonoeLogExtension();
 
     const config = vscode.workspace.getConfiguration("totonoeLog.timezone");
     await config.update("display", "+09:00", vscode.ConfigurationTarget.Global);
@@ -822,7 +804,9 @@ suite("Totonoe Log timezone settings (#13)", () => {
 
     try {
       await vscode.commands.executeCommand("totonoeLog.openVirtualDocument");
-      const document = vscode.window.activeTextEditor!.document;
+      const activeEditor = vscode.window.activeTextEditor;
+      assert.ok(activeEditor, "a normalized view editor should be shown");
+      const document = activeEditor.document;
       await vscode.commands.executeCommand("totonoeLog.setViewFilter");
 
       const expected = "2 | 2024-01-02T12:04:05.000+09:00 INFO target";
@@ -843,8 +827,7 @@ suite("Totonoe Log timezone settings (#13)", () => {
 
   test("interprets zone-less timestamps with the offset configured via totonoeLog.timezone.sourceOffset", async function () {
     this.timeout(10000);
-    const extension = vscode.extensions.getExtension("upu.totonoe-log");
-    await extension!.activate();
+    await activateTotonoeLogExtension();
 
     const config = vscode.workspace.getConfiguration("totonoeLog.timezone");
     await config.update("sourceOffset", "+09:00", vscode.ConfigurationTarget.Global);
@@ -862,7 +845,7 @@ suite("Totonoe Log timezone settings (#13)", () => {
       assert.ok(activeEditor, "a normalized view editor should be shown");
       // +09:00 の壁時計 12:04:05 は UTC の 03:04:05。表示は既定（UTC）のまま。
       assert.strictEqual(
-        activeEditor!.document.getText(),
+        activeEditor.document.getText(),
         "1 | 2024-01-02T03:04:05.000Z INFO hello"
       );
     } finally {
@@ -872,8 +855,7 @@ suite("Totonoe Log timezone settings (#13)", () => {
 
   test("applies per-file source offsets configured via totonoeLog.timezone.fileOffsets to the merged view", async function () {
     this.timeout(10000);
-    const extension = vscode.extensions.getExtension("upu.totonoe-log");
-    await extension!.activate();
+    await activateTotonoeLogExtension();
 
     const fs = await import("node:fs/promises");
     const os = await import("node:os");
@@ -912,7 +894,7 @@ suite("Totonoe Log timezone settings (#13)", () => {
         "          |       | ... | 10800s gap",
         "utc.log   | utc   | 1 | 2024-01-02T03:00:00.000Z INFO utc-entry",
       ].join("\n");
-      assert.strictEqual(activeEditor!.document.getText(), expected);
+      assert.strictEqual(activeEditor.document.getText(), expected);
     } finally {
       await config.update("fileOffsets", undefined, vscode.ConfigurationTarget.Global);
       await vscode.commands.executeCommand("workbench.action.closeAllEditors");
@@ -922,8 +904,7 @@ suite("Totonoe Log timezone settings (#13)", () => {
 
   test("warns about an invalid timezone setting and falls back to UTC", async function () {
     this.timeout(10000);
-    const extension = vscode.extensions.getExtension("upu.totonoe-log");
-    await extension!.activate();
+    await activateTotonoeLogExtension();
 
     const config = vscode.workspace.getConfiguration("totonoeLog.timezone");
     await config.update("display", "bogus", vscode.ConfigurationTarget.Global);
@@ -949,8 +930,9 @@ suite("Totonoe Log timezone settings (#13)", () => {
         "a warning should be shown for the invalid timezone setting"
       );
       const activeEditor = vscode.window.activeTextEditor;
+      assert.ok(activeEditor, "a normalized view editor should be shown");
       assert.strictEqual(
-        activeEditor!.document.getText(),
+        activeEditor.document.getText(),
         "1 | 2024-01-02T03:04:05.000Z INFO hello"
       );
     } finally {
@@ -963,8 +945,7 @@ suite("Totonoe Log timezone settings (#13)", () => {
 suite("Totonoe Log clock skew settings (#15)", () => {
   test("applies the per-file clock skew configured via totonoeLog.clockSkew.fileOffsets to the normalized view", async function () {
     this.timeout(10000);
-    const extension = vscode.extensions.getExtension("upu.totonoe-log");
-    await extension!.activate();
+    await activateTotonoeLogExtension();
 
     const fs = await import("node:fs/promises");
     const os = await import("node:os");
@@ -992,7 +973,7 @@ suite("Totonoe Log clock skew settings (#15)", () => {
       const activeEditor = vscode.window.activeTextEditor;
       assert.ok(activeEditor, "a normalized view editor should be shown");
       assert.strictEqual(
-        activeEditor!.document.getText(),
+        activeEditor.document.getText(),
         "1 | 2024-01-02T03:04:05.000Z INFO hello"
       );
     } finally {
@@ -1004,8 +985,7 @@ suite("Totonoe Log clock skew settings (#15)", () => {
 
   test("applies per-file clock skews configured via totonoeLog.clockSkew.fileOffsets to the merged view", async function () {
     this.timeout(10000);
-    const extension = vscode.extensions.getExtension("upu.totonoe-log");
-    await extension!.activate();
+    await activateTotonoeLogExtension();
 
     const fs = await import("node:fs/promises");
     const os = await import("node:os");
@@ -1040,7 +1020,7 @@ suite("Totonoe Log clock skew settings (#15)", () => {
         "fast.log   | fast   | 1 | 2024-01-02T03:03:50.000Z INFO fast-entry",
         "steady.log | steady | 1 | 2024-01-02T03:04:00.000Z INFO steady-entry",
       ].join("\n");
-      assert.strictEqual(activeEditor!.document.getText(), expected);
+      assert.strictEqual(activeEditor.document.getText(), expected);
     } finally {
       await config.update("fileOffsets", undefined, vscode.ConfigurationTarget.Global);
       await vscode.commands.executeCommand("workbench.action.closeAllEditors");
@@ -1050,8 +1030,7 @@ suite("Totonoe Log clock skew settings (#15)", () => {
 
   test("warns about invalid clock skew entries and continues with the valid ones", async function () {
     this.timeout(10000);
-    const extension = vscode.extensions.getExtension("upu.totonoe-log");
-    await extension!.activate();
+    await activateTotonoeLogExtension();
 
     const config = vscode.workspace.getConfiguration("totonoeLog.clockSkew");
     await config.update(
@@ -1081,8 +1060,9 @@ suite("Totonoe Log clock skew settings (#15)", () => {
         "a warning should be shown for the invalid clock skew setting"
       );
       const activeEditor = vscode.window.activeTextEditor;
+      assert.ok(activeEditor, "a normalized view editor should be shown");
       assert.strictEqual(
-        activeEditor!.document.getText(),
+        activeEditor.document.getText(),
         "1 | 2024-01-02T03:04:05.000Z INFO hello"
       );
     } finally {
@@ -1094,12 +1074,12 @@ suite("Totonoe Log clock skew settings (#15)", () => {
 
 suite("Totonoe Log low timestamp recognition warning", () => {
   /** タイムスタンプを含まないプレーンな行（警告条件を満たす12行）。 */
-  const UNRECOGNIZED_LOG = Array.from({ length: 12 }, (_, i) => `plain line ${i + 1}`).join("\n");
+  const UNRECOGNIZED_LOG = Array.from({ length: 12 }, (_, i) => `plain line ${String(i + 1)}`).join("\n");
 
   /** 全行が ISO 8601 タイムスタンプ付きの正常なログ（12行）。 */
   const RECOGNIZED_LOG = Array.from(
     { length: 12 },
-    (_, i) => `2024-01-02T03:04:${String(i).padStart(2, "0")}Z INFO line ${i + 1}`
+    (_, i) => `2024-01-02T03:04:${String(i).padStart(2, "0")}Z INFO line ${String(i + 1)}`
   ).join("\n");
 
   /** 認識率警告の通知本文を判定するパターン。 */
@@ -1151,8 +1131,7 @@ suite("Totonoe Log low timestamp recognition warning", () => {
   }
 
   test("warns when opening the normalized view for a log with mostly unrecognized timestamps", async () => {
-    const extension = vscode.extensions.getExtension("upu.totonoe-log");
-    await extension!.activate();
+    await activateTotonoeLogExtension();
 
     await withTempLogFiles([{ name: "unrecognized.log", content: UNRECOGNIZED_LOG }], async (uris) => {
       const source = await vscode.workspace.openTextDocument(uris[0]);
@@ -1173,8 +1152,7 @@ suite("Totonoe Log low timestamp recognition warning", () => {
   });
 
   test("warns when an unsupported timestamp format takes over after a recognized line", async () => {
-    const extension = vscode.extensions.getExtension("upu.totonoe-log");
-    await extension!.activate();
+    await activateTotonoeLogExtension();
 
     const unsupportedTimestampLines = Array.from(
       { length: 11 },
@@ -1200,8 +1178,7 @@ suite("Totonoe Log low timestamp recognition warning", () => {
   });
 
   test("shows the warning only once per file within a session", async () => {
-    const extension = vscode.extensions.getExtension("upu.totonoe-log");
-    await extension!.activate();
+    await activateTotonoeLogExtension();
 
     await withTempLogFiles([{ name: "repeat.log", content: UNRECOGNIZED_LOG }], async (uris) => {
       const source = await vscode.workspace.openTextDocument(uris[0]);
@@ -1221,8 +1198,7 @@ suite("Totonoe Log low timestamp recognition warning", () => {
   });
 
   test("does not warn for a log whose timestamps are recognized", async () => {
-    const extension = vscode.extensions.getExtension("upu.totonoe-log");
-    await extension!.activate();
+    await activateTotonoeLogExtension();
 
     await withTempLogFiles([{ name: "recognized.log", content: RECOGNIZED_LOG }], async (uris) => {
       const source = await vscode.workspace.openTextDocument(uris[0]);
@@ -1237,8 +1213,7 @@ suite("Totonoe Log low timestamp recognition warning", () => {
   });
 
   test("warns per file in the merged view, only for files with low recognition", async () => {
-    const extension = vscode.extensions.getExtension("upu.totonoe-log");
-    await extension!.activate();
+    await activateTotonoeLogExtension();
 
     await withTempLogFiles(
       [
@@ -1259,8 +1234,7 @@ suite("Totonoe Log low timestamp recognition warning", () => {
 
   test("leaves the warning to the Interactive View panel instead of a modal (#186)", async function () {
     this.timeout(10000);
-    const extension = vscode.extensions.getExtension("upu.totonoe-log");
-    await extension!.activate();
+    await activateTotonoeLogExtension();
 
     await withTempLogFiles([{ name: "interactive.log", content: UNRECOGNIZED_LOG }], async (uris) => {
       await vscode.commands.executeCommand("workbench.action.closeAllEditors");

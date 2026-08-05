@@ -102,13 +102,11 @@ export default tseslint.config(
     // src/test/**: test mocks intentionally overwrite `vscode.window.*`
     // methods with narrower stand-ins (`(vscode.window as any).showQuickPick
     // = ...`), so `any` and the unsafe-* family fire on nearly every mock
-    // call. Keep type-checked linting (no-floating-promises etc.) active;
-    // only the any-driven noise is relaxed here. Those mocks are also often
-    // `async () => "value"` with no real `await` inside, just to match the
-    // `Thenable<...>` return type of the vscode.* method being replaced, so
-    // `require-await` is relaxed here too.
+    // call. strictTypeChecked は維持しつつ、モック由来のノイズだけを緩和する。
+    // これらのモックは `Thenable<...>` の戻り値へ合わせるため、実際には await
+    // を使わない `async () => "value"` になることもあり、require-await も緩和する。
     files: ["src/test/**/*.ts"],
-    extends: [js.configs.recommended, ...tseslint.configs.recommendedTypeChecked],
+    extends: [js.configs.recommended, ...tseslint.configs.strictTypeChecked],
     languageOptions: typescriptLanguageOptions,
     rules: {
       ...commonTypeScriptRules,

@@ -1,11 +1,11 @@
 import * as assert from "node:assert";
 import * as vscode from "vscode";
+import { activateTotonoeLogExtension } from "./support/activateTotonoeLogExtension";
 import { waitForDocumentText } from "./support/waitForDocumentText";
 
 suite("Totonoe Log go to source line (#137): command surface", () => {
   test("registers the goToSourceLine command", async () => {
-    const extension = vscode.extensions.getExtension("upu.totonoe-log");
-    await extension!.activate();
+    await activateTotonoeLogExtension();
 
     const commands = await vscode.commands.getCommands(true);
     assert.ok(
@@ -15,15 +15,14 @@ suite("Totonoe Log go to source line (#137): command surface", () => {
   });
 
   test("registers an editor/context menu entry limited to normalized/merged views (#149)", async () => {
-    const extension = vscode.extensions.getExtension("upu.totonoe-log");
-    await extension!.activate();
+    const packageExtension = await activateTotonoeLogExtension();
 
     const editorContextMenu: Array<{ command: string; when?: string }> =
-      extension!.packageJSON.contributes.menus["editor/context"];
+      packageExtension.packageJSON.contributes.menus["editor/context"];
     const entry = editorContextMenu.find((item) => item.command === "totonoeLog.goToSourceLine");
     assert.ok(entry, "editor/context should have a totonoeLog.goToSourceLine entry");
     assert.strictEqual(
-      entry!.when,
+      entry.when,
       "resourceScheme == totonoe-log-normalized || resourceScheme == totonoe-log-merged",
       // 比較ビュー（totonoe-log-compare）は #149 の対象外のため、正規化・
       // マージビューのスキームのみを明示的に指定する。
@@ -35,8 +34,7 @@ suite("Totonoe Log go to source line (#137): command surface", () => {
 suite("Totonoe Log go to source line (#137): normalized views", () => {
   test("jumps from a normalized view continuation line to its physical source line", async function () {
     this.timeout(10000);
-    const extension = vscode.extensions.getExtension("upu.totonoe-log");
-    await extension!.activate();
+    await activateTotonoeLogExtension();
 
     const source = await vscode.workspace.openTextDocument({
       content: [
@@ -52,23 +50,22 @@ suite("Totonoe Log go to source line (#137): normalized views", () => {
 
     const viewEditor = vscode.window.activeTextEditor;
     assert.ok(viewEditor, "a normalized view editor should be shown");
-    assert.strictEqual(viewEditor!.document.uri.scheme, "totonoe-log-normalized");
+    assert.strictEqual(viewEditor.document.uri.scheme, "totonoe-log-normalized");
     // 表示2行目（0始まりで1）は継続行「  at Foo.bar」＝元ファイルの物理2行目。
-    viewEditor!.selection = new vscode.Selection(1, 0, 1, 0);
+    viewEditor.selection = new vscode.Selection(1, 0, 1, 0);
 
     await vscode.commands.executeCommand("totonoeLog.goToSourceLine");
 
     const activeEditor = vscode.window.activeTextEditor;
     assert.ok(activeEditor, "the source editor should be shown");
-    assert.strictEqual(activeEditor!.document.uri.toString(), source.uri.toString());
-    assert.strictEqual(activeEditor!.selection.start.line, 1);
-    assert.strictEqual(activeEditor!.selection.start.character, 0);
+    assert.strictEqual(activeEditor.document.uri.toString(), source.uri.toString());
+    assert.strictEqual(activeEditor.selection.start.line, 1);
+    assert.strictEqual(activeEditor.selection.start.character, 0);
   });
 
   test("keeps the source mapping in a severity-filtered view", async function () {
     this.timeout(10000);
-    const extension = vscode.extensions.getExtension("upu.totonoe-log");
-    await extension!.activate();
+    await activateTotonoeLogExtension();
 
     const source = await vscode.workspace.openTextDocument({
       content: [
@@ -89,7 +86,9 @@ suite("Totonoe Log go to source line (#137): normalized views", () => {
       );
 
     await vscode.commands.executeCommand("totonoeLog.openVirtualDocument");
-    const view = vscode.window.activeTextEditor!.document;
+    const initialViewEditor = vscode.window.activeTextEditor;
+    assert.ok(initialViewEditor, "a normalized view editor should be shown");
+    const view = initialViewEditor.document;
     try {
       await vscode.commands.executeCommand("totonoeLog.setViewFilter");
     } finally {
@@ -98,24 +97,24 @@ suite("Totonoe Log go to source line (#137): normalized views", () => {
     await waitForDocumentText(view, (text) => !text.includes("INFO starting"));
 
     const viewEditor = vscode.window.activeTextEditor;
-    assert.strictEqual(viewEditor!.document.uri.scheme, "totonoe-log-normalized");
+    assert.ok(viewEditor, "the filtered normalized view editor should remain active");
+    assert.strictEqual(viewEditor.document.uri.scheme, "totonoe-log-normalized");
     // 絞り込み後の表示1行目は、元ファイルでは2行目の ERROR エントリ。
-    viewEditor!.selection = new vscode.Selection(0, 0, 0, 0);
+    viewEditor.selection = new vscode.Selection(0, 0, 0, 0);
 
     await vscode.commands.executeCommand("totonoeLog.goToSourceLine");
 
     const activeEditor = vscode.window.activeTextEditor;
     assert.ok(activeEditor, "the source editor should be shown");
-    assert.strictEqual(activeEditor!.document.uri.toString(), source.uri.toString());
-    assert.strictEqual(activeEditor!.selection.start.line, 1);
+    assert.strictEqual(activeEditor.document.uri.toString(), source.uri.toString());
+    assert.strictEqual(activeEditor.selection.start.line, 1);
   });
 });
 
 suite("Totonoe Log go to source line (#137): merged views", () => {
   test("jumps to the correct file from a merged view even when same-named files live in different folders", async function () {
     this.timeout(10000);
-    const extension = vscode.extensions.getExtension("upu.totonoe-log");
-    await extension!.activate();
+    await activateTotonoeLogExtension();
 
     const fs = await import("node:fs/promises");
     const os = await import("node:os");
@@ -139,16 +138,16 @@ suite("Totonoe Log go to source line (#137): merged views", () => {
 
       const viewEditor = vscode.window.activeTextEditor;
       assert.ok(viewEditor, "a merged view editor should be shown");
-      assert.strictEqual(viewEditor!.document.uri.scheme, "totonoe-log-merged");
+      assert.strictEqual(viewEditor.document.uri.scheme, "totonoe-log-merged");
       // 時系列マージ後の表示2行目（0始まりで1）は b/app.log 由来のエントリ。
-      viewEditor!.selection = new vscode.Selection(1, 0, 1, 0);
+      viewEditor.selection = new vscode.Selection(1, 0, 1, 0);
 
       await vscode.commands.executeCommand("totonoeLog.goToSourceLine");
 
       const activeEditor = vscode.window.activeTextEditor;
       assert.ok(activeEditor, "the source editor should be shown");
-      assert.strictEqual(activeEditor!.document.uri.toString(), uriB.toString());
-      assert.strictEqual(activeEditor!.selection.start.line, 0);
+      assert.strictEqual(activeEditor.document.uri.toString(), uriB.toString());
+      assert.strictEqual(activeEditor.selection.start.line, 0);
     } finally {
       await vscode.commands.executeCommand("workbench.action.closeAllEditors");
       await fs.rm(tempDir, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 });
@@ -157,8 +156,7 @@ suite("Totonoe Log go to source line (#137): merged views", () => {
 
   test("stays on the view without navigating when the cursor is on a gap marker line", async function () {
     this.timeout(10000);
-    const extension = vscode.extensions.getExtension("upu.totonoe-log");
-    await extension!.activate();
+    await activateTotonoeLogExtension();
 
     const config = vscode.workspace.getConfiguration("totonoeLog.gap");
     await config.update("thresholdSeconds", 30, vscode.ConfigurationTarget.Global);
@@ -177,11 +175,11 @@ suite("Totonoe Log go to source line (#137): merged views", () => {
       const viewEditor = vscode.window.activeTextEditor;
       assert.ok(viewEditor, "a normalized view editor should be shown");
       assert.ok(
-        viewEditor!.document.getText().includes("60s gap"),
+        viewEditor.document.getText().includes("60s gap"),
         "the view should contain a gap marker line"
       );
       // 表示2行目（0始まりで1）はギャップマーカー行で、元ログに対応する行がない。
-      viewEditor!.selection = new vscode.Selection(1, 0, 1, 0);
+      viewEditor.selection = new vscode.Selection(1, 0, 1, 0);
 
       await assert.doesNotReject(async () => {
         await vscode.commands.executeCommand("totonoeLog.goToSourceLine");
@@ -190,7 +188,7 @@ suite("Totonoe Log go to source line (#137): merged views", () => {
       const activeEditor = vscode.window.activeTextEditor;
       assert.ok(activeEditor, "an editor should remain active");
       assert.strictEqual(
-        activeEditor!.document.uri.scheme,
+        activeEditor.document.uri.scheme,
         "totonoe-log-normalized",
         "the command should not navigate away from the view for a generated line"
       );
@@ -202,8 +200,7 @@ suite("Totonoe Log go to source line (#137): merged views", () => {
 
 suite("Totonoe Log go to source line (#137): edge cases", () => {
   test("does nothing harmful when invoked outside a Totonoe Log view", async () => {
-    const extension = vscode.extensions.getExtension("upu.totonoe-log");
-    await extension!.activate();
+    await activateTotonoeLogExtension();
 
     const source = await vscode.workspace.openTextDocument({
       content: "2024-01-02T03:04:05Z INFO plain file",
@@ -217,13 +214,12 @@ suite("Totonoe Log go to source line (#137): edge cases", () => {
 
     const activeEditor = vscode.window.activeTextEditor;
     assert.ok(activeEditor, "the original editor should remain active");
-    assert.strictEqual(activeEditor!.document.uri.toString(), source.uri.toString());
+    assert.strictEqual(activeEditor.document.uri.toString(), source.uri.toString());
   });
 
   test("warns instead of crashing when the source file was deleted before navigating (#156)", async function () {
     this.timeout(10000);
-    const extension = vscode.extensions.getExtension("upu.totonoe-log");
-    await extension!.activate();
+    await activateTotonoeLogExtension();
 
     const fs = await import("node:fs/promises");
     const os = await import("node:os");
@@ -249,9 +245,9 @@ suite("Totonoe Log go to source line (#137): edge cases", () => {
 
       const viewEditor = vscode.window.activeTextEditor;
       assert.ok(viewEditor, "a merged view editor should be shown");
-      assert.strictEqual(viewEditor!.document.uri.scheme, "totonoe-log-merged");
+      assert.strictEqual(viewEditor.document.uri.scheme, "totonoe-log-merged");
       // 時系列マージ後の表示2行目（0始まりで1）は b.log 由来のエントリ。
-      viewEditor!.selection = new vscode.Selection(1, 0, 1, 0);
+      viewEditor.selection = new vscode.Selection(1, 0, 1, 0);
 
       await fs.rm(deletedPath);
 
@@ -268,7 +264,7 @@ suite("Totonoe Log go to source line (#137): edge cases", () => {
         });
         assert.ok(
           warningMessage?.includes("Could not open the source log file"),
-          `expected a warning about the missing source file, got: ${warningMessage}`
+          `expected a warning about the missing source file, got: ${String(warningMessage)}`
         );
       } finally {
         (vscode.window as any).showWarningMessage = originalShowWarningMessage;
@@ -277,7 +273,7 @@ suite("Totonoe Log go to source line (#137): edge cases", () => {
       const activeEditor = vscode.window.activeTextEditor;
       assert.ok(activeEditor, "an editor should remain active");
       assert.strictEqual(
-        activeEditor!.document.uri.scheme,
+        activeEditor.document.uri.scheme,
         "totonoe-log-merged",
         "the command should not navigate away from the view when the source file is missing"
       );

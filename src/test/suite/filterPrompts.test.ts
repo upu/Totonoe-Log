@@ -41,15 +41,15 @@ function installPromptMocks(options: {
   let quickPickCalls = 0;
   let inputBoxCalls = 0;
   const warnings: string[] = [];
+  const severityLabels = options.severityLabels;
 
   (vscode.window as any).showQuickPick = async (items: TestSeverityQuickPickItem[]) => {
     quickPickCalls += 1;
-    if (options.severityLabels === undefined) {
+    if (severityLabels === undefined) {
       return undefined;
     }
     return items.filter(
-      (item) =>
-        item.severityValue !== undefined && options.severityLabels!.includes(item.severityValue)
+      (item) => item.severityValue !== undefined && severityLabels.includes(item.severityValue)
     );
   };
   (vscode.window as any).showInputBox = async () => {
@@ -93,13 +93,19 @@ suite("Totonoe Log filter prompts (shared)", () => {
       );
 
       assert.ok(criteria);
-      assert.deepStrictEqual([...criteria!.severities!], ["ERROR"]);
-      assert.strictEqual(criteria!.dateRange?.startMs, Date.UTC(2024, 0, 2));
-      assert.strictEqual(criteria!.dateRange?.endMs, Date.UTC(2024, 0, 2, 23, 59, 59));
+      const { severities, dateRange, ignorePatterns } = criteria;
+      assert.ok(severities);
+      assert.ok(dateRange);
+      assert.ok(ignorePatterns);
+      assert.deepStrictEqual([...severities], ["ERROR"]);
+      assert.strictEqual(dateRange.startMs, Date.UTC(2024, 0, 2));
+      assert.strictEqual(dateRange.endMs, Date.UTC(2024, 0, 2, 23, 59, 59));
       // この経路は1欄1パターンのままなので、配列に包まれた1件だけが載る（#206）。
-      assert.strictEqual(criteria!.ignorePatterns?.length, 1);
-      assert.strictEqual(criteria!.ignorePatterns![0].source, "heartbeat");
-      assert.strictEqual(criteria!.ignorePatterns![0].flags, "im");
+      assert.strictEqual(ignorePatterns.length, 1);
+      const [ignorePattern] = ignorePatterns;
+      assert.ok(ignorePattern);
+      assert.strictEqual(ignorePattern.source, "heartbeat");
+      assert.strictEqual(ignorePattern.flags, "im");
       assert.strictEqual(mock.quickPickCalls(), 1);
       assert.strictEqual(mock.inputBoxCalls(), 3);
     } finally {
@@ -132,7 +138,7 @@ suite("Totonoe Log filter prompts (shared)", () => {
       const criteria = await promptFilterCriteriaForKinds(kinds("dateRange"), ENTRIES, 0);
 
       assert.ok(criteria);
-      assert.strictEqual(criteria!.dateRange, undefined);
+      assert.strictEqual(criteria.dateRange, undefined);
     } finally {
       mock.restore();
     }

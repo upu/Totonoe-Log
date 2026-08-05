@@ -1,5 +1,6 @@
 import * as assert from "node:assert";
 import * as vscode from "vscode";
+import { activateTotonoeLogExtension } from "./support/activateTotonoeLogExtension";
 
 suite("Totonoe Log virtual document guard: unit behavior", () => {
   test("isTotonoeLogVirtualDocument recognizes the normalized, merged, and compare schemes", async () => {
@@ -49,8 +50,7 @@ suite("Totonoe Log virtual document guard: unit behavior", () => {
 
 suite("Totonoe Log virtual document guard: normalized views", () => {
   test("re-running Show Normalized View against an already-open normalized view warns and opens nothing new", async () => {
-    const extension = vscode.extensions.getExtension("upu.totonoe-log");
-    await extension!.activate();
+    await activateTotonoeLogExtension();
 
     const source = await vscode.workspace.openTextDocument({
       content: "2024-01-02T03:04:05Z INFO starting",
@@ -60,8 +60,10 @@ suite("Totonoe Log virtual document guard: normalized views", () => {
     await vscode.commands.executeCommand("workbench.action.closeOtherEditors");
 
     await vscode.commands.executeCommand("totonoeLog.openVirtualDocument");
-    const normalizedUri = vscode.window.activeTextEditor?.document.uri.toString();
-    assert.strictEqual(vscode.window.activeTextEditor?.document.uri.scheme, "totonoe-log-normalized");
+    const normalizedEditor = vscode.window.activeTextEditor;
+    assert.ok(normalizedEditor, "a normalized view editor should be shown");
+    const normalizedUri = normalizedEditor.document.uri.toString();
+    assert.strictEqual(normalizedEditor.document.uri.scheme, "totonoe-log-normalized");
 
     const originalShowWarningMessage = vscode.window.showWarningMessage;
     let warningMessage: string | undefined;
@@ -80,8 +82,10 @@ suite("Totonoe Log virtual document guard: normalized views", () => {
       warningMessage?.includes("Run it on the source log file instead"),
       "a warning should be shown when the source is Totonoe Log's own view"
     );
+    const activeEditor = vscode.window.activeTextEditor;
+    assert.ok(activeEditor, "the normalized view editor should remain active");
     assert.strictEqual(
-      vscode.window.activeTextEditor?.document.uri.toString(),
+      activeEditor.document.uri.toString(),
       normalizedUri,
       "no new virtual document should have been opened"
     );
@@ -94,8 +98,7 @@ suite("Totonoe Log virtual document guard: normalized views", () => {
   // のガードは、この前後のテストで引き続き確認している。
 
   test("copyMaskedText warns and leaves the clipboard untouched when a normalized view is active", async () => {
-    const extension = vscode.extensions.getExtension("upu.totonoe-log");
-    await extension!.activate();
+    await activateTotonoeLogExtension();
 
     const source = await vscode.workspace.openTextDocument({
       content: [
@@ -109,7 +112,9 @@ suite("Totonoe Log virtual document guard: normalized views", () => {
     await vscode.commands.executeCommand("workbench.action.closeOtherEditors");
 
     await vscode.commands.executeCommand("totonoeLog.openVirtualDocument");
-    assert.strictEqual(vscode.window.activeTextEditor?.document.uri.scheme, "totonoe-log-normalized");
+    const normalizedEditor = vscode.window.activeTextEditor;
+    assert.ok(normalizedEditor, "a normalized view editor should be shown");
+    assert.strictEqual(normalizedEditor.document.uri.scheme, "totonoe-log-normalized");
 
     const sentinel = "sentinel-before-guarded-copy";
     await vscode.env.clipboard.writeText(sentinel);
@@ -141,8 +146,7 @@ suite("Totonoe Log virtual document guard: normalized views", () => {
 
 suite("Totonoe Log virtual document guard: merged and compare views", () => {
   test("Show Normalized View warns when a merged view is active", async () => {
-    const extension = vscode.extensions.getExtension("upu.totonoe-log");
-    await extension!.activate();
+    await activateTotonoeLogExtension();
 
     const fs = await import("node:fs/promises");
     const os = await import("node:os");
@@ -162,8 +166,10 @@ suite("Totonoe Log virtual document guard: merged and compare views", () => {
         dbLogUri,
       ]);
 
-      assert.strictEqual(vscode.window.activeTextEditor?.document.uri.scheme, "totonoe-log-merged");
-      const mergedUri = vscode.window.activeTextEditor?.document.uri.toString();
+      const mergedEditor = vscode.window.activeTextEditor;
+      assert.ok(mergedEditor, "a merged view editor should be shown");
+      assert.strictEqual(mergedEditor.document.uri.scheme, "totonoe-log-merged");
+      const mergedUri = mergedEditor.document.uri.toString();
 
       const originalShowWarningMessage = vscode.window.showWarningMessage;
       let warningMessage: string | undefined;
@@ -182,8 +188,10 @@ suite("Totonoe Log virtual document guard: merged and compare views", () => {
         warningMessage?.includes("Run it on the source log file instead"),
         "a warning should be shown when normalizing from a merged view"
       );
+      const activeEditor = vscode.window.activeTextEditor;
+      assert.ok(activeEditor, "the merged view editor should remain active");
       assert.strictEqual(
-        vscode.window.activeTextEditor?.document.uri.toString(),
+        activeEditor.document.uri.toString(),
         mergedUri,
         "no new view should be opened"
       );
@@ -194,8 +202,7 @@ suite("Totonoe Log virtual document guard: merged and compare views", () => {
   });
 
   test("Set Filter warns when a compare view is active", async () => {
-    const extension = vscode.extensions.getExtension("upu.totonoe-log");
-    await extension!.activate();
+    await activateTotonoeLogExtension();
 
     const fs = await import("node:fs/promises");
     const os = await import("node:os");
@@ -221,8 +228,10 @@ suite("Totonoe Log virtual document guard: merged and compare views", () => {
         (vscode.window as any).showOpenDialog = originalShowOpenDialog;
       }
 
-      assert.strictEqual(vscode.window.activeTextEditor?.document.uri.scheme, "totonoe-log-compare");
-      const compareUri = vscode.window.activeTextEditor?.document.uri.toString();
+      const compareEditor = vscode.window.activeTextEditor;
+      assert.ok(compareEditor, "a compare view editor should be shown");
+      assert.strictEqual(compareEditor.document.uri.scheme, "totonoe-log-compare");
+      const compareUri = compareEditor.document.uri.toString();
 
       const originalShowWarningMessage = vscode.window.showWarningMessage;
       let warningMessage: string | undefined;
@@ -242,10 +251,12 @@ suite("Totonoe Log virtual document guard: merged and compare views", () => {
       // 作り直せない）。「ビューが無い」ではなく「対応していない」と案内する。
       assert.ok(
         warningMessage?.includes("This view does not support filtering"),
-        `a compare view should be reported as unsupported, got: ${warningMessage}`
+        `a compare view should be reported as unsupported, got: ${String(warningMessage)}`
       );
+      const activeEditor = vscode.window.activeTextEditor;
+      assert.ok(activeEditor, "the compare view editor should remain active");
       assert.strictEqual(
-        vscode.window.activeTextEditor?.document.uri.toString(),
+        activeEditor.document.uri.toString(),
         compareUri,
         "no new view should be opened"
       );
@@ -258,8 +269,7 @@ suite("Totonoe Log virtual document guard: merged and compare views", () => {
 
 suite("Totonoe Log virtual document guard: ordinary logs", () => {
   test("normal log files are unaffected by the guard", async () => {
-    const extension = vscode.extensions.getExtension("upu.totonoe-log");
-    await extension!.activate();
+    await activateTotonoeLogExtension();
 
     const source = await vscode.workspace.openTextDocument({
       content: "2024-01-02T03:04:05Z INFO starting",
@@ -282,6 +292,8 @@ suite("Totonoe Log virtual document guard: ordinary logs", () => {
     }
 
     assert.strictEqual(warningMessage, undefined, "an ordinary log file should not trigger the guard");
-    assert.strictEqual(vscode.window.activeTextEditor?.document.uri.scheme, "totonoe-log-normalized");
+    const activeEditor = vscode.window.activeTextEditor;
+    assert.ok(activeEditor, "a normalized view editor should be shown");
+    assert.strictEqual(activeEditor.document.uri.scheme, "totonoe-log-normalized");
   });
 });
