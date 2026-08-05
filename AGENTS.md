@@ -86,7 +86,10 @@ VSCode 拡張機能「Totonoe Log」。コンセプトは「バラバラなロ�
 - `no-restricted-syntax` で、`src/**` に日本語の文字列リテラル・テンプレートを
   直接書くことを禁止している（l10n が腐るのを防ぐ機械的なゲート）。文言は英語を
   ソース言語として書き、訳は `package.nls.ja.json` / `l10n/bundle.l10n.ja.json`
-  に置く。コメント・正規表現リテラル・`src/test/**` は対象外
+  に置く。コメント・正規表現リテラル・`src/test/**` は対象外。
+  `src/interactiveViewHtml.ts` だけはテンプレート側の禁止を外している（HTML/CSS の
+  文書を組み立てるファイルで、中の日本語が全てコメントのため）。外した分は
+  `packageLocalization.test.ts` が補う
 
 ## ワークフロー
 
