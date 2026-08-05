@@ -29,7 +29,8 @@ CI相当の順序とOS差は[運用ランブック](/openwiki/operations/runbook
 | `src/test/suite/setViewFilterNormalized.test.ts`, `setViewFilterMerged.test.ts` | 開いた仮想文書へのfilter適用と行対応 |
 | `src/test/suite/goToSourceLine.test.ts`, `virtualDocumentGuard.test.ts` | 元行ジャンプと、整形済み文書を入力へ再利用しないガード |
 | `src/test/suite/interactiveView.test.ts`, `interactiveViewHtml.test.ts`, `interactiveViewLabels.test.ts` | panel、criteria、file visibility、export、HTML/CSP、Webview要素ID、表示言語、静的・動的ラベル契約 |
-| `src/test/suite/packageLocalization.test.ts` | manifest・実行時翻訳キー、英日bundle、位置プレースホルダー、Webview scriptの日本語リテラル排除 |
+| `src/test/suite/packageLocalization.test.ts` | manifest・実行時翻訳キー、英日bundle、位置プレースホルダー、Webview scriptの日本語リテラル排除、normalize層の言語非依存性 |
+| `src/test/suite/settingsValidationErrors.test.ts` | 設定バリデーションのmessage code、パラメータ、extension hostでの翻訳可能な警告整形 |
 | `src/test/suite/filterPrompts.test.ts` | QuickPick/InputBoxによるfilter入力 |
 | `src/test/suite/interactiveViewRefresh.test.ts` | latest-winsの世代管理 |
 
@@ -64,7 +65,9 @@ severity/date/match/ignoreのAND・OR、空条件、複数行message、構文エ
 
 ### 多言語化
 
-`packageLocalization.test.ts` は、`package.json` の `%key%` と `package.nls.json` / `package.nls.ja.json` のキー集合、拡張ホストの直接的な `vscode.l10n.t()` 呼び出しと `l10n/bundle.l10n.ja.json`、位置プレースホルダーを突き合わせる。runtimeのソース文言はキー抽出のため文字列リテラルを直接渡す。Interactive Viewでは `interactiveViewHtml.test.ts` で翻訳済み静的文言と `lang` のescape、`interactiveViewLabels.test.ts` でprotocolが要求する全ラベル、`packageLocalization.test.ts` でbrowser scriptに日本語UIリテラルが残らないことを確認する。設計上の3経路は[VS Code統合](/openwiki/integrations/vscode.md)を参照する。
+`packageLocalization.test.ts` は、`package.json` の `%key%` と `package.nls.json` / `package.nls.ja.json` のキー集合、拡張ホストの直接的な `vscode.l10n.t()` 呼び出しと `l10n/bundle.l10n.ja.json`、位置プレースホルダーを突き合わせる。runtimeのソース文言はキー抽出のため文字列リテラルを直接渡す。Interactive Viewでは `interactiveViewHtml.test.ts` で翻訳済み静的文言と `lang` のescape、`interactiveViewLabels.test.ts` でprotocolが要求する全ラベル、`packageLocalization.test.ts` でbrowser scriptに日本語UIリテラルが残らないことを確認する。
+
+同じ `packageLocalization.test.ts` は `src/normalize/` を再帰的に検査し、日本語文字と非portableな `×`・`〜`・`～` を文字列リテラルへ戻さないことも保証する。normalize層の設定検証を増やす場合は、完成文ではなく `SettingsValidationError` のcodeとパラメータを返し、`settingsValidationErrors.test.ts` で全codeにextension host側の整形処理があること、複数エラーが1本の警告用テキストへまとまることを確認する。UIは表示言語へ追従し、コピー・比較対象の整形済み本文は英語・ASCIIで固定する境界の詳細は[VS Code統合](/openwiki/integrations/vscode.md)を参照する。
 
 ### package・release
 
