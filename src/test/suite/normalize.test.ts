@@ -4663,8 +4663,23 @@ suite("normalize / merged collapse (#158)", () => {
     if (items[0].kind !== "group") {
       throw new Error("unreachable");
     }
-    assert.match(items[0].headerText, /server-a\.log and others/);
+    assert.match(items[0].headerText, /server-a\.log, etc\./);
     assert.match(items[0].headerText, /\(x4[,)]/);
+  });
+
+  test("keeps the multi-source mark short enough not to widen the columns much (#288)", () => {
+    // ファイル名列の幅は候補値の最長で決まるため、印が長いとその列を使う全行が
+    // 右へずれる。印だけで列が広がる量を、ファイル名そのものより短く保つ。
+    const items = buildInteractiveMergedCollapsedLines(interleavedHeartbeats(), { threshold: 3 });
+
+    if (items[0].kind !== "group") {
+      throw new Error("unreachable");
+    }
+    // 列は `padEnd` で揃うので、他により長いファイル名があると末尾に空白が付く。
+    // ここで見たいのは印の長さなので、パディングを落としてから比べる。
+    const fileNameColumn = items[0].headerText.split(" | ")[0].trimEnd();
+    assert.strictEqual(fileNameColumn, "server-a.log, etc.");
+    assert.strictEqual(fileNameColumn.length - "server-a.log".length, 6);
   });
 
   test("reports every source file of the group, de-duplicated and in order", () => {
@@ -4697,10 +4712,10 @@ suite("normalize / merged collapse (#158)", () => {
     if (items[0].kind !== "group") {
       throw new Error("unreachable");
     }
-    assert.match(items[0].headerText, /app\.log and others/);
+    assert.match(items[0].headerText, /app\.log, etc\./);
     assert.deepStrictEqual(items[0].headerFileIndices, [0, 1]);
     // 種別は両方 "app" で違いが無いので、そちらには印を付けない。
-    assert.doesNotMatch(items[0].headerText, /app and others/);
+    assert.doesNotMatch(items[0].headerText, /app, etc\./);
   });
 
   test("shows the plain file name when the whole group comes from one file", () => {
@@ -4721,7 +4736,7 @@ suite("normalize / merged collapse (#158)", () => {
       throw new Error("unreachable");
     }
     assert.match(items[0].headerText, /server-a\.log/);
-    assert.doesNotMatch(items[0].headerText, /and others/);
+    assert.doesNotMatch(items[0].headerText, /, etc\./);
   });
 
   test("keeps each expanded line pointing at its own source file (#137)", () => {
@@ -4821,7 +4836,7 @@ suite("normalize / merged collapse (#158)", () => {
     }
     assert.strictEqual(result.formatted.text.split("\n").length, 1);
     assert.match(result.formatted.text, /\(x4[,)]/);
-    assert.match(result.formatted.text, /server-a\.log and others/);
+    assert.match(result.formatted.text, /server-a\.log, etc\./);
   });
 
   test("buildInteractiveMergedExportText points the group header at the range start", async () => {
