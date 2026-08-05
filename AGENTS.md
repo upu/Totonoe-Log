@@ -118,7 +118,7 @@ OpenWiki文書は、次のコマンドでローカルから手動更新する（
 
 生成された差分は機能変更と混ぜず、`docs: OpenWiki を更新` のような単独 PR にする。
 
-生成されたOpenWikiページは直接編集してよい。生成そのものへの指示は `openwiki/INSTRUCTIONS.md` に書く。
+OpenWikiを更新したら、生成された内容はその PR の中で手直ししてよい。生成そのものへの指示は `openwiki/INSTRUCTIONS.md` に書く。
 
 ### 更新後に取り消すもの
 
