@@ -56,7 +56,11 @@ VS Codeの表示言語へ追従する文言は、用途ごとに3つの経路を
 - 拡張ホストの通知、warning、prompt、QuickPick、ダイアログ: 英語リテラルを `vscode.l10n.t()` へ渡し、日本語訳を `l10n/bundle.l10n.ja.json` に置く。位置プレースホルダー `{0}`, `{1}` は翻訳前後で一致させる。
 - Interactive View: 静的HTML文言は `src/interactiveViewHtml.ts`、動的要素は `src/interactiveViewLabels.ts` で翻訳する。後者は共有protocolの `state.labels` を介してbrowser側へ渡す。
 
-翻訳対象を変更したら[テスト指針](/openwiki/testing/guide.md)の `packageLocalization.test.ts` を確認する。また3つの翻訳ファイルはVSIX同梱物なので、`scripts/check-package-contents.js` のallowlistも同期する。
+`src/normalize/` はVS Code APIに依存できないため、設定バリデーションで完成済みの警告文を返さない。`src/normalize/settingsErrors.ts` の `SettingsValidationError` が言語非依存のcodeとパラメータを運び、`src/settingsErrorMessages.ts` がextension host側で `vscode.l10n.t()` を使って表示文へ変換する。不正項目が複数あっても警告は1本にまとめ、正常な設定項目の処理は継続する。
+
+一方、仮想ドキュメントやexportへ入る整形済み本文はUI文言ではなく、表示言語に追従させない。`src/normalize/gapDetection.ts` の `3.5s gap`、`src/normalize/groupSuffix.ts` の `(x12, ~03:04:07.000Z)`、`src/normalize/buildInteractiveCollapsedLines.ts` の `and others` は英語・ASCIIで固定する。同じログのコピー結果とCompare Logsの差分を利用者の表示言語に左右されない形で再現するためであり、この本文を多言語化対象へ移してはならない。この境界は[ログ処理ドメイン](/openwiki/domain/log-processing.md)の整形処理から、仮想文書と比較経路へ引き継がれる。
+
+翻訳対象を変更したら[テスト指針](/openwiki/testing/guide.md)の `packageLocalization.test.ts` と `settingsValidationErrors.test.ts` を確認する。また3つの翻訳ファイルはVSIX同梱物なので、`scripts/check-package-contents.js` のallowlistも同期する。
 
 ## 設定統合
 
