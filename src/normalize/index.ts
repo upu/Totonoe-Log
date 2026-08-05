@@ -1,4 +1,9 @@
 export type { LogEntry, TimestampFormat, TimestampParseContext } from "./types";
+export type {
+  SettingsValidationError,
+  SettingsValidationErrorCode,
+} from "./settingsErrors";
+export { SETTINGS_VALIDATION_ERROR_CODES } from "./settingsErrors";
 export type { ParseLogOptions } from "./parseLog";
 export { parseLog } from "./parseLog";
 export type { FormatNormalizedLogOptions } from "./formatNormalizedLog";

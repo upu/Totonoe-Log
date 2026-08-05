@@ -177,7 +177,7 @@ suite("Totonoe Log go to source line (#137): merged views", () => {
       const viewEditor = vscode.window.activeTextEditor;
       assert.ok(viewEditor, "a normalized view editor should be shown");
       assert.ok(
-        viewEditor!.document.getText().includes("空白"),
+        viewEditor!.document.getText().includes("60s gap"),
         "the view should contain a gap marker line"
       );
       // 表示2行目（0始まりで1）はギャップマーカー行で、元ログに対応する行がない。

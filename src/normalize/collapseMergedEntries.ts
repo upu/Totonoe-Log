@@ -45,7 +45,7 @@ export function collapseRepeatedMergedEntries(
       // 検出しやすくするためのフェイルセーフとして例外にする
       // （`filterMergedEntriesByCriteria` と同じ扱い）。
       throw new Error(
-        "collapseRepeatedMergedEntries: 折りたたみ結果に対応する MergedEntry が見つかりませんでした。"
+        "collapseRepeatedMergedEntries: no MergedEntry matched an entry in the collapsed result."
       );
     }
     return merged;

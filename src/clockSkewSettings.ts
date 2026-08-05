@@ -1,5 +1,6 @@
 import * as vscode from "vscode";
 import { compileClockSkewRules, resolveClockSkewMs } from "./normalize";
+import { formatSettingsValidationErrors } from "./settingsErrorMessages";
 
 /** クロックスキュー補正設定のVSCode設定セクション名。 */
 const CLOCK_SKEW_CONFIG_SECTION = "totonoeLog.clockSkew";
@@ -23,7 +24,7 @@ export function createClockSkewResolver(): (fileName: string) => number {
     vscode.window.showWarningMessage(
       vscode.l10n.t(
         "Totonoe Log: Ignored invalid entries in totonoeLog.clockSkew.fileOffsets — {0}",
-        errors.join(" / ")
+        formatSettingsValidationErrors(errors)
       )
     );
   }

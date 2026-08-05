@@ -7,6 +7,8 @@
  * 持つ。
  */
 
+import { describeThrownError, type SettingsValidationError } from "./settingsErrors";
+
 /**
  * ルールに指定できる色。テーマカラーIDや任意のCSS色ではなく限定した名前に
  * しているのは、明・暗テーマそれぞれで読める値をこちら側で用意するため
@@ -52,7 +54,8 @@ export interface HighlightRule {
 export interface CompileHighlightRulesResult {
   readonly rules: HighlightRule[];
   /** 無効だった項目ごとの、ユーザー向けエラーメッセージ。 */
-  readonly errors: string[];
+  /** 無効だった項目ごとのエラー（文言は呼び出し側が組み立てる。issue #279）。 */
+  readonly errors: SettingsValidationError[];
 }
 
 function isHighlightColor(value: string): value is HighlightColor {
@@ -70,11 +73,11 @@ export function compileHighlightRules(
   settings: readonly unknown[]
 ): CompileHighlightRulesResult {
   const rules: HighlightRule[] = [];
-  const errors: string[] = [];
+  const errors: SettingsValidationError[] = [];
 
   settings.forEach((setting, index) => {
     if (typeof setting !== "object" || setting === null) {
-      errors.push(`${index + 1}番目の項目: オブジェクトではありません`);
+      errors.push({ code: "notAnObject", index });
       return;
     }
 
@@ -82,7 +85,7 @@ export function compileHighlightRules(
     const name = typeof rawName === "string" && rawName !== "" ? rawName : `highlight-${index + 1}`;
 
     if (typeof pattern !== "string" || pattern === "") {
-      errors.push(`${name}: pattern（文字列）が指定されていません`);
+      errors.push({ code: "missingNamedPattern", name });
       return;
     }
 
@@ -90,18 +93,19 @@ export function compileHighlightRules(
     try {
       regex = new RegExp(pattern, "gim");
     } catch (error) {
-      const reason = error instanceof Error ? error.message : String(error);
-      errors.push(`${name}: 正規表現として不正です（${reason}）`);
+      errors.push({ code: "invalidNamedRegex", name, reason: describeThrownError(error) });
       return;
     }
 
     let color = DEFAULT_HIGHLIGHT_COLOR;
     if (rawColor !== undefined) {
       if (typeof rawColor !== "string" || !isHighlightColor(rawColor)) {
-        errors.push(
-          `${name}: color は ${HIGHLIGHT_COLORS.join(" / ")} のいずれかを指定してください` +
-            `（指定値: ${JSON.stringify(rawColor)}）`
-        );
+        errors.push({
+          code: "invalidHighlightColor",
+          name,
+          allowedColors: HIGHLIGHT_COLORS,
+          actual: JSON.stringify(rawColor),
+        });
         return;
       }
       color = rawColor;

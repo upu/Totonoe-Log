@@ -11,6 +11,8 @@
  * ＋ホストローカルで主要ユースケース（サーバ間の TZ ずれの補正）を賄えるため。
  */
 
+import { describeThrownError, type SettingsValidationError } from "./settingsErrors";
+
 /**
  * 表示用タイムゾーンの指定。UTC からのオフセット（分）、または `"local"`
  * （ホストマシンのローカルタイムゾーン。DST を考慮してタイムスタンプごとに
@@ -116,8 +118,8 @@ export interface FileOffsetRule {
  */
 export interface CompileFileOffsetRulesResult {
   readonly rules: FileOffsetRule[];
-  /** 無効だった項目ごとの、ユーザー向けエラーメッセージ。 */
-  readonly errors: string[];
+  /** 無効だった項目ごとのエラー（文言は呼び出し側が組み立てる。issue #279）。 */
+  readonly errors: SettingsValidationError[];
 }
 
 /**
@@ -128,18 +130,18 @@ export function compileFileOffsetRules(
   settings: readonly unknown[]
 ): CompileFileOffsetRulesResult {
   const rules: FileOffsetRule[] = [];
-  const errors: string[] = [];
+  const errors: SettingsValidationError[] = [];
 
   settings.forEach((setting, index) => {
     if (typeof setting !== "object" || setting === null) {
-      errors.push(`${index + 1}番目の項目: オブジェクトではありません`);
+      errors.push({ code: "notAnObject", index });
       return;
     }
 
     const { filePattern, offset } = setting as Partial<FileOffsetRuleSetting>;
 
     if (typeof filePattern !== "string" || filePattern === "") {
-      errors.push(`${index + 1}番目の項目: filePattern（文字列）が指定されていません`);
+      errors.push({ code: "missingStringProperty", index, property: "filePattern" });
       return;
     }
 
@@ -147,16 +149,18 @@ export function compileFileOffsetRules(
     try {
       regex = new RegExp(filePattern);
     } catch (error) {
-      const reason = error instanceof Error ? error.message : String(error);
-      errors.push(`${index + 1}番目の項目: filePattern が正規表現として不正です（${reason}）`);
+      errors.push({
+        code: "invalidRegexProperty",
+        index,
+        property: "filePattern",
+        reason: describeThrownError(error),
+      });
       return;
     }
 
     const offsetMinutes = typeof offset === "string" ? parseUtcOffsetMinutes(offset) : undefined;
     if (offsetMinutes === undefined) {
-      errors.push(
-        `${index + 1}番目の項目: offset が不正です（"+09:00" のような UTC オフセットを指定してください）`
-      );
+      errors.push({ code: "invalidUtcOffset", index });
       return;
     }
 

@@ -6,6 +6,7 @@ import {
   type LogEntry,
   type TimestampFormat,
 } from "./normalize";
+import { formatSettingsValidationErrors } from "./settingsErrorMessages";
 
 /** カスタムタイムスタンプ形式を読み込むVSCode設定のキー。 */
 const TIMESTAMP_FORMATS_CONFIG_SECTION = "totonoeLog";
@@ -29,7 +30,7 @@ export function readConfiguredTimestampFormats(): TimestampFormat[] {
     vscode.window.showWarningMessage(
       vscode.l10n.t(
         "Totonoe Log: Ignored invalid entries in totonoeLog.timestampFormats — {0}",
-        errors.join(" / ")
+        formatSettingsValidationErrors(errors)
       )
     );
   }

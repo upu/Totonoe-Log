@@ -32,6 +32,7 @@ const WEBVIEW_MAIN_SOURCE_PATH = path.join(
   "interactiveView",
   "main.ts"
 );
+const NORMALIZE_SOURCE_ROOT = path.join(EXTENSION_ROOT, "src", "normalize");
 const EXCLUDED_TOP_LEVEL_DIRECTORIES = new Set(["normalize", "test", "webview"]);
 const EXCLUDED_TOP_LEVEL_FILES = new Set<string>();
 const JAPANESE_CHARACTER_PATTERN = /[぀-ヿ㐀-鿿]/u;
@@ -140,6 +141,19 @@ function collectJapaneseStringLiterals(filePath: string): string[] {
   return matches;
 }
 
+function collectNormalizeSourceFiles(directory = NORMALIZE_SOURCE_ROOT): string[] {
+  const sourceFiles: string[] = [];
+  for (const entry of fs.readdirSync(directory, { withFileTypes: true })) {
+    const entryPath = path.join(directory, entry.name);
+    if (entry.isDirectory()) {
+      sourceFiles.push(...collectNormalizeSourceFiles(entryPath));
+    } else if (entry.isFile() && entry.name.endsWith(".ts")) {
+      sourceFiles.push(entryPath);
+    }
+  }
+  return sourceFiles.sort();
+}
+
 function positionalPlaceholders(value: string): string[] {
   return [...value.matchAll(/\{(\d+)\}/g)].map((match) => match[1]).sort();
 }
@@ -176,6 +190,19 @@ suite("Package localization", () => {
       collectJapaneseStringLiterals(WEBVIEW_MAIN_SOURCE_PATH),
       [],
       "Webview UI text should come from the localized labels sent by the extension host"
+    );
+  });
+
+  test("keeps Japanese literals out of the normalize layer (#279)", () => {
+    // `src/normalize/` は VSCode API に依存できない（AGENTS.md）ため、ここに
+    // 文言が残っていると `vscode.l10n.t()` で訳す手立てが無い。整形結果の本文は
+    // 英語固定、設定バリデーションはメッセージコードを返す方針（#279）の担保。
+    assert.deepStrictEqual(
+      collectNormalizeSourceFiles().flatMap((filePath) =>
+        collectJapaneseStringLiterals(filePath)
+      ),
+      [],
+      "normalize layer output should be language-independent"
     );
   });
 

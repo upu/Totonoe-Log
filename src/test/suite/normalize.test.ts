@@ -556,7 +556,10 @@ suite("normalize / compileCustomTimestampFormats", () => {
 
     assert.strictEqual(formats.length, 0);
     assert.strictEqual(errors.length, 1);
-    assert.ok(errors[0].includes("broken"));
+    assert.deepStrictEqual(
+      { code: errors[0].code, name: "name" in errors[0] ? errors[0].name : undefined },
+      { code: "invalidNamedRegex", name: "broken" }
+    );
   });
 
   test("reports an error when required capture groups are missing", () => {
@@ -650,7 +653,7 @@ suite("normalize / formatNormalizedLog", () => {
 
     const output = formatNormalizedLog(parseLog(text));
 
-    assert.ok(!output.includes("空白"));
+    assert.ok(!output.includes("gap"));
   });
 
   test("inserts a gap marker between entries whose timestamp gap meets the threshold", () => {
@@ -665,7 +668,7 @@ suite("normalize / formatNormalizedLog", () => {
       output,
       [
         "1 | 2024-01-02T03:04:05.000Z INFO before",
-        "... | 30秒の空白",
+        "... | 30s gap",
         "2 | 2024-01-02T03:04:35.000Z INFO after",
       ].join("\n")
     );
@@ -679,7 +682,7 @@ suite("normalize / formatNormalizedLog", () => {
 
     const output = formatNormalizedLog(parseLog(text), { gapThresholdMs: 30_000 });
 
-    assert.ok(!output.includes("空白"));
+    assert.ok(!output.includes("gap"));
   });
 
   test("formats a sub-second-precision gap duration with one decimal place", () => {
@@ -690,7 +693,7 @@ suite("normalize / formatNormalizedLog", () => {
 
     const output = formatNormalizedLog(parseLog(text), { gapThresholdMs: 30_000 });
 
-    assert.ok(output.includes("30.5秒の空白"));
+    assert.ok(output.includes("30.5s gap"));
   });
 
   test("skips the gap check for a pair where the earlier entry lacks a recognized timestamp, without affecting later pairs", () => {
@@ -704,8 +707,8 @@ suite("normalize / formatNormalizedLog", () => {
 
     const output = formatNormalizedLog(parseLog(text), { gapThresholdMs: 30_000 });
 
-    assert.strictEqual((output.match(/秒の空白/g) ?? []).length, 1);
-    assert.ok(output.includes("60秒の空白"));
+    assert.strictEqual((output.match(/s gap/g) ?? []).length, 1);
+    assert.ok(output.includes("60s gap"));
   });
 
   test("treats a gapThresholdMs of 0 as disabled", () => {
@@ -716,7 +719,7 @@ suite("normalize / formatNormalizedLog", () => {
 
     const output = formatNormalizedLog(parseLog(text), { gapThresholdMs: 0 });
 
-    assert.ok(!output.includes("空白"));
+    assert.ok(!output.includes("gap"));
   });
 
   test("inserts multiple gap markers for multiple qualifying gaps", () => {
@@ -728,7 +731,7 @@ suite("normalize / formatNormalizedLog", () => {
 
     const output = formatNormalizedLog(parseLog(text), { gapThresholdMs: 30_000 });
 
-    assert.strictEqual((output.match(/秒の空白/g) ?? []).length, 2);
+    assert.strictEqual((output.match(/s gap/g) ?? []).length, 2);
   });
 });
 
@@ -1706,7 +1709,7 @@ suite("normalize / buildInteractiveCollapsedLines (#172)", () => {
     if (item.kind !== "group") {
       throw new Error("unreachable");
     }
-    // 見出しは formatCollapsedLog と同じ内容になる（範囲ラベル・タイムスタンプスパン・×N）。
+    // 見出しは formatCollapsedLog と同じ内容になる（範囲ラベル・タイムスタンプスパン・繰り返し回数）。
     const collapsedItems = collapseRepeatedEntries(entries, { threshold: 3 });
     assert.strictEqual(item.headerText, formatCollapsedLog(entries, collapsedItems));
     // 展開後の各行は、範囲ラベル("1-3"、3桁)に合わせた幅のガターで揃う。
@@ -1740,7 +1743,7 @@ suite("normalize / buildInteractiveCollapsedLines (#172)", () => {
     }
     assert.strictEqual(
       items[1].headerText,
-      "2-4 | 2024-01-02T03:04:05.000Z INFO ok (×3, 〜03:04:07.000Z)"
+      "2-4 | 2024-01-02T03:04:05.000Z INFO ok (x3, ~03:04:07.000Z)"
     );
     // グループ内の展開行も、範囲ラベル("2-4"、3桁)に合わせた幅のガターで揃う。
     assert.deepStrictEqual(items[1].lines, [
@@ -2081,7 +2084,7 @@ suite("normalize / display mask (#194)", () => {
     // であることは残す）。
     assert.strictEqual(
       items[0].headerText,
-      "1-3 | <TIMESTAMP> INFO connect to <HOST> ok (×3)"
+      "1-3 | <TIMESTAMP> INFO connect to <HOST> ok (x3)"
     );
     assert.deepStrictEqual(items[0].lines, [
       "  1 | <TIMESTAMP> INFO connect to <HOST> ok",
@@ -2669,7 +2672,7 @@ suite("normalize / formatCollapsedLog", () => {
 
     assert.strictEqual(
       formatCollapsedLog(entries, items),
-      "1-3 | 2024-01-02T03:04:05.000Z INFO connect ok (×3, 〜03:04:07.000Z)"
+      "1-3 | 2024-01-02T03:04:05.000Z INFO connect ok (x3, ~03:04:07.000Z)"
     );
   });
 
@@ -2684,7 +2687,7 @@ suite("normalize / formatCollapsedLog", () => {
 
     assert.strictEqual(
       formatCollapsedLog(entries, items),
-      "1-3 | 2024-01-02T03:04:05.000Z INFO connect ok (×3)"
+      "1-3 | 2024-01-02T03:04:05.000Z INFO connect ok (x3)"
     );
   });
 
@@ -2699,7 +2702,7 @@ suite("normalize / formatCollapsedLog", () => {
 
     assert.strictEqual(
       formatCollapsedLog(entries, items, { displayTimezone: 540 }),
-      "1-3 | 2024-01-02T12:04:05.000+09:00 INFO connect ok (×3, 〜12:04:07.000+09:00)"
+      "1-3 | 2024-01-02T12:04:05.000+09:00 INFO connect ok (x3, ~12:04:07.000+09:00)"
     );
   });
 
@@ -2724,7 +2727,7 @@ suite("normalize / formatCollapsedLog", () => {
       formatCollapsedLog(entries, items),
       [
         "  1 | ==== banner ====",
-        "2-4 | 2024-01-02T03:04:05.000Z INFO ok (×3, 〜03:04:07.000Z)",
+        "2-4 | 2024-01-02T03:04:05.000Z INFO ok (x3, ~03:04:07.000Z)",
       ].join("\n")
     );
   });
@@ -2744,7 +2747,7 @@ suite("normalize / formatCollapsedLog", () => {
     assert.strictEqual(
       formatCollapsedLog(entries, items),
       [
-        "1-6 | 2024-01-02T03:04:05.000Z ERROR boom (×3, 〜03:04:07.000Z)",
+        "1-6 | 2024-01-02T03:04:05.000Z ERROR boom (x3, ~03:04:07.000Z)",
         "  2 |                                  detail",
       ].join("\n")
     );
@@ -2943,7 +2946,7 @@ suite("normalize / formatMergedLog", () => {
 
     const output = formatMergedLog(merged);
 
-    assert.ok(!output.includes("空白"));
+    assert.ok(!output.includes("gap"));
   });
 
   test("inserts a gap marker between merged entries from different files, blanking the fileName/kind columns", () => {
@@ -2958,7 +2961,7 @@ suite("normalize / formatMergedLog", () => {
     const kindWidth = "database".length;
     const expected = [
       `${"app.log".padEnd(fileNameWidth)} | ${"app".padEnd(kindWidth)} | 1 | 2024-01-02T03:04:05.000Z INFO  before`,
-      `${" ".repeat(fileNameWidth)} | ${" ".repeat(kindWidth)} | ... | 30秒の空白`,
+      `${" ".repeat(fileNameWidth)} | ${" ".repeat(kindWidth)} | ... | 30s gap`,
       `${"database.log".padEnd(fileNameWidth)} | ${"database".padEnd(kindWidth)} | 1 | 2024-01-02T03:04:35.000Z ERROR after`,
     ].join("\n");
 
@@ -2973,7 +2976,7 @@ suite("normalize / formatMergedLog", () => {
 
     const output = formatMergedLog(merged, { gapThresholdMs: 30_000 });
 
-    assert.ok(!output.includes("空白"));
+    assert.ok(!output.includes("gap"));
   });
 
   test("treats a gapThresholdMs of 0 as disabled", () => {
@@ -2984,7 +2987,7 @@ suite("normalize / formatMergedLog", () => {
 
     const output = formatMergedLog(merged, { gapThresholdMs: 0 });
 
-    assert.ok(!output.includes("空白"));
+    assert.ok(!output.includes("gap"));
   });
 
   test("inserts multiple gap markers for multiple qualifying gaps", () => {
@@ -2996,7 +2999,7 @@ suite("normalize / formatMergedLog", () => {
 
     const output = formatMergedLog(merged, { gapThresholdMs: 30_000 });
 
-    assert.strictEqual((output.match(/秒の空白/g) ?? []).length, 2);
+    assert.strictEqual((output.match(/s gap/g) ?? []).length, 2);
   });
 
   test("skips the gap check for a pair where an entry lacks a recognized timestamp", () => {
@@ -3009,7 +3012,7 @@ suite("normalize / formatMergedLog", () => {
 
     const output = formatMergedLog(merged, { gapThresholdMs: 30_000 });
 
-    assert.ok(!output.includes("空白"));
+    assert.ok(!output.includes("gap"));
   });
 
   test("detects a gap on the filtered entry list, matching the normalized view's existing behavior", async () => {
@@ -3029,8 +3032,8 @@ suite("normalize / formatMergedLog", () => {
 
     const output = formatMergedLog(filterResult.entries, { gapThresholdMs: 30_000 });
 
-    assert.strictEqual((output.match(/秒の空白/g) ?? []).length, 1);
-    assert.ok(output.includes("40秒の空白"));
+    assert.strictEqual((output.match(/s gap/g) ?? []).length, 1);
+    assert.ok(output.includes("40s gap"));
   });
 
   test("does not pass an out-of-range timestamp into merge order, date filtering, or gap detection", async () => {
@@ -3058,8 +3061,8 @@ suite("normalize / formatMergedLog", () => {
     assert.deepStrictEqual(filterResult.entries, []);
 
     const output = formatMergedLog(merged, { gapThresholdMs: 30 * 60 * 1000 });
-    assert.strictEqual((output.match(/秒の空白/g) ?? []).length, 1);
-    assert.ok(output.includes("5400秒の空白"));
+    assert.strictEqual((output.match(/s gap/g) ?? []).length, 1);
+    assert.ok(output.includes("5400s gap"));
   });
 });
 
@@ -3420,7 +3423,7 @@ suite("normalize / collapse honors the display mask (#245)", () => {
     assert.strictEqual(items[0].kind, "group");
     if (items[0].kind === "group") {
       assert.ok(items[0].headerText.includes("<PID>"), "the header should show the masked text");
-      assert.match(items[0].headerText, /\(×3[,)]/);
+      assert.match(items[0].headerText, /\(x3[,)]/);
       assert.strictEqual(items[0].lines.length, 3);
       assert.ok(
         items[0].lines.every((line) => line.includes("<PID>")),
@@ -4108,7 +4111,7 @@ suite("normalize / buildInteractiveExportText (#175)", () => {
     assert.strictEqual(result.formatted.text, expected.text);
     assert.deepStrictEqual(result.formatted.lineSources, expected.lineSources);
     // 折りたたみが実際に効いていること（4行あるINFOの連続がまとまっている）も確認する。
-    assert.ok(result.formatted.text.includes("×3"));
+    assert.ok(result.formatted.text.includes("x3"));
   });
 
   test("propagates a timeout failure from the ignore pattern stage", async () => {
@@ -4469,12 +4472,12 @@ suite("normalize / compileHighlightRules (#18)", () => {
       ["ok"]
     );
     assert.strictEqual(errors.length, 4);
-    assert.match(errors[0], /2番目の項目/);
-    assert.match(errors[1], /no-pattern/);
-    assert.match(errors[2], /bad-regex/);
-    assert.match(errors[3], /bad-color/);
-    // 使える色が分かる文言であること（色コードではなく名前で選ぶため）。
-    assert.match(errors[3], /red/);
+    assert.deepStrictEqual(errors[0], { code: "notAnObject", index: 1 });
+    assert.deepStrictEqual(errors[1], { code: "missingNamedPattern", name: "no-pattern" });
+    assert.ok(errors[2].code === "invalidNamedRegex" && errors[2].name === "bad-regex");
+    // 使える色が分かること（色コードではなく名前で選ぶため）。
+    assert.ok(errors[3].code === "invalidHighlightColor" && errors[3].name === "bad-color");
+    assert.ok(errors[3].allowedColors.includes("red"));
   });
 });
 
@@ -4652,8 +4655,8 @@ suite("normalize / merged collapse (#158)", () => {
     if (items[0].kind !== "group") {
       throw new Error("unreachable");
     }
-    assert.match(items[0].headerText, /server-a\.log 他/);
-    assert.match(items[0].headerText, /\(×4[,)]/);
+    assert.match(items[0].headerText, /server-a\.log and others/);
+    assert.match(items[0].headerText, /\(x4[,)]/);
   });
 
   test("reports every source file of the group, de-duplicated and in order", () => {
@@ -4686,10 +4689,10 @@ suite("normalize / merged collapse (#158)", () => {
     if (items[0].kind !== "group") {
       throw new Error("unreachable");
     }
-    assert.match(items[0].headerText, /app\.log 他/);
+    assert.match(items[0].headerText, /app\.log and others/);
     assert.deepStrictEqual(items[0].headerFileIndices, [0, 1]);
     // 種別は両方 "app" で違いが無いので、そちらには印を付けない。
-    assert.doesNotMatch(items[0].headerText, /app 他/);
+    assert.doesNotMatch(items[0].headerText, /app and others/);
   });
 
   test("shows the plain file name when the whole group comes from one file", () => {
@@ -4710,7 +4713,7 @@ suite("normalize / merged collapse (#158)", () => {
       throw new Error("unreachable");
     }
     assert.match(items[0].headerText, /server-a\.log/);
-    assert.doesNotMatch(items[0].headerText, /他/);
+    assert.doesNotMatch(items[0].headerText, /and others/);
   });
 
   test("keeps each expanded line pointing at its own source file (#137)", () => {
@@ -4809,8 +4812,8 @@ suite("normalize / merged collapse (#158)", () => {
       throw new Error("unreachable");
     }
     assert.strictEqual(result.formatted.text.split("\n").length, 1);
-    assert.match(result.formatted.text, /\(×4[,)]/);
-    assert.match(result.formatted.text, /server-a\.log 他/);
+    assert.match(result.formatted.text, /\(x4[,)]/);
+    assert.match(result.formatted.text, /server-a\.log and others/);
   });
 
   test("buildInteractiveMergedExportText points the group header at the range start", async () => {
@@ -4927,7 +4930,7 @@ suite("normalize / column alignment (#174)", () => {
     assert.strictEqual(
       formatCollapsedLog(entries, items),
       [
-        "1-3 | 2024-01-02T03:04:05.000Z INFO  connect ok (×3, 〜03:04:07.000Z)",
+        "1-3 | 2024-01-02T03:04:05.000Z INFO  connect ok (x3, ~03:04:07.000Z)",
         "  4 | 2024-01-02T03:04:10.000Z ERROR boom",
       ].join("\n")
     );
@@ -4944,7 +4947,7 @@ suite("normalize / column alignment (#174)", () => {
 
     assert.strictEqual(
       formatCollapsedLog(entries, items),
-      "1-3 | 2024-01-02T23:59:58.000Z INFO connect ok (×3, 〜2024-01-03T00:00:01.000Z)"
+      "1-3 | 2024-01-02T23:59:58.000Z INFO connect ok (x3, ~2024-01-03T00:00:01.000Z)"
     );
   });
 
@@ -4961,7 +4964,7 @@ suite("normalize / column alignment (#174)", () => {
       formatCollapsedLog(entries, items, {
         mask: { maskTimestamp: true, maskHost: true },
       }),
-      "1-3 | <TIMESTAMP> INFO connect to <HOST> ok (×3)"
+      "1-3 | <TIMESTAMP> INFO connect to <HOST> ok (x3)"
     );
   });
 });
@@ -5063,7 +5066,7 @@ suite("normalize / continuation line indent (#256)", () => {
     assert.strictEqual(
       formatCollapsedLog(entries, items),
       [
-        "1-6 | 2024-01-02T03:04:05.000Z ERROR boom (×3, 〜03:04:07.000Z)",
+        "1-6 | 2024-01-02T03:04:05.000Z ERROR boom (x3, ~03:04:07.000Z)",
         `  2 | ${indent}  detail`,
       ].join("\n")
     );
