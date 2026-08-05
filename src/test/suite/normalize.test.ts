@@ -54,6 +54,14 @@ import {
 } from "../../normalize";
 import * as maskForCompare from "../../normalize/maskForCompare";
 
+/**
+ * ギャップ区切り行（`... | 30.5s gap`）の出現回数。単に "gap" を数えると、
+ * ログ本文にその語が含まれるだけで数が合わなくなるため、秒数付きの形で数える。
+ */
+function countGapMarkers(output: string): number {
+  return (output.match(/\d+(?:\.\d)?s gap/g) ?? []).length;
+}
+
 suite("normalize / parseLog", () => {
   test("parses ISO 8601 timestamps with severity and message", () => {
     const [entry] = parseLog("2024-01-02T03:04:05.678Z ERROR Something broke");
@@ -653,7 +661,7 @@ suite("normalize / formatNormalizedLog", () => {
 
     const output = formatNormalizedLog(parseLog(text));
 
-    assert.ok(!output.includes("gap"));
+    assert.strictEqual(countGapMarkers(output), 0);
   });
 
   test("inserts a gap marker between entries whose timestamp gap meets the threshold", () => {
@@ -682,7 +690,7 @@ suite("normalize / formatNormalizedLog", () => {
 
     const output = formatNormalizedLog(parseLog(text), { gapThresholdMs: 30_000 });
 
-    assert.ok(!output.includes("gap"));
+    assert.strictEqual(countGapMarkers(output), 0);
   });
 
   test("formats a sub-second-precision gap duration with one decimal place", () => {
@@ -707,7 +715,7 @@ suite("normalize / formatNormalizedLog", () => {
 
     const output = formatNormalizedLog(parseLog(text), { gapThresholdMs: 30_000 });
 
-    assert.strictEqual((output.match(/s gap/g) ?? []).length, 1);
+    assert.strictEqual(countGapMarkers(output), 1);
     assert.ok(output.includes("60s gap"));
   });
 
@@ -719,7 +727,7 @@ suite("normalize / formatNormalizedLog", () => {
 
     const output = formatNormalizedLog(parseLog(text), { gapThresholdMs: 0 });
 
-    assert.ok(!output.includes("gap"));
+    assert.strictEqual(countGapMarkers(output), 0);
   });
 
   test("inserts multiple gap markers for multiple qualifying gaps", () => {
@@ -731,7 +739,7 @@ suite("normalize / formatNormalizedLog", () => {
 
     const output = formatNormalizedLog(parseLog(text), { gapThresholdMs: 30_000 });
 
-    assert.strictEqual((output.match(/s gap/g) ?? []).length, 2);
+    assert.strictEqual(countGapMarkers(output), 2);
   });
 });
 
@@ -2946,7 +2954,7 @@ suite("normalize / formatMergedLog", () => {
 
     const output = formatMergedLog(merged);
 
-    assert.ok(!output.includes("gap"));
+    assert.strictEqual(countGapMarkers(output), 0);
   });
 
   test("inserts a gap marker between merged entries from different files, blanking the fileName/kind columns", () => {
@@ -2976,7 +2984,7 @@ suite("normalize / formatMergedLog", () => {
 
     const output = formatMergedLog(merged, { gapThresholdMs: 30_000 });
 
-    assert.ok(!output.includes("gap"));
+    assert.strictEqual(countGapMarkers(output), 0);
   });
 
   test("treats a gapThresholdMs of 0 as disabled", () => {
@@ -2987,7 +2995,7 @@ suite("normalize / formatMergedLog", () => {
 
     const output = formatMergedLog(merged, { gapThresholdMs: 0 });
 
-    assert.ok(!output.includes("gap"));
+    assert.strictEqual(countGapMarkers(output), 0);
   });
 
   test("inserts multiple gap markers for multiple qualifying gaps", () => {
@@ -2999,7 +3007,7 @@ suite("normalize / formatMergedLog", () => {
 
     const output = formatMergedLog(merged, { gapThresholdMs: 30_000 });
 
-    assert.strictEqual((output.match(/s gap/g) ?? []).length, 2);
+    assert.strictEqual(countGapMarkers(output), 2);
   });
 
   test("skips the gap check for a pair where an entry lacks a recognized timestamp", () => {
@@ -3012,7 +3020,7 @@ suite("normalize / formatMergedLog", () => {
 
     const output = formatMergedLog(merged, { gapThresholdMs: 30_000 });
 
-    assert.ok(!output.includes("gap"));
+    assert.strictEqual(countGapMarkers(output), 0);
   });
 
   test("detects a gap on the filtered entry list, matching the normalized view's existing behavior", async () => {
@@ -3032,7 +3040,7 @@ suite("normalize / formatMergedLog", () => {
 
     const output = formatMergedLog(filterResult.entries, { gapThresholdMs: 30_000 });
 
-    assert.strictEqual((output.match(/s gap/g) ?? []).length, 1);
+    assert.strictEqual(countGapMarkers(output), 1);
     assert.ok(output.includes("40s gap"));
   });
 
@@ -3061,7 +3069,7 @@ suite("normalize / formatMergedLog", () => {
     assert.deepStrictEqual(filterResult.entries, []);
 
     const output = formatMergedLog(merged, { gapThresholdMs: 30 * 60 * 1000 });
-    assert.strictEqual((output.match(/s gap/g) ?? []).length, 1);
+    assert.strictEqual(countGapMarkers(output), 1);
     assert.ok(output.includes("5400s gap"));
   });
 });
@@ -4111,7 +4119,7 @@ suite("normalize / buildInteractiveExportText (#175)", () => {
     assert.strictEqual(result.formatted.text, expected.text);
     assert.deepStrictEqual(result.formatted.lineSources, expected.lineSources);
     // 折りたたみが実際に効いていること（4行あるINFOの連続がまとまっている）も確認する。
-    assert.ok(result.formatted.text.includes("x3"));
+    assert.match(result.formatted.text, /\(x3[,)]/);
   });
 
   test("propagates a timeout failure from the ignore pattern stage", async () => {
