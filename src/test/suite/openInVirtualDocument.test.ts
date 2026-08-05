@@ -1,5 +1,6 @@
 import * as assert from "node:assert";
 import * as vscode from "vscode";
+import { activateTotonoeLogExtension } from "./support/activateTotonoeLogExtension";
 import { waitForDocumentText } from "./support/waitForDocumentText";
 
 async function withTempLogFiles<T>(
@@ -28,12 +29,11 @@ async function withTempLogFiles<T>(
 
 suite("Totonoe Log open in virtual document (#249): command surface", () => {
   test("registers the openVirtualDocument command and drops the two it replaces", async () => {
-    const extension = vscode.extensions.getExtension("upu.totonoe-log");
-    await extension!.activate();
+    const packageExtension = await activateTotonoeLogExtension();
 
     const commands = await vscode.commands.getCommands(true);
     const contributed = (
-      extension!.packageJSON.contributes.commands as Array<{ command: string }>
+      packageExtension.packageJSON.contributes.commands as Array<{ command: string }>
     ).map((item) => item.command);
 
     assert.ok(
@@ -47,10 +47,9 @@ suite("Totonoe Log open in virtual document (#249): command surface", () => {
   });
 
   test("shows the explorer entry for any non-folder, not just multi-selections", async () => {
-    const extension = vscode.extensions.getExtension("upu.totonoe-log");
-    await extension!.activate();
+    const packageExtension = await activateTotonoeLogExtension();
 
-    const explorerContext = extension!.packageJSON.contributes.menus["explorer/context"] as Array<{
+    const explorerContext = packageExtension.packageJSON.contributes.menus["explorer/context"] as Array<{
       command: string;
       when: string;
     }>;
@@ -59,7 +58,7 @@ suite("Totonoe Log open in virtual document (#249): command surface", () => {
     );
     assert.ok(entry, "openVirtualDocument should appear in the explorer context menu");
     assert.strictEqual(
-      entry!.when,
+      entry.when,
       "!explorerResourceIsFolder",
       "a single selected file must be enough to offer the command"
     );
@@ -68,8 +67,7 @@ suite("Totonoe Log open in virtual document (#249): command surface", () => {
 
 suite("Totonoe Log open in virtual document (#249): view selection", () => {
   test("opens a normalized view for a single file selected in the explorer", async () => {
-    const extension = vscode.extensions.getExtension("upu.totonoe-log");
-    await extension!.activate();
+    await activateTotonoeLogExtension();
 
     await withTempLogFiles({ "app.log": "2024-01-02T03:04:05Z ERROR boom" }, async (paths) => {
       const appLogUri = vscode.Uri.file(paths["app.log"]);
@@ -79,18 +77,18 @@ suite("Totonoe Log open in virtual document (#249): view selection", () => {
       ]);
 
       const activeEditor = vscode.window.activeTextEditor;
-      assert.strictEqual(activeEditor!.document.uri.scheme, "totonoe-log-normalized");
+      assert.ok(activeEditor, "a normalized view editor should be shown");
+      assert.strictEqual(activeEditor.document.uri.scheme, "totonoe-log-normalized");
       // 単一ファイルなのでファイル名/種類列は付かない。
       assert.strictEqual(
-        activeEditor!.document.getText(),
+        activeEditor.document.getText(),
         "1 | 2024-01-02T03:04:05.000Z ERROR boom"
       );
     });
   });
 
   test("opens a merged view for two or more files, spanning folders", async () => {
-    const extension = vscode.extensions.getExtension("upu.totonoe-log");
-    await extension!.activate();
+    await activateTotonoeLogExtension();
 
     await withTempLogFiles(
       {
@@ -107,8 +105,9 @@ suite("Totonoe Log open in virtual document (#249): view selection", () => {
         ]);
 
         const activeEditor = vscode.window.activeTextEditor;
-        assert.strictEqual(activeEditor!.document.uri.scheme, "totonoe-log-merged");
-        const text = activeEditor!.document.getText();
+        assert.ok(activeEditor, "a merged view editor should be shown");
+        assert.strictEqual(activeEditor.document.uri.scheme, "totonoe-log-merged");
+        const text = activeEditor.document.getText();
         assert.ok(text.includes("app.log"), "the merged view should carry the file name column");
         assert.ok(text.includes("db.log"), "a file from another folder should be merged in");
       }
@@ -116,8 +115,7 @@ suite("Totonoe Log open in virtual document (#249): view selection", () => {
   });
 
   test("falls back to the active editor when run from the palette, unsaved changes included", async () => {
-    const extension = vscode.extensions.getExtension("upu.totonoe-log");
-    await extension!.activate();
+    await activateTotonoeLogExtension();
 
     const source = await vscode.workspace.openTextDocument({
       content: "2024-01-02T03:04:05Z ERROR unsaved edit",
@@ -128,9 +126,10 @@ suite("Totonoe Log open in virtual document (#249): view selection", () => {
     await vscode.commands.executeCommand("totonoeLog.openVirtualDocument");
 
     const activeEditor = vscode.window.activeTextEditor;
-    assert.strictEqual(activeEditor!.document.uri.scheme, "totonoe-log-normalized");
+    assert.ok(activeEditor, "a normalized view editor should be shown");
+    assert.strictEqual(activeEditor.document.uri.scheme, "totonoe-log-normalized");
     assert.strictEqual(
-      activeEditor!.document.getText(),
+      activeEditor.document.getText(),
       "1 | 2024-01-02T03:04:05.000Z ERROR unsaved edit"
     );
 
@@ -138,8 +137,7 @@ suite("Totonoe Log open in virtual document (#249): view selection", () => {
   });
 
   test("warns instead of opening when the selection holds only folders", async () => {
-    const extension = vscode.extensions.getExtension("upu.totonoe-log");
-    await extension!.activate();
+    await activateTotonoeLogExtension();
 
     await withTempLogFiles({ "sub/app.log": "2024-01-02T03:04:05Z INFO starting" }, async (paths) => {
       const path = await import("node:path");
@@ -171,22 +169,17 @@ suite("Totonoe Log open in virtual document (#249): view selection", () => {
       }
 
       assert.ok(warningMessage, "a warning should explain that no log file was selected");
-      assert.notStrictEqual(
-        vscode.window.activeTextEditor!.document.uri.scheme,
-        "totonoe-log-normalized"
-      );
-      assert.notStrictEqual(
-        vscode.window.activeTextEditor!.document.uri.scheme,
-        "totonoe-log-merged"
-      );
+      const activeEditor = vscode.window.activeTextEditor;
+      assert.ok(activeEditor, "the original editor should remain active");
+      assert.notStrictEqual(activeEditor.document.uri.scheme, "totonoe-log-normalized");
+      assert.notStrictEqual(activeEditor.document.uri.scheme, "totonoe-log-merged");
     });
   });
 });
 
 suite("Totonoe Log open in virtual document (#249): downstream commands", () => {
   test("keeps Go to Source Line working from both the single-file and merged results", async () => {
-    const extension = vscode.extensions.getExtension("upu.totonoe-log");
-    await extension!.activate();
+    await activateTotonoeLogExtension();
 
     await withTempLogFiles(
       {
@@ -200,10 +193,14 @@ suite("Totonoe Log open in virtual document (#249): downstream commands", () => 
         await vscode.commands.executeCommand("totonoeLog.openVirtualDocument", dbLogUri, [
           dbLogUri,
         ]);
-        vscode.window.activeTextEditor!.selection = new vscode.Selection(0, 0, 0, 0);
+        const normalizedEditor = vscode.window.activeTextEditor;
+        assert.ok(normalizedEditor, "a normalized view editor should be shown");
+        normalizedEditor.selection = new vscode.Selection(0, 0, 0, 0);
         await vscode.commands.executeCommand("totonoeLog.goToSourceLine");
+        const singleFileSourceEditor = vscode.window.activeTextEditor;
+        assert.ok(singleFileSourceEditor, "the source editor should be shown");
         assert.strictEqual(
-          vscode.window.activeTextEditor!.document.uri.fsPath,
+          singleFileSourceEditor.document.uri.fsPath,
           dbLogUri.fsPath,
           "the single-file result should map back to its source"
         );
@@ -212,14 +209,15 @@ suite("Totonoe Log open in virtual document (#249): downstream commands", () => 
           appLogUri,
           dbLogUri,
         ]);
-        assert.strictEqual(
-          vscode.window.activeTextEditor!.document.uri.scheme,
-          "totonoe-log-merged"
-        );
-        vscode.window.activeTextEditor!.selection = new vscode.Selection(0, 0, 0, 0);
+        const mergedEditor = vscode.window.activeTextEditor;
+        assert.ok(mergedEditor, "a merged view editor should be shown");
+        assert.strictEqual(mergedEditor.document.uri.scheme, "totonoe-log-merged");
+        mergedEditor.selection = new vscode.Selection(0, 0, 0, 0);
         await vscode.commands.executeCommand("totonoeLog.goToSourceLine");
+        const mergedSourceEditor = vscode.window.activeTextEditor;
+        assert.ok(mergedSourceEditor, "the source editor should be shown");
         assert.strictEqual(
-          vscode.window.activeTextEditor!.document.uri.fsPath,
+          mergedSourceEditor.document.uri.fsPath,
           appLogUri.fsPath,
           "the merged result should map back to the first entry's source"
         );
@@ -228,8 +226,7 @@ suite("Totonoe Log open in virtual document (#249): downstream commands", () => 
   });
 
   test("can be filtered afterwards in both shapes (#248 keeps working)", async () => {
-    const extension = vscode.extensions.getExtension("upu.totonoe-log");
-    await extension!.activate();
+    await activateTotonoeLogExtension();
 
     await withTempLogFiles(
       {
@@ -255,7 +252,9 @@ suite("Totonoe Log open in virtual document (#249): downstream commands", () => 
             appLogUri,
             dbLogUri,
           ]);
-          const merged = vscode.window.activeTextEditor!.document;
+          const activeEditor = vscode.window.activeTextEditor;
+          assert.ok(activeEditor, "a merged view editor should be shown");
+          const merged = activeEditor.document;
           await vscode.commands.executeCommand("totonoeLog.setViewFilter");
           assert.ok(
             !(await waitForDocumentText(merged, (text) => !text.includes("INFO starting"))).includes(

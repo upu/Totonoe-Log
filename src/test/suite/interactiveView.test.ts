@@ -162,8 +162,10 @@ suite("interactiveViewCriteria / toFilterCriteria (#166)", () => {
       0
     );
 
-    assert.strictEqual(criteria.ignorePatterns?.length, 1);
-    assert.strictEqual(criteria.ignorePatterns![0].test("HEARTBEAT"), true);
+    const ignorePatterns = criteria.ignorePatterns;
+    assert.ok(ignorePatterns);
+    assert.strictEqual(ignorePatterns.length, 1);
+    assert.strictEqual(ignorePatterns[0].test("HEARTBEAT"), true);
     assert.deepStrictEqual(errors, []);
   });
 
@@ -194,8 +196,10 @@ suite("interactiveViewCriteria / toFilterCriteria (#166)", () => {
       0
     );
 
-    assert.strictEqual(criteria.matchPatterns?.length, 1);
-    assert.strictEqual(criteria.matchPatterns![0].test("TIMEOUT"), true);
+    const matchPatterns = criteria.matchPatterns;
+    assert.ok(matchPatterns);
+    assert.strictEqual(matchPatterns.length, 1);
+    assert.strictEqual(matchPatterns[0].test("TIMEOUT"), true);
     assert.deepStrictEqual(errors, []);
   });
 
@@ -327,7 +331,7 @@ suite("interactiveViewCriteria / compileMaskPattern (#195)", () => {
 
     assert.ok(pattern instanceof RegExp);
     assert.strictEqual(
-      "USER=alice and user=bob".replace(pattern!, "<MASKED>"),
+      "USER=alice and user=bob".replace(pattern, "<MASKED>"),
       "<MASKED> and <MASKED>"
     );
     assert.deepStrictEqual(errors, []);
@@ -577,12 +581,12 @@ suite("interactiveViewContext / parseWebviewLineSource (#191)", () => {
 
 suite("timestampRecognitionWarning / buildLowTimestampRecognitionWarnings (#186)", () => {
   /** タイムスタンプを含まないプレーンな行（警告条件を満たす12行）。 */
-  const UNRECOGNIZED_LOG = Array.from({ length: 12 }, (_, i) => `plain line ${i + 1}`).join("\n");
+  const UNRECOGNIZED_LOG = Array.from({ length: 12 }, (_, i) => `plain line ${String(i + 1)}`).join("\n");
 
   /** 全行が ISO 8601 タイムスタンプ付きの正常なログ（12行）。 */
   const RECOGNIZED_LOG = Array.from(
     { length: 12 },
-    (_, i) => `2024-01-02T03:04:${String(i).padStart(2, "0")}Z INFO line ${i + 1}`
+    (_, i) => `2024-01-02T03:04:${String(i).padStart(2, "0")}Z INFO line ${String(i + 1)}`
   ).join("\n");
 
   /** 認識済みの行の後で未対応形式へ切り替わるログ（形式切替の兆候を満たす）。 */
@@ -686,7 +690,8 @@ async function waitFor(
 suite("Totonoe Log interactive view (#166)", () => {
   test("registers the showInteractiveView command under its final id (#184)", async () => {
     const extension = vscode.extensions.getExtension("upu.totonoe-log");
-    await extension!.activate();
+    assert.ok(extension, "the extension should be installed");
+    await extension.activate();
 
     const commands = await vscode.commands.getCommands(true);
     assert.ok(
@@ -699,15 +704,16 @@ suite("Totonoe Log interactive view (#166)", () => {
     );
 
     const command = (
-      extension!.packageJSON.contributes.commands as Array<{ command: string; title: string }>
+      extension.packageJSON.contributes.commands as Array<{ command: string; title: string }>
     ).find((item) => item.command === "totonoeLog.showInteractiveView");
     assert.ok(command, "the command should be contributed in package.json");
-    assert.strictEqual(command!.title, "Totonoe Log: Show Interactive View");
+    assert.strictEqual(command.title, "Totonoe Log: Show Interactive View");
   });
 
   test("registers the webview context menu jump command, hidden from the palette (#191)", async () => {
     const extension = vscode.extensions.getExtension("upu.totonoe-log");
-    await extension!.activate();
+    assert.ok(extension, "the extension should be installed");
+    await extension.activate();
 
     const commands = await vscode.commands.getCommands(true);
     assert.ok(
@@ -715,7 +721,7 @@ suite("Totonoe Log interactive view (#166)", () => {
       "totonoeLog.goToSourceLineFromInteractiveView command should be registered"
     );
 
-    const menus = extension!.packageJSON.contributes.menus as Record<
+    const menus = extension.packageJSON.contributes.menus as Record<
       string,
       Array<{ command: string; when?: string }>
     >;
@@ -723,21 +729,22 @@ suite("Totonoe Log interactive view (#166)", () => {
       (item) => item.command === "totonoeLog.goToSourceLineFromInteractiveView"
     );
     assert.ok(contextEntry, "webview/context should have a jump entry");
-    assert.strictEqual(contextEntry!.when, "webviewSection == totonoeLogInteractiveLine");
+    assert.strictEqual(contextEntry.when, "webviewSection == totonoeLogInteractiveLine");
 
     // 行のコンテキストからしか意味を持たないコマンドなので、パレットには出さない。
     const paletteEntry = menus.commandPalette.find(
       (item) => item.command === "totonoeLog.goToSourceLineFromInteractiveView"
     );
     assert.ok(paletteEntry, "commandPalette should have an entry hiding the command");
-    assert.strictEqual(paletteEntry!.when, "false");
+    assert.strictEqual(paletteEntry.when, "false");
   });
 
   test("offers an explorer context menu entry for any file, single or multiple (#181, #201)", async () => {
     const extension = vscode.extensions.getExtension("upu.totonoe-log");
-    await extension!.activate();
+    assert.ok(extension, "the extension should be installed");
+    await extension.activate();
 
-    const menus = extension!.packageJSON.contributes.menus as Record<
+    const menus = extension.packageJSON.contributes.menus as Record<
       string,
       Array<{ command: string; when?: string }>
     >;
@@ -747,13 +754,14 @@ suite("Totonoe Log interactive view (#166)", () => {
     assert.ok(explorerEntry, "explorer/context should have an Interactive View entry");
     // マージ系（`listMultiSelection`）と違い1ファイルでも成立するため、
     // フォルダ以外なら出す（issue #201）。
-    assert.strictEqual(explorerEntry!.when, "!explorerResourceIsFolder");
+    assert.strictEqual(explorerEntry.when, "!explorerResourceIsFolder");
   });
 
   test("opens a single-file webview from an explorer single selection (#201)", async function () {
     this.timeout(10000);
     const extension = vscode.extensions.getExtension("upu.totonoe-log");
-    await extension!.activate();
+    assert.ok(extension, "the extension should be installed");
+    await extension.activate();
 
     const fs = await import("node:fs/promises");
     const os = await import("node:os");
@@ -786,7 +794,8 @@ suite("Totonoe Log interactive view (#166)", () => {
   test("opens a webview tab from an explorer multi-selection, with no active editor (#181)", async function () {
     this.timeout(10000);
     const extension = vscode.extensions.getExtension("upu.totonoe-log");
-    await extension!.activate();
+    assert.ok(extension, "the extension should be installed");
+    await extension.activate();
 
     const fs = await import("node:fs/promises");
     const os = await import("node:os");
@@ -826,7 +835,8 @@ suite("Totonoe Log interactive view (#166)", () => {
   test("opens a webview tab when invoked against an active log editor", async function () {
     this.timeout(10000);
     const extension = vscode.extensions.getExtension("upu.totonoe-log");
-    await extension!.activate();
+    assert.ok(extension, "the extension should be installed");
+    await extension.activate();
 
     const source = await vscode.workspace.openTextDocument({
       content: "2024-01-02T03:04:05Z ERROR boom",
@@ -842,14 +852,17 @@ suite("Totonoe Log interactive view (#166)", () => {
         .find((tab) => tab.input instanceof vscode.TabInputWebview);
     assert.ok(await waitFor(() => webviewTab() !== undefined), "a webview tab should be opened");
 
-    const tab = webviewTab()!;
+    const tab = webviewTab();
+    assert.ok(tab, "a webview tab should be opened");
     assert.ok(
       tab.label.startsWith("Totonoe Log: "),
       `the panel title should carry no (Alpha) marker, got "${tab.label}" (#184)`
     );
     // VSCode は `createWebviewPanel` の viewType に内部の接頭辞を付けてタブへ
     // 持たせるため、末尾一致で確認する。
-    const viewType = (tab.input as vscode.TabInputWebview).viewType;
+    const input = tab.input;
+    assert.ok(input instanceof vscode.TabInputWebview, "the tab should contain a webview");
+    const viewType = input.viewType;
     assert.ok(
       viewType.endsWith("totonoeLog.interactiveView"),
       `the webview view type should have dropped its alpha suffix, got "${viewType}" (#184)`

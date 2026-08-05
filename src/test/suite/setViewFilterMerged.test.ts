@@ -1,6 +1,7 @@
 import * as assert from "node:assert";
 import * as vscode from "vscode";
 import type { FilterKind } from "../../filterPrompts";
+import { activateTotonoeLogExtension } from "./support/activateTotonoeLogExtension";
 import { waitForDocumentText } from "./support/waitForDocumentText";
 
 interface TestQuickPickItem extends vscode.QuickPickItem {
@@ -60,15 +61,16 @@ async function openMergedView(fileUris: readonly vscode.Uri[]): Promise<vscode.T
   await vscode.commands.executeCommand("totonoeLog.openVirtualDocument", fileUris[0], [
     ...fileUris,
   ]);
-  const document = vscode.window.activeTextEditor!.document;
+  const activeEditor = vscode.window.activeTextEditor;
+  assert.ok(activeEditor, "a merged view editor should be shown");
+  const document = activeEditor.document;
   assert.strictEqual(document.uri.scheme, "totonoe-log-merged");
   return document;
 }
 
 suite("Totonoe Log set filter on the merged view (#248): filtering and navigation", () => {
   test("applies only the criteria selected in the kind picker, keeping fileName/kind columns", async () => {
-    const extension = vscode.extensions.getExtension("upu.totonoe-log");
-    await extension!.activate();
+    await activateTotonoeLogExtension();
 
     await withTempLogFiles(
       {
@@ -119,8 +121,7 @@ suite("Totonoe Log set filter on the merged view (#248): filtering and navigatio
   });
 
   test("keeps the source mapping so Go to Source Line still reaches the original file", async () => {
-    const extension = vscode.extensions.getExtension("upu.totonoe-log");
-    await extension!.activate();
+    await activateTotonoeLogExtension();
 
     await withTempLogFiles(
       {
@@ -139,12 +140,15 @@ suite("Totonoe Log set filter on the merged view (#248): filtering and navigatio
         }
         await waitForDocumentText(document, (text) => !text.includes("INFO starting"));
 
-        const mergedEditor = vscode.window.activeTextEditor!;
+        const mergedEditor = vscode.window.activeTextEditor;
+        assert.ok(mergedEditor, "the filtered merged view editor should remain active");
         mergedEditor.selection = new vscode.Selection(0, 0, 0, 0);
         await vscode.commands.executeCommand("totonoeLog.goToSourceLine");
 
+        const sourceEditor = vscode.window.activeTextEditor;
+        assert.ok(sourceEditor, "the source editor should be shown");
         assert.strictEqual(
-          vscode.window.activeTextEditor!.document.uri.fsPath,
+          sourceEditor.document.uri.fsPath,
           dbLogUri.fsPath,
           "Go to Source Line should still reach the original file after filtering"
         );
@@ -155,8 +159,7 @@ suite("Totonoe Log set filter on the merged view (#248): filtering and navigatio
 
 suite("Totonoe Log set filter on the merged view (#248): clearing and cancellation", () => {
   test("clears the filter when no kind is selected (but the picker is not dismissed)", async () => {
-    const extension = vscode.extensions.getExtension("upu.totonoe-log");
-    await extension!.activate();
+    await activateTotonoeLogExtension();
 
     await withTempLogFiles(
       {
@@ -200,8 +203,7 @@ suite("Totonoe Log set filter on the merged view (#248): clearing and cancellati
   });
 
   test("leaves the view untouched when the kind picker is dismissed", async () => {
-    const extension = vscode.extensions.getExtension("upu.totonoe-log");
-    await extension!.activate();
+    await activateTotonoeLogExtension();
 
     await withTempLogFiles(
       {
@@ -229,8 +231,7 @@ suite("Totonoe Log set filter on the merged view (#248): clearing and cancellati
   });
 
   test("leaves the view untouched when a prompt is dismissed after picking a kind", async () => {
-    const extension = vscode.extensions.getExtension("upu.totonoe-log");
-    await extension!.activate();
+    await activateTotonoeLogExtension();
 
     await withTempLogFiles(
       {

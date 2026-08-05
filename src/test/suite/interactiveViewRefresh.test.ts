@@ -10,6 +10,17 @@ function deferred<T>(): { promise: Promise<T>; resolve: (value: T) => void } {
   return { promise, resolve };
 }
 
+/** 値を運ばず、完了だけを知らせる Promise。 */
+function deferredSignal(): { promise: Promise<undefined>; resolve: () => void } {
+  const signal = deferred<undefined>();
+  return {
+    promise: signal.promise,
+    resolve: () => {
+      signal.resolve(undefined);
+    },
+  };
+}
+
 suite("interactiveViewRefresh / RefreshRevisionGate (#218)", () => {
   test("treats the newest requested revision as the current one", () => {
     const gate = new RefreshRevisionGate();
@@ -73,9 +84,9 @@ suite("interactiveViewRefresh / RefreshRevisionGate (#218)", () => {
       published.push(label);
     };
 
-    const first = deferred<void>();
-    const second = deferred<void>();
-    const third = deferred<void>();
+    const first = deferredSignal();
+    const second = deferredSignal();
+    const third = deferredSignal();
 
     const running = [
       refresh("first", first.promise),

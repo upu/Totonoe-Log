@@ -951,9 +951,6 @@ suite("normalize / filterEntriesByIgnorePattern", () => {
   ) {
     const result = await filterEntriesByIgnorePattern(entries, patterns);
     assert.strictEqual(result.ok, true);
-    if (!result.ok) {
-      throw new Error("unreachable");
-    }
     return result.entries;
   }
 
@@ -1025,7 +1022,7 @@ suite("normalize / filterEntriesByIgnorePattern", () => {
   test("returns quickly for a normal pattern against a moderately sized log (no perceptible slowdown)", async () => {
     const lines = [];
     for (let i = 0; i < 500; i += 1) {
-      lines.push(`2024-01-02T03:04:05Z INFO message number ${i}`);
+      lines.push(`2024-01-02T03:04:05Z INFO message number ${String(i)}`);
     }
     const entries = parseLog(lines.join("\n"));
 
@@ -1036,7 +1033,7 @@ suite("normalize / filterEntriesByIgnorePattern", () => {
     assert.strictEqual(filtered.length, entries.length - 1);
     // ワーカースレッドの起動コストを含めても、通常のパターンは十分速く
     // 終わるべき（既定タイムアウトの 2000ms よりずっと短い）。
-    assert.ok(elapsedMs < 1500, `expected a fast result, took ${elapsedMs}ms`);
+    assert.ok(elapsedMs < 1500, `expected a fast result, took ${String(elapsedMs)}ms`);
   });
 
   test("terminates and reports a timeout instead of hanging forever when matching doesn't finish in time", async function () {
@@ -1075,13 +1072,11 @@ suite("normalize / filterEntriesByIgnorePattern", () => {
     const elapsedMs = Date.now() - startedAt;
 
     assert.strictEqual(result.ok, false);
-    if (!result.ok) {
-      assert.strictEqual(result.reason, "timeout");
-    }
+    assert.strictEqual(result.reason, "timeout");
     // タイムアウトによって早期に打ち切られていること（＝拡張ホストを
     // ブロックし続けない）ことの確認。ワーカーの起動・終了コストを見込んで
     // 余裕を持たせる。
-    assert.ok(elapsedMs < 4000, `expected an early termination, took ${elapsedMs}ms`);
+    assert.ok(elapsedMs < 4000, `expected an early termination, took ${String(elapsedMs)}ms`);
   });
 
   test("excludes an entry matching any one of several patterns (#206)", async () => {
@@ -1132,9 +1127,6 @@ suite("normalize / filterEntriesByMatchPattern (#182)", () => {
   ) {
     const result = await filterEntriesByMatchPattern(entries, patterns);
     assert.strictEqual(result.ok, true);
-    if (!result.ok) {
-      throw new Error("unreachable");
-    }
     return result.entries;
   }
 
@@ -1244,9 +1236,7 @@ suite("normalize / filterEntriesByMatchPattern (#182)", () => {
     const result = await filterEntriesByMatchPattern(entries, [/hello/], { timeoutMs: 1 });
 
     assert.strictEqual(result.ok, false);
-    if (!result.ok) {
-      assert.strictEqual(result.reason, "timeout");
-    }
+    assert.strictEqual(result.reason, "timeout");
   });
 
   test("keeps an entry matching any one of several patterns (#206)", async () => {
@@ -1285,9 +1275,6 @@ suite("normalize / filterEntriesByCriteria", () => {
   ) {
     const result = await filterEntriesByCriteria(entries, criteria);
     assert.strictEqual(result.ok, true);
-    if (!result.ok) {
-      throw new Error("unreachable");
-    }
     return result.entries;
   }
 
@@ -1364,9 +1351,7 @@ suite("normalize / filterEntriesByCriteria", () => {
     );
 
     assert.strictEqual(result.ok, false);
-    if (!result.ok) {
-      assert.strictEqual(result.reason, "timeout");
-    }
+    assert.strictEqual(result.reason, "timeout");
   });
 
   test("applies only the match pattern filter when only a match pattern is specified (#182)", async () => {
@@ -1405,9 +1390,7 @@ suite("normalize / filterEntriesByCriteria", () => {
     );
 
     assert.strictEqual(result.ok, false);
-    if (!result.ok) {
-      assert.strictEqual(result.reason, "timeout");
-    }
+    assert.strictEqual(result.reason, "timeout");
   });
 
   test("ORs the patterns within each field and ANDs the two fields (#206)", async () => {
@@ -1453,15 +1436,9 @@ suite("normalize / buildInteractivePayload (#166)", () => {
     const payload = await buildInteractivePayload(entries, criteria);
 
     assert.strictEqual(payload.ok, true);
-    if (!payload.ok) {
-      throw new Error("unreachable");
-    }
 
     const filterResult = await filterEntriesByCriteria(entries, criteria);
     assert.strictEqual(filterResult.ok, true);
-    if (!filterResult.ok) {
-      throw new Error("unreachable");
-    }
     const expected = formatNormalizedLogWithLineSources(filterResult.entries);
 
     assert.strictEqual(payload.text, expected.text);
@@ -1474,9 +1451,6 @@ suite("normalize / buildInteractivePayload (#166)", () => {
     const payload = await buildInteractivePayload(entries, { severities: new Set(["ERROR"]) });
 
     assert.strictEqual(payload.ok, true);
-    if (!payload.ok) {
-      throw new Error("unreachable");
-    }
     // INFO のエントリはフィルタで0件になるが、チェックボックス自体は残ってほしい。
     assert.deepStrictEqual(payload.distinctSeverities, getDistinctSeverities(entries));
     assert.ok(payload.distinctSeverities.includes("INFO"));
@@ -1488,9 +1462,6 @@ suite("normalize / buildInteractivePayload (#166)", () => {
     const payload = await buildInteractivePayload(entries, { severities: new Set(["ERROR"]) });
 
     assert.strictEqual(payload.ok, true);
-    if (!payload.ok) {
-      throw new Error("unreachable");
-    }
     assert.strictEqual(payload.totalLineCount, entries.reduce((n, e) => n + e.lines.length, 0));
     // ERRORの3エントリ。最後の「heartbeat noise」エントリは、次行の
     // 「not a recognizable...」（タイムスタンプなし）を継続行として
@@ -1508,9 +1479,7 @@ suite("normalize / buildInteractivePayload (#166)", () => {
     );
 
     assert.strictEqual(payload.ok, false);
-    if (!payload.ok) {
-      assert.strictEqual(payload.reason, "timeout");
-    }
+    assert.strictEqual(payload.reason, "timeout");
   });
 
   test("omits items when collapseThreshold is not specified", async () => {
@@ -1519,9 +1488,6 @@ suite("normalize / buildInteractivePayload (#166)", () => {
     const payload = await buildInteractivePayload(entries, {});
 
     assert.strictEqual(payload.ok, true);
-    if (!payload.ok) {
-      throw new Error("unreachable");
-    }
     assert.strictEqual(payload.items, undefined);
   });
 
@@ -1532,15 +1498,9 @@ suite("normalize / buildInteractivePayload (#166)", () => {
     const payload = await buildInteractivePayload(entries, criteria, { collapseThreshold: 3 });
 
     assert.strictEqual(payload.ok, true);
-    if (!payload.ok) {
-      throw new Error("unreachable");
-    }
 
     const filterResult = await filterEntriesByCriteria(entries, criteria);
     assert.strictEqual(filterResult.ok, true);
-    if (!filterResult.ok) {
-      throw new Error("unreachable");
-    }
     assert.deepStrictEqual(
       payload.items,
       buildInteractiveCollapsedLines(filterResult.entries, { threshold: 3 })
@@ -1573,15 +1533,9 @@ suite("normalize / buildInteractiveMergedPayload (#168)", () => {
     const payload = await buildInteractiveMergedPayload(mergedEntries, criteria);
 
     assert.strictEqual(payload.ok, true);
-    if (!payload.ok) {
-      throw new Error("unreachable");
-    }
 
     const filterResult = await filterMergedEntriesByCriteria(mergedEntries, criteria);
     assert.strictEqual(filterResult.ok, true);
-    if (!filterResult.ok) {
-      throw new Error("unreachable");
-    }
     const expected = formatMergedLogWithLineSources(filterResult.entries);
 
     assert.strictEqual(payload.text, expected.text);
@@ -1596,9 +1550,6 @@ suite("normalize / buildInteractiveMergedPayload (#168)", () => {
     });
 
     assert.strictEqual(payload.ok, true);
-    if (!payload.ok) {
-      throw new Error("unreachable");
-    }
     assert.deepStrictEqual(
       payload.distinctSeverities,
       getDistinctSeverities(mergedEntries.map((merged) => merged.entry))
@@ -1614,9 +1565,6 @@ suite("normalize / buildInteractiveMergedPayload (#168)", () => {
     });
 
     assert.strictEqual(payload.ok, true);
-    if (!payload.ok) {
-      throw new Error("unreachable");
-    }
     assert.strictEqual(
       payload.totalLineCount,
       mergedEntries.reduce((n, m) => n + m.entry.lines.length, 0)
@@ -1636,9 +1584,7 @@ suite("normalize / buildInteractiveMergedPayload (#168)", () => {
     );
 
     assert.strictEqual(payload.ok, false);
-    if (!payload.ok) {
-      assert.strictEqual(payload.reason, "timeout");
-    }
+    assert.strictEqual(payload.reason, "timeout");
   });
 });
 
@@ -1692,9 +1638,6 @@ suite("normalize / buildInteractiveCollapsedLines (#172)", () => {
 
     const [item] = items;
     assert.strictEqual(item.kind, "group");
-    if (item.kind !== "group") {
-      throw new Error("unreachable");
-    }
     assert.deepStrictEqual(
       item.lineSources,
       [1, 2, 3, 4, 5, 6].map((line) => ({ fileIndex: 0, line }))
@@ -1714,9 +1657,6 @@ suite("normalize / buildInteractiveCollapsedLines (#172)", () => {
     assert.strictEqual(items.length, 1);
     const [item] = items;
     assert.strictEqual(item.kind, "group");
-    if (item.kind !== "group") {
-      throw new Error("unreachable");
-    }
     // 見出しは formatCollapsedLog と同じ内容になる（範囲ラベル・タイムスタンプスパン・繰り返し回数）。
     const collapsedItems = collapseRepeatedEntries(entries, { threshold: 3 });
     assert.strictEqual(item.headerText, formatCollapsedLog(entries, collapsedItems));
@@ -1746,9 +1686,6 @@ suite("normalize / buildInteractiveCollapsedLines (#172)", () => {
       lineSource: { fileIndex: 0, line: 1 },
     });
     assert.strictEqual(items[1].kind, "group");
-    if (items[1].kind !== "group") {
-      throw new Error("unreachable");
-    }
     assert.strictEqual(
       items[1].headerText,
       "2-4 | 2024-01-02T03:04:05.000Z INFO ok (x3, ~03:04:07.000Z)"
@@ -1777,9 +1714,6 @@ suite("normalize / buildInteractiveCollapsedLines (#172)", () => {
     assert.strictEqual(items.length, 1);
     const [item] = items;
     assert.strictEqual(item.kind, "group");
-    if (item.kind !== "group") {
-      throw new Error("unreachable");
-    }
     // ガター幅は範囲ラベル("1-6"、3桁)に合わせて揃うため、単独で
     // formatNormalizedLog(entries) を呼んだ場合（幅1桁）とは異なる。
     assert.deepStrictEqual(item.lines, [
@@ -2085,9 +2019,6 @@ suite("normalize / display mask (#194)", () => {
 
     assert.strictEqual(items.length, 1);
     assert.strictEqual(items[0].kind, "group");
-    if (items[0].kind !== "group") {
-      return;
-    }
     // 開始/終了が異なるグループはスパン表示のままにする（マスクしても「範囲」
     // であることは残す）。
     assert.strictEqual(
@@ -2112,9 +2043,6 @@ suite("normalize / display mask (#194)", () => {
     });
 
     assert.ok(result.ok);
-    if (!result.ok) {
-      return;
-    }
     assert.strictEqual(
       result.text,
       ["1 | <TIMESTAMP> INFO  connect to <HOST> ok", "2 | <TIMESTAMP> ERROR boom"].join("\n")
@@ -2133,7 +2061,7 @@ suite("normalize / display mask (#194)", () => {
 
     assert.ok(result.ok);
     assert.strictEqual(
-      result.ok ? result.text : "",
+      result.text,
       "app.log | app | 1 | <TIMESTAMP> INFO from <HOST>"
     );
   });
@@ -2144,7 +2072,7 @@ suite("normalize / display mask (#194)", () => {
     const plain = await buildInteractiveExportText(entries, {}, { mask: MASK_BOTH });
     assert.ok(plain.ok);
     assert.strictEqual(
-      plain.ok ? plain.formatted.text : "",
+      plain.formatted.text,
       "1 | <TIMESTAMP> INFO from <HOST>"
     );
 
@@ -2153,7 +2081,7 @@ suite("normalize / display mask (#194)", () => {
       mask: MASK_BOTH,
     });
     assert.ok(collapsed.ok);
-    assert.match(collapsed.ok ? collapsed.formatted.text : "", /<TIMESTAMP> INFO from <HOST>/);
+    assert.match(collapsed.formatted.text, /<TIMESTAMP> INFO from <HOST>/);
   });
 
   test("buildInteractiveMergedExportText forwards the mask", async () => {
@@ -2164,7 +2092,7 @@ suite("normalize / display mask (#194)", () => {
 
     assert.ok(result.ok);
     assert.strictEqual(
-      result.ok ? result.formatted.text : "",
+      result.formatted.text,
       "app.log | app | 1 | <TIMESTAMP> INFO from <HOST>"
     );
   });
@@ -2279,9 +2207,6 @@ suite("normalize / maskEntriesByPatterns (#195)", () => {
   async function maskOk(entries: Parameters<typeof maskEntriesByPatterns>[0], pattern: RegExp) {
     const result = await maskEntriesByPatterns(entries, [pattern]);
     assert.strictEqual(result.ok, true);
-    if (!result.ok) {
-      throw new Error("unreachable");
-    }
     return result.entries;
   }
 
@@ -2359,9 +2284,7 @@ suite("normalize / maskEntriesByPatterns (#195)", () => {
     const result = await maskEntriesByPatterns(entries, [/hello/], { timeoutMs: 1 });
 
     assert.strictEqual(result.ok, false);
-    if (!result.ok) {
-      assert.strictEqual(result.reason, "timeout");
-    }
+    assert.strictEqual(result.reason, "timeout");
   });
 
   test("masks merged entries while keeping their file index", async () => {
@@ -2372,9 +2295,6 @@ suite("normalize / maskEntriesByPatterns (#195)", () => {
     const result = await maskMergedEntriesByPatterns(merged, [/user=\w+/]);
 
     assert.strictEqual(result.ok, true);
-    if (!result.ok) {
-      return;
-    }
     assert.strictEqual(result.entries[0].entry.message, "<MASKED> ok");
     assert.strictEqual(result.entries[0].fileIndex, merged[0].fileIndex);
   });
@@ -2383,14 +2303,13 @@ suite("normalize / maskEntriesByPatterns (#195)", () => {
     // キー指定欄と任意パターン欄を同時に効かせるための配列適用（issue #212）。
     const entries = parseLog("2024-01-02T03:04:05Z INFO user=alice token=secret");
 
-    const result = await maskEntriesByPatterns(entries, [
-      buildKeyMaskPattern("user")!,
-      /token=\S+/,
-    ]);
+    const keyPattern = buildKeyMaskPattern("user");
+    assert.ok(keyPattern);
+    const result = await maskEntriesByPatterns(entries, [keyPattern, /token=\S+/]);
 
     assert.strictEqual(result.ok, true);
     assert.strictEqual(
-      result.ok ? result.entries[0].message : "",
+      result.entries[0].message,
       "user=<MASKED> <MASKED>"
     );
   });
@@ -2486,9 +2405,6 @@ suite("normalize / custom mask pattern in the interactive builders (#195)", () =
     });
 
     assert.ok(result.ok);
-    if (!result.ok) {
-      return;
-    }
     assert.strictEqual(result.text, "1 | 2024-01-02T03:04:05.000Z INFO <MASKED> from <HOST>");
     assert.strictEqual(result.maskPatternFailure, undefined);
   });
@@ -2505,9 +2421,6 @@ suite("normalize / custom mask pattern in the interactive builders (#195)", () =
     });
 
     assert.ok(result.ok);
-    if (!result.ok) {
-      return;
-    }
     assert.strictEqual(result.maskPatternFailure, "timeout");
     assert.strictEqual(result.text, "1 | 2024-01-02T03:04:05.000Z INFO user=alice from <HOST>");
   });
@@ -2525,11 +2438,11 @@ suite("normalize / custom mask pattern in the interactive builders (#195)", () =
     });
 
     assert.ok(result.ok);
-    if (!result.ok) {
-      return;
-    }
-    assert.strictEqual(result.items?.length, 1);
-    assert.match(result.items?.[0].kind === "group" ? result.items[0].headerText : "", /<MASKED> ok/);
+    assert.ok(result.items);
+    assert.strictEqual(result.items.length, 1);
+    const [item] = result.items;
+    assert.strictEqual(item.kind, "group");
+    assert.match(item.headerText, /<MASKED> ok/);
   });
 
   test("buildInteractiveMergedPayload applies the pattern", async () => {
@@ -2539,7 +2452,7 @@ suite("normalize / custom mask pattern in the interactive builders (#195)", () =
 
     assert.ok(result.ok);
     assert.strictEqual(
-      result.ok ? result.text : "",
+      result.text,
       "app.log | app | 1 | 2024-01-02T03:04:05.000Z INFO <MASKED> from 10.0.0.1"
     );
   });
@@ -2551,16 +2464,13 @@ suite("normalize / custom mask pattern in the interactive builders (#195)", () =
 
     const applied = await buildInteractiveExportText(entries, {}, { maskPatterns: [/user=\w+/] });
     assert.ok(applied.ok);
-    assert.match(applied.ok ? applied.formatted.text : "", /<MASKED> from 10\.0\.0\.1/);
+    assert.match(applied.formatted.text, /<MASKED> from 10\.0\.0\.1/);
 
     const failed = await buildInteractiveExportText(entries, {}, {
       maskPatterns: [/user=\w+/],
       maskPatternTimeoutMs: 1,
     });
     assert.ok(failed.ok);
-    if (!failed.ok) {
-      return;
-    }
     assert.strictEqual(failed.maskPatternFailure, "timeout");
     assert.match(failed.formatted.text, /user=alice/);
   });
@@ -2571,7 +2481,7 @@ suite("normalize / custom mask pattern in the interactive builders (#195)", () =
     const result = await buildInteractiveMergedExportText(merged, {}, { maskPatterns: [/user=\w+/] });
 
     assert.ok(result.ok);
-    assert.match(result.ok ? result.formatted.text : "", /INFO <MASKED> from/);
+    assert.match(result.formatted.text, /INFO <MASKED> from/);
   });
 });
 
@@ -2588,7 +2498,7 @@ suite("normalize / collapseRepeatedEntries", () => {
 
     assert.strictEqual(items.length, 1);
     assert.strictEqual(items[0].kind, "group");
-    assert.strictEqual(items[0].kind === "group" ? items[0].entries.length : 0, 3);
+    assert.strictEqual(items[0].entries.length, 3);
   });
 
   test("keeps entries below the threshold ungrouped", () => {
@@ -2612,11 +2522,11 @@ suite("normalize / collapseRepeatedEntries", () => {
 
     assert.strictEqual(items.length, 3);
     assert.strictEqual(items[0].kind, "group");
-    assert.strictEqual(items[0].kind === "group" ? items[0].entries.length : 0, 2);
+    assert.strictEqual(items[0].entries.length, 2);
     assert.strictEqual(items[1].kind, "single");
-    assert.strictEqual(items[1].kind === "single" ? items[1].entry.message : "", "B");
+    assert.strictEqual(items[1].entry.message, "B");
     assert.strictEqual(items[2].kind, "single");
-    assert.strictEqual(items[2].kind === "single" ? items[2].entry.message : "", "A");
+    assert.strictEqual(items[2].entry.message, "A");
   });
 
   test("treats entries differing only by a masked IPv4 address as repeats", () => {
@@ -2630,7 +2540,7 @@ suite("normalize / collapseRepeatedEntries", () => {
 
     assert.strictEqual(items.length, 1);
     assert.strictEqual(items[0].kind, "group");
-    assert.strictEqual(items[0].kind === "group" ? items[0].entries.length : 0, 2);
+    assert.strictEqual(items[0].entries.length, 2);
   });
 
   test("does not merge entries with different severities even when the message matches", () => {
@@ -3034,9 +2944,6 @@ suite("normalize / formatMergedLog", () => {
       severities: new Set(["INFO", "ERROR"]),
     });
     assert.strictEqual(filterResult.ok, true);
-    if (!filterResult.ok) {
-      throw new Error("unreachable");
-    }
 
     const output = formatMergedLog(filterResult.entries, { gapThresholdMs: 30_000 });
 
@@ -3063,9 +2970,6 @@ suite("normalize / formatMergedLog", () => {
       },
     });
     assert.strictEqual(filterResult.ok, true);
-    if (!filterResult.ok) {
-      throw new Error("unreachable");
-    }
     assert.deepStrictEqual(filterResult.entries, []);
 
     const output = formatMergedLog(merged, { gapThresholdMs: 30 * 60 * 1000 });
@@ -3082,9 +2986,6 @@ suite("normalize / filterMergedEntriesByCriteria", () => {
   ) {
     const result = await filterMergedEntriesByCriteria(mergedEntries, criteria);
     assert.strictEqual(result.ok, true);
-    if (!result.ok) {
-      throw new Error("unreachable");
-    }
     return result.entries;
   }
 
@@ -3181,23 +3082,21 @@ suite("normalize / filterMergedEntriesByCriteria", () => {
     );
 
     assert.strictEqual(result.ok, false);
-    if (!result.ok) {
-      assert.strictEqual(result.reason, "timeout");
-    }
+    assert.strictEqual(result.reason, "timeout");
   });
 });
 
 suite("normalize / assessTimestampRecognition", () => {
   /** タイムスタンプを含まないプレーンな行を count 行分生成する。 */
   function plainLines(count: number): string {
-    return Array.from({ length: count }, (_, i) => `plain line ${i + 1}`).join("\n");
+    return Array.from({ length: count }, (_, i) => `plain line ${String(i + 1)}`).join("\n");
   }
 
   /** ISO 8601 タイムスタンプ付きの行を count 行分生成する。 */
   function timestampedLines(count: number): string {
     return Array.from(
       { length: count },
-      (_, i) => `2024-01-02T03:04:${String(i % 60).padStart(2, "0")}Z INFO line ${i + 1}`
+      (_, i) => `2024-01-02T03:04:${String(i % 60).padStart(2, "0")}Z INFO line ${String(i + 1)}`
     ).join("\n");
   }
 
@@ -3222,7 +3121,7 @@ suite("normalize / assessTimestampRecognition", () => {
   test("does not count continuation lines (e.g. stack traces) of recognized entries as unrecognized", () => {
     const stackTrace = Array.from(
       { length: 20 },
-      (_, i) => `    at com.example.App.method${i}(App.java:${i + 1})`
+      (_, i) => `    at com.example.App.method${String(i)}(App.java:${String(i + 1)})`
     ).join("\n");
     const text = [
       "2024-01-02T03:04:05Z ERROR boom",
@@ -3370,9 +3269,7 @@ suite("normalize / collapse honors the display mask (#245)", () => {
 
     assert.strictEqual(items.length, 1);
     assert.strictEqual(items[0].kind, "group");
-    if (items[0].kind === "group") {
-      assert.strictEqual(items[0].entries.length, 3);
-    }
+    assert.strictEqual(items[0].entries.length, 3);
   });
 
   test("does not collapse lines that differ only by syslog hostname when no mask is configured", () => {
@@ -3429,15 +3326,13 @@ suite("normalize / collapse honors the display mask (#245)", () => {
 
     assert.strictEqual(items.length, 1);
     assert.strictEqual(items[0].kind, "group");
-    if (items[0].kind === "group") {
-      assert.ok(items[0].headerText.includes("<PID>"), "the header should show the masked text");
-      assert.match(items[0].headerText, /\(x3[,)]/);
-      assert.strictEqual(items[0].lines.length, 3);
-      assert.ok(
-        items[0].lines.every((line) => line.includes("<PID>")),
-        "the expanded lines should stay masked as they are today"
-      );
-    }
+    assert.ok(items[0].headerText.includes("<PID>"), "the header should show the masked text");
+    assert.match(items[0].headerText, /\(x3[,)]/);
+    assert.strictEqual(items[0].lines.length, 3);
+    assert.ok(
+      items[0].lines.every((line) => line.includes("<PID>")),
+      "the expanded lines should stay masked as they are today"
+    );
   });
 
   test("groups the merged display items across files as well (#158)", () => {
@@ -3456,9 +3351,7 @@ suite("normalize / collapse honors the display mask (#245)", () => {
 
     assert.strictEqual(items.length, 1);
     assert.strictEqual(items[0].kind, "group");
-    if (items[0].kind === "group") {
-      assert.deepStrictEqual(items[0].headerFileIndices, [0, 1]);
-    }
+    assert.deepStrictEqual(items[0].headerFileIndices, [0, 1]);
   });
 
   test("carries the same grouping into the exported virtual document (#175)", async () => {
@@ -3469,22 +3362,20 @@ suite("normalize / collapse honors the display mask (#245)", () => {
     );
 
     assert.strictEqual(result.ok, true);
-    if (result.ok) {
-      // 折りたたまれていれば見出し1行だけになる（書き出しは折りたたんだ状態を写す）。
-      assert.strictEqual(result.formatted.text.split("\n").length, 1);
-      assert.ok(result.formatted.text.includes("<PID>"));
-    }
+    // 折りたたまれていれば見出し1行だけになる（書き出しは折りたたんだ状態を写す）。
+    assert.strictEqual(result.formatted.text.split("\n").length, 1);
+    assert.ok(result.formatted.text.includes("<PID>"));
   });
 });
 
 suite("normalize / assessTimestampRecognitionByFile (#186)", () => {
   /** タイムスタンプを含まないプレーンな行（警告条件を満たす12行）。 */
-  const UNRECOGNIZED_LOG = Array.from({ length: 12 }, (_, i) => `plain line ${i + 1}`).join("\n");
+  const UNRECOGNIZED_LOG = Array.from({ length: 12 }, (_, i) => `plain line ${String(i + 1)}`).join("\n");
 
   /** 全行が ISO 8601 タイムスタンプ付きの正常なログ（12行）。 */
   const RECOGNIZED_LOG = Array.from(
     { length: 12 },
-    (_, i) => `2024-01-02T03:04:${String(i).padStart(2, "0")}Z INFO line ${i + 1}`
+    (_, i) => `2024-01-02T03:04:${String(i).padStart(2, "0")}Z INFO line ${String(i + 1)}`
   ).join("\n");
 
   test("assesses each source file separately, so only the unrecognized one warns", () => {
@@ -4023,9 +3914,6 @@ suite("normalize / formatMergedLogWithLineSources (#137)", () => {
       severities: new Set(["INFO"]),
     });
     assert.strictEqual(result.ok, true);
-    if (!result.ok) {
-      throw new Error("unreachable");
-    }
 
     const { lineSources } = formatMergedLogWithLineSources(result.entries);
 
@@ -4087,15 +3975,9 @@ suite("normalize / buildInteractiveExportText (#175)", () => {
     const result = await buildInteractiveExportText(entries, criteria);
 
     assert.strictEqual(result.ok, true);
-    if (!result.ok) {
-      throw new Error("unreachable");
-    }
 
     const filterResult = await filterEntriesByCriteria(entries, criteria);
     assert.strictEqual(filterResult.ok, true);
-    if (!filterResult.ok) {
-      throw new Error("unreachable");
-    }
     const expected = formatNormalizedLogWithLineSources(filterResult.entries);
 
     assert.strictEqual(result.formatted.text, expected.text);
@@ -4109,9 +3991,6 @@ suite("normalize / buildInteractiveExportText (#175)", () => {
     const result = await buildInteractiveExportText(entries, criteria, { collapseThreshold: 3 });
 
     assert.strictEqual(result.ok, true);
-    if (!result.ok) {
-      throw new Error("unreachable");
-    }
 
     const items = collapseRepeatedEntries(entries, { threshold: 3 });
     const expected = formatCollapsedLogWithLineSources(entries, items);
@@ -4132,9 +4011,7 @@ suite("normalize / buildInteractiveExportText (#175)", () => {
     );
 
     assert.strictEqual(result.ok, false);
-    if (!result.ok) {
-      assert.strictEqual(result.reason, "timeout");
-    }
+    assert.strictEqual(result.reason, "timeout");
   });
 });
 
@@ -4163,15 +4040,9 @@ suite("normalize / buildInteractiveMergedExportText (#175)", () => {
     const result = await buildInteractiveMergedExportText(mergedEntries, criteria);
 
     assert.strictEqual(result.ok, true);
-    if (!result.ok) {
-      throw new Error("unreachable");
-    }
 
     const filterResult = await filterMergedEntriesByCriteria(mergedEntries, criteria);
     assert.strictEqual(filterResult.ok, true);
-    if (!filterResult.ok) {
-      throw new Error("unreachable");
-    }
     const expected = formatMergedLogWithLineSources(filterResult.entries);
 
     assert.strictEqual(result.formatted.text, expected.text);
@@ -4190,9 +4061,7 @@ suite("normalize / buildInteractiveMergedExportText (#175)", () => {
     );
 
     assert.strictEqual(result.ok, false);
-    if (!result.ok) {
-      assert.strictEqual(result.reason, "timeout");
-    }
+    assert.strictEqual(result.reason, "timeout");
   });
 });
 
@@ -4244,9 +4113,6 @@ suite("normalize / file visibility (#170)", () => {
     );
 
     assert.strictEqual(payload.ok, true);
-    if (!payload.ok) {
-      throw new Error("unreachable");
-    }
     assert.match(payload.text, /from app/);
     assert.doesNotMatch(payload.text, /from worker/);
     // 非表示にしたファイルのセベリティも、チェックボックスを消さないよう残す
@@ -4262,9 +4128,6 @@ suite("normalize / file visibility (#170)", () => {
     const payload = await buildInteractivePayload(entries, {}, { visibleFileIndices: new Set() });
 
     assert.strictEqual(payload.ok, true);
-    if (!payload.ok) {
-      throw new Error("unreachable");
-    }
     assert.strictEqual(payload.text, "");
     assert.deepStrictEqual(payload.distinctSeverities, ["ERROR"]);
     assert.strictEqual(payload.totalLineCount, 1);
@@ -4281,9 +4144,6 @@ suite("normalize / file visibility (#170)", () => {
     );
 
     assert.strictEqual(result.ok, true);
-    if (!result.ok) {
-      throw new Error("unreachable");
-    }
     assert.match(result.formatted.text, /from worker/);
     assert.doesNotMatch(result.formatted.text, /from app/);
   });
@@ -4294,9 +4154,6 @@ suite("normalize / file visibility (#170)", () => {
     const result = await buildInteractiveExportText(entries, {}, { visibleFileIndices: new Set() });
 
     assert.strictEqual(result.ok, true);
-    if (!result.ok) {
-      throw new Error("unreachable");
-    }
     assert.strictEqual(result.formatted.text, "");
   });
 });
@@ -4495,9 +4352,6 @@ suite("normalize / highlightDisplayLines (#18)", () => {
     const { rules } = compileHighlightRules(settings);
     const result = await highlightDisplayLines(lines, rules);
     assert.strictEqual(result.ok, true);
-    if (!result.ok) {
-      throw new Error("unreachable");
-    }
     return new Map(result.highlights);
   }
 
@@ -4542,7 +4396,7 @@ suite("normalize / highlightDisplayLines (#18)", () => {
     // 優先順位として扱う（後勝ちだと、上に足したルールが効かなくなって驚く）。
     const line = "OutOfMemoryError";
 
-    const highlights = await highlightOk(line ? [line] : [], [
+    const highlights = await highlightOk([line], [
       { pattern: "OutOfMemory", color: "red" },
       { pattern: "MemoryError", color: "blue" },
     ]);
@@ -4591,9 +4445,7 @@ suite("normalize / highlightDisplayLines (#18)", () => {
     const result = await highlightDisplayLines(["hello"], rules, { timeoutMs: 1 });
 
     assert.strictEqual(result.ok, false);
-    if (!result.ok) {
-      assert.strictEqual(result.reason, "timeout");
-    }
+    assert.strictEqual(result.reason, "timeout");
   });
 });
 
@@ -4627,9 +4479,6 @@ suite("normalize / merged collapse (#158)", () => {
 
     assert.strictEqual(items.length, 1);
     assert.strictEqual(items[0].kind, "group");
-    if (items[0].kind !== "group") {
-      throw new Error("unreachable");
-    }
     assert.deepStrictEqual(
       items[0].entries.map((merged) => merged.fileName),
       ["server-a.log", "server-b.log", "server-a.log", "server-b.log"]
@@ -4777,9 +4626,6 @@ suite("normalize / merged collapse (#158)", () => {
 
     const group = items.find((item) => item.kind === "group");
     assert.ok(group);
-    if (group?.kind !== "group") {
-      throw new Error("unreachable");
-    }
     // 先頭は server-a.log の3行目、末尾は server-b.log の2行目。範囲にすると 3-2。
     assert.doesNotMatch(group.headerText, /3-2/);
     assert.match(group.headerText, /\| +3 /);
@@ -4805,20 +4651,15 @@ suite("normalize / merged collapse (#158)", () => {
     });
 
     assert.strictEqual(payload.ok, true);
-    if (!payload.ok) {
-      throw new Error("unreachable");
-    }
-    assert.strictEqual(payload.items?.length, 1);
-    assert.strictEqual(payload.items?.[0].kind, "group");
+    assert.ok(payload.items);
+    assert.strictEqual(payload.items.length, 1);
+    assert.strictEqual(payload.items[0].kind, "group");
   });
 
   test("buildInteractiveMergedPayload leaves the expanded text when no threshold is given", async () => {
     const payload = await buildInteractiveMergedPayload(interleavedHeartbeats(), {});
 
     assert.strictEqual(payload.ok, true);
-    if (!payload.ok) {
-      throw new Error("unreachable");
-    }
     assert.strictEqual(payload.items, undefined);
     assert.strictEqual(payload.text.split("\n").length, 4);
   });
@@ -4831,9 +4672,6 @@ suite("normalize / merged collapse (#158)", () => {
     });
 
     assert.strictEqual(result.ok, true);
-    if (!result.ok) {
-      throw new Error("unreachable");
-    }
     assert.strictEqual(result.formatted.text.split("\n").length, 1);
     assert.match(result.formatted.text, /\(x4[,)]/);
     assert.match(result.formatted.text, /server-a\.log, etc\./);

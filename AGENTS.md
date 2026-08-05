@@ -77,13 +77,12 @@ VSCode 拡張機能「Totonoe Log」。コンセプトは「バラバラなロ�
   `npm run build` は `npm test` と `npm run check:package` の両方が使う成果物を
   1回だけ生成するためのステップなので、`check:package` スクリプト自体はビルド
   しない（二重ビルドを避けるため）
-- lint は ESLint（`eslint.config.mjs`）。本体の `src/**/*.ts`（`src/test/**` を
-  除く）は型情報を使う `typescript-eslint` の `strictTypeChecked` を適用し、
-  `no-floating-promises` に加えて不要な条件分岐や暗黙の文字列化等も検出する。
-  `src/test/**` は `recommendedTypeChecked` を維持し、`vscode.window.*` をモックで
-  上書きする都合上 `any` 関連ルールと `require-await` を緩和している。
-  `scripts/**` は CommonJS の素の Node スクリプトとして別ルールセットを当てる
-  （詳細は `eslint.config.mjs` のコメント参照）
+- lint は ESLint（`eslint.config.mjs`）。本体と `src/test/**` の両方に型情報を
+  使う `typescript-eslint` の `strictTypeChecked` を適用し、`no-floating-promises` に
+  加えて不要な条件分岐や暗黙の文字列化等も検出する。テストは
+  `vscode.window.*` をモックで上書きする都合上、`any` 関連ルールと
+  `require-await` を緩和している。`scripts/**` は CommonJS の素の Node スクリプト
+  として別ルールセットを当てる（詳細は `eslint.config.mjs` のコメント参照）
 - `no-restricted-syntax` で、`src/**` に日本語の文字列リテラル・テンプレートを
   直接書くことを禁止している（l10n が腐るのを防ぐ機械的なゲート）。文言は英語を
   ソース言語として書き、訳は `package.nls.ja.json` / `l10n/bundle.l10n.ja.json`

@@ -45,8 +45,69 @@ const JAPANESE_CHARACTER_PATTERN = /[぀-ヿ㐀-鿿]/u;
  */
 const NON_PORTABLE_CHARACTER_PATTERN = /[぀-ヿ㐀-鿿×〜～]/u;
 
-function readJson<T>(fileName: string): T {
-  return JSON.parse(fs.readFileSync(path.join(EXTENSION_ROOT, fileName), "utf8")) as T;
+function readJson(fileName: string): unknown {
+  return JSON.parse(fs.readFileSync(path.join(EXTENSION_ROOT, fileName), "utf8"));
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+function isStringRecord(value: unknown): value is Record<string, string> {
+  return isRecord(value) && Object.values(value).every((entry) => typeof entry === "string");
+}
+
+function isConfigurationNode(value: unknown): value is ConfigurationNode {
+  if (!isRecord(value)) {
+    return false;
+  }
+
+  if (
+    (value.description !== undefined && typeof value.description !== "string") ||
+    (value.markdownDescription !== undefined && typeof value.markdownDescription !== "string") ||
+    (value.items !== undefined && !isConfigurationNode(value.items))
+  ) {
+    return false;
+  }
+
+  return (
+    value.properties === undefined ||
+    (isRecord(value.properties) && Object.values(value.properties).every(isConfigurationNode))
+  );
+}
+
+function isExtensionManifest(value: unknown): value is ExtensionManifest {
+  if (
+    !isRecord(value) ||
+    typeof value.displayName !== "string" ||
+    typeof value.description !== "string" ||
+    (value.l10n !== undefined && typeof value.l10n !== "string") ||
+    !isRecord(value.contributes)
+  ) {
+    return false;
+  }
+
+  const { commands, configuration } = value.contributes;
+  return (
+    Array.isArray(commands) &&
+    commands.every((command) => isRecord(command) && typeof command.title === "string") &&
+    isRecord(configuration) &&
+    typeof configuration.title === "string" &&
+    isRecord(configuration.properties) &&
+    Object.values(configuration.properties).every(isConfigurationNode)
+  );
+}
+
+function readExtensionManifest(fileName: string): ExtensionManifest {
+  const manifest = readJson(fileName);
+  assert.ok(isExtensionManifest(manifest), `${fileName} should be a valid extension manifest`);
+  return manifest;
+}
+
+function readStringRecord(fileName: string): Record<string, string> {
+  const translations = readJson(fileName);
+  assert.ok(isStringRecord(translations), `${fileName} should be a string-to-string JSON object`);
+  return translations;
 }
 
 function collectConfigurationDescriptions(node: ConfigurationNode): string[] {
@@ -111,7 +172,7 @@ function collectRuntimeLocalizationKeys(): string[] {
     const sourceFile = ts.createSourceFile(filePath, sourceText, ts.ScriptTarget.Latest, true);
     const visit = (node: ts.Node): void => {
       if (isVscodeL10nCall(node)) {
-        const [keyNode] = node.arguments;
+        const keyNode = node.arguments.length > 0 ? node.arguments[0] : undefined;
         assert.ok(
           keyNode !== undefined &&
             (ts.isStringLiteral(keyNode) || ts.isNoSubstitutionTemplateLiteral(keyNode)),
@@ -141,7 +202,7 @@ function collectMatchingStringLiterals(filePath: string, pattern: RegExp): strin
       pattern.test(node.text)
     ) {
       const { line } = sourceFile.getLineAndCharacterOfPosition(node.getStart(sourceFile));
-      matches.push(`${path.relative(EXTENSION_ROOT, filePath)}:${line + 1}: ${node.text}`);
+      matches.push(`${path.relative(EXTENSION_ROOT, filePath)}:${String(line + 1)}: ${node.text}`);
     }
     ts.forEachChild(node, visit);
   };
@@ -217,7 +278,7 @@ function collectJapaneseHtmlDocumentText(): string[] {
       if (index !== -1) {
         const { line } = sourceFile.getLineAndCharacterOfPosition(start + index);
         matches.push(
-          `${path.relative(EXTENSION_ROOT, INTERACTIVE_VIEW_HTML_SOURCE_PATH)}:${line + 1}: ` +
+          `${path.relative(EXTENSION_ROOT, INTERACTIVE_VIEW_HTML_SOURCE_PATH)}:${String(line + 1)}: ` +
             withoutComments.slice(index, index + 60).trim()
         );
       }
@@ -239,9 +300,9 @@ function positionalPlaceholders(value: string): string[] {
 
 suite("Package localization", () => {
   test("keeps the manifest placeholders and English/Japanese bundles in sync", () => {
-    const manifest = readJson<ExtensionManifest>("package.json");
-    const english = readJson<Record<string, string>>("package.nls.json");
-    const japanese = readJson<Record<string, string>>("package.nls.ja.json");
+    const manifest = readExtensionManifest("package.json");
+    const english = readStringRecord("package.nls.json");
+    const japanese = readStringRecord("package.nls.ja.json");
     const manifestValues = [
       manifest.displayName,
       manifest.description,
@@ -299,8 +360,8 @@ suite("Package localization", () => {
   });
 
   test("keeps extension-host runtime messages and the Japanese bundle in sync", () => {
-    const manifest = readJson<ExtensionManifest>("package.json");
-    const japanese = readJson<Record<string, string>>("l10n/bundle.l10n.ja.json");
+    const manifest = readExtensionManifest("package.json");
+    const japanese = readStringRecord("l10n/bundle.l10n.ja.json");
     const sourceKeys = collectRuntimeLocalizationKeys();
     const japaneseKeys = Object.keys(japanese).sort();
 

@@ -1,10 +1,10 @@
 import * as assert from "node:assert";
 import * as vscode from "vscode";
+import { activateTotonoeLogExtension } from "./support/activateTotonoeLogExtension";
 
 suite("Totonoe Log merged view: regular files", () => {
   test("merges the selected files into a single chronologically-ordered view", async () => {
-    const extension = vscode.extensions.getExtension("upu.totonoe-log");
-    await extension!.activate();
+    await activateTotonoeLogExtension();
 
     const fs = await import("node:fs/promises");
     const os = await import("node:os");
@@ -26,12 +26,12 @@ suite("Totonoe Log merged view: regular files", () => {
 
       const activeEditor = vscode.window.activeTextEditor;
       assert.ok(activeEditor, "a merged view editor should be shown");
-      assert.strictEqual(activeEditor!.document.uri.scheme, "totonoe-log-merged");
+      assert.strictEqual(activeEditor.document.uri.scheme, "totonoe-log-merged");
 
       const fileNameWidth = "database_20240101.log".length;
       const kindWidth = "database".length;
       assert.strictEqual(
-        activeEditor!.document.getText(),
+        activeEditor.document.getText(),
         [
           `${"database_20240101.log".padEnd(fileNameWidth)} | ${"database".padEnd(kindWidth)} | 1 | 2024-01-02T03:04:04.000Z ERROR boom`,
           `${"app.log".padEnd(fileNameWidth)} | ${"app".padEnd(kindWidth)} | 1 | 2024-01-02T03:04:05.000Z INFO  hello`,
@@ -44,8 +44,7 @@ suite("Totonoe Log merged view: regular files", () => {
   });
 
   test("decodes a Shift_JIS source using the resource-scoped files.encoding setting", async () => {
-    const extension = vscode.extensions.getExtension("upu.totonoe-log");
-    await extension!.activate();
+    await activateTotonoeLogExtension();
 
     const fs = await import("node:fs/promises");
     const os = await import("node:os");
@@ -75,7 +74,7 @@ suite("Totonoe Log merged view: regular files", () => {
       const activeEditor = vscode.window.activeTextEditor;
       assert.ok(activeEditor, "a merged view editor should be shown");
       assert.ok(
-        activeEditor!.document.getText().includes("INFO 日本"),
+        activeEditor.document.getText().includes("INFO 日本"),
         "the Shift_JIS message should be decoded without replacement characters"
       );
     } finally {
@@ -86,8 +85,7 @@ suite("Totonoe Log merged view: regular files", () => {
   });
 
   test("warns and falls back to UTF-8 for an unsupported files.encoding value", async () => {
-    const extension = vscode.extensions.getExtension("upu.totonoe-log");
-    await extension!.activate();
+    await activateTotonoeLogExtension();
 
     const fs = await import("node:fs/promises");
     const os = await import("node:os");
@@ -132,7 +130,9 @@ suite("Totonoe Log merged view: regular files", () => {
 
       assert.ok(warningMessage?.includes("unsupported-test-encoding"));
       assert.ok(warningMessage?.includes("UTF-8"));
-      assert.ok(vscode.window.activeTextEditor?.document.getText().includes("INFO fallback"));
+      const activeEditor = vscode.window.activeTextEditor;
+      assert.ok(activeEditor, "a merged view editor should be shown");
+      assert.ok(activeEditor.document.getText().includes("INFO fallback"));
     } finally {
       await vscode.commands.executeCommand("workbench.action.closeAllEditors");
       await fs.rm(tempDir, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 });
@@ -144,8 +144,7 @@ suite("Totonoe Log merged view: large files", () => {
   test("opens the complete merged result when its formatted content exceeds 50MB", async function () {
     this.timeout(60000);
 
-    const extension = vscode.extensions.getExtension("upu.totonoe-log");
-    await extension!.activate();
+    await activateTotonoeLogExtension();
 
     const fs = await import("node:fs/promises");
     const os = await import("node:os");
@@ -177,11 +176,11 @@ suite("Totonoe Log merged view: large files", () => {
       const activeTab = vscode.window.tabGroups.activeTabGroup.activeTab;
       assert.ok(activeTab, "the large merged result should be opened in a tab");
       assert.ok(
-        activeTab!.input instanceof vscode.TabInputText,
+        activeTab.input instanceof vscode.TabInputText,
         "the large merged result should use a text editor tab"
       );
 
-      const resultUri = (activeTab!.input as vscode.TabInputText).uri;
+      const resultUri = activeTab.input.uri;
       assert.notStrictEqual(
         resultUri.scheme,
         "totonoe-log-merged",
@@ -191,7 +190,7 @@ suite("Totonoe Log merged view: large files", () => {
       const resultStat = await vscode.workspace.fs.stat(resultUri);
       assert.ok(
         resultStat.size > 50 * oneMb,
-        `the complete formatted result should exceed 50MB (actual: ${resultStat.size} bytes)`
+        `the complete formatted result should exceed 50MB (actual: ${String(resultStat.size)} bytes)`
       );
 
       const resultBytes = await vscode.workspace.fs.readFile(resultUri);
@@ -212,8 +211,7 @@ suite("Totonoe Log merged view: large files", () => {
     // 収まらない（他の実ファイル操作テストと同じ理由でissue #72の前例に倣う）。
     this.timeout(60000);
 
-    const extension = vscode.extensions.getExtension("upu.totonoe-log");
-    await extension!.activate();
+    await activateTotonoeLogExtension();
 
     const fs = await import("node:fs/promises");
     const os = await import("node:os");
@@ -252,7 +250,7 @@ suite("Totonoe Log merged view: large files", () => {
       const bigLogStats = await fs.stat(bigLogPath);
       assert.ok(
         bigLogStats.size > 50 * oneMb,
-        `test fixture should exceed VSCode's ~50MB sync limit (actual: ${bigLogStats.size} bytes)`
+        `test fixture should exceed VSCode's ~50MB sync limit (actual: ${String(bigLogStats.size)} bytes)`
       );
 
       const { loadLogFiles } = await import("../../logFileReading");
