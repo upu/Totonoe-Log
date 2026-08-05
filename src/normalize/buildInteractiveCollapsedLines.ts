@@ -251,8 +251,12 @@ export function buildInteractiveCollapsedLines(
  * 複数ファイル由来のグループで、代表のファイル名/種別に添える印（issue #158）。
  * 整形結果の本文なので表示言語に追従させず英語で固定する（issue #279、
  * 理由は `gapDetection.ts` の `formatGapMarkerText` 参照）。
+ *
+ * 短く保つ（issue #288）。この印が付いた値も
+ * {@link computeMergedDisplayLayout} の列幅の候補に入るため、長くすると
+ * その列を使う**全行**が右へずれる。列挙の続きとして読める最小限の表記にする。
  */
-const MULTIPLE_SOURCES_SUFFIX = " and others";
+const MULTIPLE_SOURCES_SUFFIX = ", etc.";
 
 /**
  * グループの列に出す代表値を決める。代表1件しか出せない以上どれかに寄せる
