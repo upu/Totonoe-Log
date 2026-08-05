@@ -4675,7 +4675,9 @@ suite("normalize / merged collapse (#158)", () => {
     if (items[0].kind !== "group") {
       throw new Error("unreachable");
     }
-    const fileNameColumn = items[0].headerText.split(" | ")[0];
+    // 列は `padEnd` で揃うので、他により長いファイル名があると末尾に空白が付く。
+    // ここで見たいのは印の長さなので、パディングを落としてから比べる。
+    const fileNameColumn = items[0].headerText.split(" | ")[0].trimEnd();
     assert.strictEqual(fileNameColumn, "server-a.log, etc.");
     assert.strictEqual(fileNameColumn.length - "server-a.log".length, 6);
   });
