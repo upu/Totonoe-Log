@@ -178,6 +178,22 @@ function blankMarkupComments(value: string): string {
 }
 
 /**
+ * Unicode エスケープを実際の文字へ戻す。元のエスケープと同じ長さになるよう
+ * 右を空白で埋めるのは、`blankMarkupComments` と同じく位置を保つため。
+ *
+ * ソースの見た目のまま探すとエスケープで書いた日本語をすり抜けるので、
+ * `eslint.config.mjs` が `TemplateElement` の `value.cooked`（エスケープ解決後）を
+ * 見ているのに合わせる。
+ */
+function decodeUnicodeEscapes(value: string): string {
+  return value.replace(
+    /\\u\{([0-9a-fA-F]{1,6})\}|\\u([0-9a-fA-F]{4})/g,
+    (escape, braced: string | undefined, plain: string | undefined) =>
+      String.fromCodePoint(Number.parseInt(braced ?? plain ?? "", 16)).padEnd(escape.length, " ")
+  );
+}
+
+/**
  * `src/interactiveViewHtml.ts` の文字列（テンプレート含む）から、HTML/CSS の
  * コメントを除いた部分に残る日本語を拾う。
  */
@@ -194,7 +210,9 @@ function collectJapaneseHtmlDocumentText(): string[] {
     const isTemplate = ts.isTemplateExpression(node) || ts.isNoSubstitutionTemplateLiteral(node);
     if (isTemplate || ts.isStringLiteral(node)) {
       const start = node.getStart(sourceFile);
-      const withoutComments = blankMarkupComments(node.getText(sourceFile));
+      // コメントを先に潰してから復号する。コメントの中のエスケープを
+      // 数え直しても意味がないため。
+      const withoutComments = decodeUnicodeEscapes(blankMarkupComments(node.getText(sourceFile)));
       const index = withoutComments.search(JAPANESE_CHARACTER_PATTERN);
       if (index !== -1) {
         const { line } = sourceFile.getLineAndCharacterOfPosition(start + index);
