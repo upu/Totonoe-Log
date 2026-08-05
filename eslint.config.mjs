@@ -34,9 +34,13 @@ const noHardcodedJapanese = [
     message: NO_HARDCODED_JAPANESE_MESSAGE,
   },
   {
-    // `cooked` は不正なエスケープを含むテンプレートで undefined になりうるため
-    // `raw` を見る。
-    selector: `TemplateElement[value.raw=/${JAPANESE_CHARACTERS}/]`,
+    // 見るのは `raw` ではなく `cooked`（エスケープを解決した後の文字列）。
+    // `raw` はソース上の見た目そのままなので、Unicode エスケープで書いた
+    // 日本語をすり抜けてしまい、`value` が同じくエスケープ解決後である
+    // `Literal` 側と挙動が食い違う。
+    // `cooked` が undefined になるのは不正なエスケープを含むタグ付き
+    // テンプレートだけで、このリポジトリはタグ付きテンプレートを使っていない。
+    selector: `TemplateElement[value.cooked=/${JAPANESE_CHARACTERS}/]`,
     message: NO_HARDCODED_JAPANESE_MESSAGE,
   },
 ];
