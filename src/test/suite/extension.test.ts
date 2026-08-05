@@ -1,5 +1,8 @@
 import * as assert from "node:assert";
 import * as vscode from "vscode";
+import { createClockSkewResolver } from "../../clockSkewSettings";
+import { readConfiguredTimestampFormats } from "../../timestampFormatSettings";
+import { createSourceOffsetResolver } from "../../timezoneSettings";
 import { waitForDocumentText } from "./support/waitForDocumentText";
 
 suite("Totonoe Log extension", () => {
@@ -643,6 +646,32 @@ suite("Totonoe Log merge from the explorer context menu", () => {
     } finally {
       await vscode.commands.executeCommand("workbench.action.closeAllEditors");
       await fs.rm(tempDir, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 });
+    }
+  });
+});
+
+suite("Totonoe Log configuration value guards", () => {
+  test("treats non-array rule settings as empty arrays", () => {
+    const originalGetConfiguration = vscode.workspace.getConfiguration;
+    (vscode.workspace as any).getConfiguration = (section?: string) => ({
+      get: (key: string, defaultValue: unknown) => {
+        if (
+          (section === "totonoeLog" && key === "timestampFormats") ||
+          (section === "totonoeLog.timezone" && key === "fileOffsets") ||
+          (section === "totonoeLog.clockSkew" && key === "fileOffsets")
+        ) {
+          return {};
+        }
+        return defaultValue;
+      },
+    });
+
+    try {
+      assert.ok(readConfiguredTimestampFormats().length > 0);
+      assert.strictEqual(createSourceOffsetResolver()("app.log"), 0);
+      assert.strictEqual(createClockSkewResolver()("app.log"), 0);
+    } finally {
+      (vscode.workspace as any).getConfiguration = originalGetConfiguration;
     }
   });
 });
