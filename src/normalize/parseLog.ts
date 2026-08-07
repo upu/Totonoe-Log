@@ -117,6 +117,8 @@ interface TimestampMatch {
   readonly format: TimestampFormat;
   readonly match: RegExpExecArray;
   readonly timestampMs: number;
+  /** タイムスタンプの前にあった前置きフィールドの長さ（issue #301）。行頭なら 0。 */
+  readonly prefixLength: number;
 }
 
 function finalizeEntry(entry: MutableEntry): LogEntry {
@@ -135,21 +137,88 @@ function finalizeEntry(entry: MutableEntry): LogEntry {
   };
 }
 
+/**
+ * タイムスタンプより前に置かれる「前置きフィールド」1個分のパターン（issue #301）。
+ *
+ * 走査幅を決めて総当たりで探すのではなく、前置きの**形**を列挙して1個ずつ
+ * 読み飛ばす。任意の位置を許すと、本文中の日時表記（`see 2024-01-02T03:04:05Z
+ * for details` のような継続行）を新しいエントリの開始と誤認し、スタックトレースが
+ * 割れてしまう。ここに並ぶ3つの形自体が誤検知の抑制装置なので、`\S+\s+` のような
+ * 何にでも当たる形は入れないこと。
+ */
+const LEADING_FIELD_PATTERNS: readonly RegExp[] = [
+  // Common / Combined Log Format のクライアント3フィールド（`10.0.0.1 - - `）。
+  // 直後が `[` であることまで見て、普通の英文3語に当たらないようにする。
+  /^\S+ \S+ \S+ (?=\[)/,
+  // 角括弧のレベル・スレッド・ワーカー名（`[INFO] ` `[worker-3] `）。
+  /^\[[^\]\r\n]{0,64}\]\s*/,
+  // logfmt 風の key=value（`pid=1204 ` `host=web01 `）。
+  /^[\w.-]+=\S+\s+/,
+];
+
+/** 読み飛ばす前置きの個数と総文字数の上限。深追いして本文へ踏み込まないための歯止め。 */
+const MAX_LEADING_FIELDS = 3;
+const MAX_LEADING_FIELD_LENGTH = 64;
+
+function matchTimestampAt(
+  line: string,
+  offset: number,
+  timestampFormats: readonly TimestampFormat[],
+  parseContext: TimestampParseContext
+): TimestampMatch | undefined {
+  const text = offset === 0 ? line : line.slice(offset);
+  for (const format of timestampFormats) {
+    // g / y フラグ付きの正規表現は lastIndex が状態を持つため、
+    // 毎回リセットして次の行で誤動作しないようにする。
+    format.regex.lastIndex = 0;
+    const match = format.regex.exec(text);
+    if (match && match.index === 0) {
+      const timestampMs = format.parse(match, parseContext);
+      if (timestampMs !== undefined) {
+        return { format, match, timestampMs, prefixLength: offset };
+      }
+    }
+  }
+  return undefined;
+}
+
+/** `offset` から始まる前置きフィールド1個分の長さ。どの形にも当たらなければ 0。 */
+function leadingFieldLength(line: string, offset: number): number {
+  const rest = line.slice(offset);
+  for (const pattern of LEADING_FIELD_PATTERNS) {
+    const match = pattern.exec(rest);
+    if (match && match[0].length > 0) {
+      return match[0].length;
+    }
+  }
+  return 0;
+}
+
+/**
+ * 行の先頭、または既知の前置きフィールドを読み飛ばした位置にあるタイムスタンプを探す。
+ *
+ * 前置きは1個読み飛ばすたびに全形式を試し直す。まとめて貪欲に食わせると
+ * `[worker-3] [2024-01-02 03:04:05] msg` で角括弧を2つとも前置きとみなし、
+ * タイムスタンプごと飲み込んでしまう。
+ */
 function findTimestampMatch(
   line: string,
   timestampFormats: readonly TimestampFormat[],
   parseContext: TimestampParseContext
 ): TimestampMatch | undefined {
-  for (const format of timestampFormats) {
-    // g / y フラグ付きの正規表現は lastIndex が状態を持つため、
-    // 毎回リセットして次の行で誤動作しないようにする。
-    format.regex.lastIndex = 0;
-    const match = format.regex.exec(line);
-    if (match && match.index === 0) {
-      const timestampMs = format.parse(match, parseContext);
-      if (timestampMs !== undefined) {
-        return { format, match, timestampMs };
-      }
+  let offset = 0;
+  for (let step = 0; step <= MAX_LEADING_FIELDS; step++) {
+    const found = matchTimestampAt(line, offset, timestampFormats, parseContext);
+    if (found) {
+      return found;
+    }
+    const advance = leadingFieldLength(line, offset);
+    if (advance === 0) {
+      return undefined;
+    }
+    offset += advance;
+    if (offset > MAX_LEADING_FIELD_LENGTH) {
+      return undefined;
     }
   }
   return undefined;
@@ -161,7 +230,12 @@ function createMatchedEntry(
   timestampMatch: TimestampMatch,
   severityRegex: RegExp
 ): MutableEntry {
-  const remainderAfterTimestamp = line.slice(timestampMatch.match[0].length);
+  const leadingFields = line.slice(0, timestampMatch.prefixLength);
+  const remainderAfterTimestamp = line.slice(
+    timestampMatch.prefixLength + timestampMatch.match[0].length
+  );
+  // セベリティはタイムスタンプの直後だけを見る（前置きの中は読まない）。判定の
+  // 規則を1つに保つためで、`[INFO] 2024-... ` は message に `[INFO]` が残る。
   const severityMatch = severityRegex.exec(remainderAfterTimestamp);
   const severity = severityMatch ? normalizeSeverity(severityMatch[1]) : undefined;
   const remainderAfterSeverity = severityMatch
@@ -173,7 +247,7 @@ function createMatchedEntry(
     rawTimestamp: timestampMatch.match[0],
     timestampFormat: timestampMatch.format.name,
     severity,
-    firstLineMessage: remainderAfterSeverity,
+    firstLineMessage: leadingFields + remainderAfterSeverity,
     startLine: lineNumber,
     lines: [line],
     matched: true,
