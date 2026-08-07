@@ -316,7 +316,7 @@ suite("Package localization", () => {
     const japaneseKeys = Object.keys(japanese).sort();
 
     assert.strictEqual(manifest.contributes.configuration.title, "Totonoe Log");
-    assert.strictEqual(referencedKeys.length, 30, "all in-scope manifest strings should be localized");
+    assert.strictEqual(referencedKeys.length, 31, "all in-scope manifest strings should be localized");
     assert.deepStrictEqual(englishKeys, japaneseKeys, "English and Japanese keys should match");
     assert.deepStrictEqual(
       referencedKeys,

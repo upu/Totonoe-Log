@@ -7,6 +7,8 @@
  * 正規表現を書けなくても値を伏せられるようにする。
  */
 
+import { escapeForRegExp } from "./escapeForRegExp";
+
 /** キー欄の区切り（カンマと空白のどちらでも書ける）。 */
 const KEY_SEPARATOR_REGEX = /[,\s]+/;
 
@@ -15,11 +17,6 @@ const KEY_SEPARATOR_REGEX = /[,\s]+/;
  * `, id=3` まで巻き込まずに済む。
  */
 const VALUE_TERMINATORS = "\\s,;)\\]}\"'";
-
-/** 正規表現のメタ文字を打ち消す。キー名はリテラルとして扱う（`a.b` が `axb` に当たらないように）。 */
-function escapeForRegExp(text: string): string {
-  return text.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-}
 
 /**
  * キー欄の入力文字列から、値の位置だけに一致する正規表現を作る。

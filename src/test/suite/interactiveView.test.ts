@@ -1174,6 +1174,8 @@ suite("interactiveViewConfigWatch / classifyInteractiveViewConfigChange (#183)",
       "totonoeLog.timezone.sourceOffset",
       "totonoeLog.timezone.fileOffsets",
       "totonoeLog.clockSkew.fileOffsets",
+      // セベリティ語彙（issue #302）もパース時に読むため再パースが要る。
+      "totonoeLog.severityTokens",
     ]) {
       assert.strictEqual(
         classifyInteractiveViewConfigChange(changed(section)),

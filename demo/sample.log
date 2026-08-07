@@ -11,6 +11,8 @@ java.lang.NullPointerException
 2024-01-02T03:04:11+09:00 INFO Request completed in 250ms
 2024-01-02T03:04:11+09 INFO Cache warmed in 42ms, hour-only offset
 2024-01-02T03:04:11z INFO Metrics flushed to collector, lowercase z designator
+2024-01-02T03:04:19Z NOTICE Configuration reloaded from /etc/app/config.yaml
+2024-01-02T03:04:19.500Z ERR Connection refused by cache.internal:6379
 Jan  2 03:04:12 host myapp[1204]: heartbeat ok
 Jan  2 03:04:13 host sshd[2871]: connection closed
 Jan  2 03:04:14 host sshd[2903]: connection closed

@@ -229,11 +229,13 @@ commands rather than to any single one (see
 | Setting | Effect |
 | --- | --- |
 | `totonoeLog.timestampFormats` | Adds timestamp formats the built-ins don't recognize. Tried first, so it can override a built-in interpretation. |
+| `totonoeLog.severityTokens` | Adds severity/level names the built-ins don't recognize, on top of the built-in vocabulary. |
 | `totonoeLog.timezone.sourceOffset` | The UTC offset assumed for timestamps written without one. |
 | `totonoeLog.timezone.fileOffsets` | Per-file-name-pattern overrides of the above. |
 | `totonoeLog.timezone.display` | The timezone every view renders timestamps in, and the one date/time prompts are read in. |
 | `totonoeLog.clockSkew.fileOffsets` | Shifts a file's timestamps by ±N seconds to correct a host whose clock was wrong. |
 
 `Compare Logs` and `Copy Masked Text` are the exceptions: both mask or rewrite
-the original text instead of building a timeline, so only `timestampFormats`
-applies to them.
+the original text instead of building a timeline. `Compare Logs` still renders
+the severity of each entry, so `timestampFormats` and `severityTokens` apply to
+it; `Copy Masked Text` uses only `timestampFormats`.

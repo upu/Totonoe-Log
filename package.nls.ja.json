@@ -25,6 +25,7 @@
   "totonoeLog.timestampFormats.description": "組み込みで認識されないタイムスタンプ形式を、正規表現＋名前付きキャプチャグループで追加する。組み込み形式より先に試行される。カレンダー形式はグループ `y` `mo` `d` `h` `mi` `s`（任意で `ms` `tzs` `tzh` `tzm`）、エポック形式はグループ `epochMs` または `epochSec`（任意で `ms`）を含めること。詳細は README の「Custom timestamp formats」参照。",
   "totonoeLog.timestampFormats.name.description": "この形式の表示名。省略時は custom-<連番>。",
   "totonoeLog.timestampFormats.pattern.description": "行頭のタイムスタンプにマッチする正規表現（自動的に行頭へアンカーされる）。名前付きキャプチャグループでパース方法を指定する。",
+  "totonoeLog.severityTokens.description": "社内フレームワーク独自のレベル名など、組み込みで認識されないセベリティ/レベル名を追加する。組み込みの語彙（TRACE, VERBOSE, DEBUG, INFO, NOTICE, WARNING/WARN, ERROR/ERR, SEVERE, CRITICAL/CRIT, ALERT, EMERG, FATAL, PANIC）を置き換えるのではなく追加する。正規表現ではなく素の名前を書く。大文字小文字は区別しない。詳細は README の「Severity levels」参照。",
   "totonoeLog.highlightRules.description": "Interactive View で目立たせたいキーワード/パターンを登録する。一致した箇所だけに色が付き、行は消えない（絞り込みとは別）。パターンは正規表現として解釈され、大文字小文字は区別しない。詳細は README の「Highlight rules」参照。",
   "totonoeLog.highlightRules.name.description": "このルールの表示名。設定を見分けるためと、警告文言に使う。省略時は highlight-<連番>。",
   "totonoeLog.highlightRules.pattern.description": "色を付ける箇所にマッチする正規表現（大文字小文字は区別しない）。1行の中の一致箇所はすべて色が付く。",

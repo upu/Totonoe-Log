@@ -13,6 +13,7 @@ import {
   type FilterableViewSource,
   type SourceLineMap,
 } from "./virtualDocumentContentProvider";
+import { readConfiguredSeverityTokens } from "./severityTokenSettings";
 import { readConfiguredTimestampFormats } from "./timestampFormatSettings";
 import { readDisplayTimezone } from "./timezoneSettings";
 import { warnIfLowTimestampRecognition } from "./timestampRecognitionWarning";
@@ -230,6 +231,7 @@ export async function openMergedView(
   const files = await readLogFiles(fileUris);
   const mergedEntries = mergeLogFiles(files, {
     timestampFormats: readConfiguredTimestampFormats(),
+    severityTokens: readConfiguredSeverityTokens(),
   });
   warnLowTimestampRecognitionPerFile(fileUris, mergedEntries);
   const formatted = formatMergedLogWithLineSources(mergedEntries, {

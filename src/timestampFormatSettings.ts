@@ -7,6 +7,7 @@ import {
   type TimestampFormat,
 } from "./normalize";
 import { formatSettingsValidationErrors } from "./settingsErrorMessages";
+import { readConfiguredSeverityTokens } from "./severityTokenSettings";
 
 /** カスタムタイムスタンプ形式を読み込むVSCode設定のキー。 */
 const TIMESTAMP_FORMATS_CONFIG_SECTION = "totonoeLog";
@@ -38,14 +39,15 @@ export function readConfiguredTimestampFormats(): TimestampFormat[] {
 }
 
 /**
- * `totonoeLog.timestampFormats` 設定を反映して {@link parseLog} を実行する。
- * VSCode API に触れる各コマンドは、素の `parseLog` の代わりにこれを使う
- * （純粋ロジック層に VSCode 依存を持ち込まないための薄いラッパー）。
+ * パース結果そのものを決める設定（タイムスタンプ形式、セベリティ語彙）を
+ * 反映して {@link parseLog} を実行する。VSCode API に触れる各コマンドは、
+ * 素の `parseLog` の代わりにこれを使う（純粋ロジック層に VSCode 依存を
+ * 持ち込まないための薄いラッパー）。
  *
  * `sourceUtcOffsetMinutes` はタイムゾーン表記を持たないタイムスタンプに
  * 仮定するソースオフセット（issue #13）。設定からの解決は呼び出し側が
- * `timezoneSettings.ts` を通じて行う（このモジュールをタイムスタンプ形式
- * 設定専用に保つため）。
+ * `timezoneSettings.ts` を通じて行う——ファイル名ごとの規則を解決するのに
+ * 読み込み元の情報が要るため、ここでは決められない。
  */
 export function parseLogWithConfiguredFormats(
   text: string,
@@ -53,6 +55,7 @@ export function parseLogWithConfiguredFormats(
 ): LogEntry[] {
   return parseLog(text, {
     timestampFormats: readConfiguredTimestampFormats(),
+    severityTokens: readConfiguredSeverityTokens(),
     sourceUtcOffsetMinutes,
   });
 }

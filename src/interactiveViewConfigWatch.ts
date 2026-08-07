@@ -14,6 +14,7 @@ export type InteractiveViewConfigChangeEffect = "reparse" | "redisplay" | "none"
  */
 const REPARSE_SECTIONS: readonly string[] = [
   "totonoeLog.timestampFormats",
+  "totonoeLog.severityTokens",
   "totonoeLog.timezone.sourceOffset",
   "totonoeLog.timezone.fileOffsets",
   "totonoeLog.clockSkew.fileOffsets",

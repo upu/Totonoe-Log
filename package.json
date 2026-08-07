@@ -217,6 +217,14 @@
             }
           }
         },
+        "totonoeLog.severityTokens": {
+          "type": "array",
+          "default": [],
+          "markdownDescription": "%totonoeLog.severityTokens.description%",
+          "items": {
+            "type": "string"
+          }
+        },
         "totonoeLog.highlightRules": {
           "type": "array",
           "default": [],
