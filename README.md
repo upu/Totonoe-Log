@@ -64,6 +64,16 @@ Process-ID masking, available here and in `Copy Masked Text`, covers syslog-styl
 
 Common timestamp formats are recognized out of the box: ISO 8601 (plain and bracketed), classic syslog, slash-separated dates (`2024/01/02 03:04:05`), Apache/Nginx access-log timestamps (`[02/Jan/2024:03:04:05 +0900]`), and leading epoch seconds/milliseconds. Formats not covered by the built-ins can be added via the `totonoeLog.timestampFormats` setting (see [Custom timestamp formats](#custom-timestamp-formats)).
 
+The timestamp doesn't have to be the first thing on the line. A few field shapes that are commonly written in front of it are stepped over, so real Common/Combined Log Format access logs work as they are:
+
+```
+10.0.0.1 - - [02/Jan/2024:03:04:05 +0900] "GET /health HTTP/1.1" 200 1234
+[worker-3] [2024-01-02 03:04:05] job finished
+pid=1204 host=web01 2024-01-02T03:04:05Z INFO started
+```
+
+The shapes recognized are the access-log client fields (`10.0.0.1 - - ` followed by a bracketed timestamp), bracketed fields such as `[INFO] ` or `[worker-3] `, and `key=value` fields — up to three of them, within the first 64 characters. Whatever comes before the timestamp is kept at the start of the message, so nothing is lost. Deliberately narrow shapes are used rather than "any text": a continuation line like `see 2024-01-02T03:04:05Z for details` must not be mistaken for the start of a new entry, or stack traces would be split apart. The severity is read from the token *after* the timestamp only, so a leading `[INFO] ` stays in the message rather than becoming the entry's severity.
+
 ### Severity levels
 
 The severity is read from the token that follows the timestamp. The built-in vocabulary covers the common level names plus the syslog severities: `TRACE`, `VERBOSE`, `DEBUG`, `INFO`, `NOTICE`, `WARNING`, `WARN`, `ERROR`, `ERR`, `SEVERE`, `CRITICAL`, `CRIT`, `ALERT`, `EMERG`, `FATAL`, and `PANIC` (matched case-insensitively).

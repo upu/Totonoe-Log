@@ -10,6 +10,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- **Logs whose timestamp is not at the start of the line are now recognized.**
+  Real Common/Combined Log Format access logs
+  (`10.0.0.1 - - [02/Jan/2024:03:04:05 +0900] "GET /health HTTP/1.1" 200 1234`)
+  parse as they are, as do layouts that put a bracketed field or `key=value`
+  fields first (`[worker-3] [2024-01-02 03:04:05] ...`,
+  `pid=1204 2024-01-02T03:04:05Z ...`). Up to three such fields within the first
+  64 characters are stepped over, and whatever precedes the timestamp is kept at
+  the start of the message. Only these specific field shapes are stepped over,
+  so a continuation line that happens to mention a date is still kept with its
+  entry (issue #301).
+
 - **More severity names are recognized out of the box.** The syslog severities
   (`NOTICE`, `EMERG`, `ALERT`, `CRIT`, `ERR`), `SEVERE`, `VERBOSE` and `PANIC`
   now fill in the severity column and appear as their own checkbox in the

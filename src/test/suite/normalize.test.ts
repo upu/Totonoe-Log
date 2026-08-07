@@ -1,4 +1,6 @@
 import * as assert from "node:assert";
+import * as fs from "node:fs";
+import * as path from "node:path";
 import {
   parseLog,
   createSyslogFormat,
@@ -301,6 +303,115 @@ suite("normalize / parseLog", () => {
     });
     assert.strictEqual(syslogEntry.matched, true);
     assert.strictEqual(syslogEntry.timestampMs, Date.UTC(2024, 0, 2, 23, 59, 59));
+  });
+});
+
+suite("normalize / parseLog timestamps after leading fields (#301)", () => {
+  const ACCESS_LOG_LINE =
+    '10.0.0.1 - - [02/Jan/2024:03:04:05 +0900] "GET /health HTTP/1.1" 200 1234';
+
+  test("recognizes a Common Log Format line whose timestamp follows the client fields", () => {
+    const [entry] = parseLog(ACCESS_LOG_LINE);
+
+    assert.strictEqual(entry.matched, true);
+    assert.strictEqual(entry.timestampFormat, "apache-access-log");
+    // 03:04:05+09:00 は UTC では前日の 18:04:05。
+    assert.strictEqual(entry.timestampMs, Date.UTC(2024, 0, 1, 18, 4, 5));
+  });
+
+  test("keeps the fields before the timestamp in the message", () => {
+    const [entry] = parseLog(ACCESS_LOG_LINE);
+
+    assert.strictEqual(entry.message, '10.0.0.1 - - "GET /health HTTP/1.1" 200 1234');
+  });
+
+  test("points rawTimestamp at the timestamp alone, not at the fields before it", () => {
+    const [entry] = parseLog(ACCESS_LOG_LINE);
+
+    assert.strictEqual(entry.rawTimestamp, "[02/Jan/2024:03:04:05 +0900]");
+  });
+
+  test("steps over several bracketed fields instead of swallowing the timestamp", () => {
+    const [entry] = parseLog("[worker-3] [2024-01-02 03:04:05] job finished");
+
+    assert.strictEqual(entry.matched, true);
+    assert.strictEqual(entry.timestampMs, Date.UTC(2024, 0, 2, 3, 4, 5));
+    assert.strictEqual(entry.rawTimestamp, "[2024-01-02 03:04:05]");
+    assert.strictEqual(entry.message, "[worker-3] job finished");
+  });
+
+  test("steps over key=value fields placed before the timestamp", () => {
+    const [entry] = parseLog("pid=1204 host=web01 2024-01-02T03:04:05Z INFO started");
+
+    assert.strictEqual(entry.matched, true);
+    assert.strictEqual(entry.timestampMs, Date.UTC(2024, 0, 2, 3, 4, 5));
+    assert.strictEqual(entry.severity, "INFO");
+    assert.strictEqual(entry.message, "pid=1204 host=web01 started");
+  });
+
+  test("reads the severity after the timestamp only, leaving a leading level in the message", () => {
+    // 前置きの中のセベリティは読まない（判定はタイムスタンプの直後だけ）。
+    // 認識できずに行ごと落ちていた従来より良く、規則も1つで済むため。
+    const [entry] = parseLog("[INFO] 2024-01-02 03:04:05 app started");
+
+    assert.strictEqual(entry.matched, true);
+    assert.strictEqual(entry.timestampMs, Date.UTC(2024, 0, 2, 3, 4, 5));
+    assert.strictEqual(entry.severity, undefined);
+    assert.strictEqual(entry.message, "[INFO] app started");
+  });
+
+  test("interleaves an access log with an application log when merged", () => {
+    const merged = mergeLogFiles([
+      {
+        fileName: "app.log",
+        text: [
+          "2024-01-01T18:04:00Z INFO before the request",
+          "2024-01-01T18:04:10Z INFO after the request",
+        ].join("\n"),
+      },
+      { fileName: "access.log", text: ACCESS_LOG_LINE },
+    ]);
+
+    assert.deepStrictEqual(
+      merged.map((item) => item.fileName),
+      ["app.log", "access.log", "app.log"]
+    );
+  });
+
+  test("does not turn a bare number-heavy line into an entry of its own", () => {
+    // 20桁の数字は EPOCH の `\d{10}(?!\d)` に後ろ10桁が当たりうる。前置きとして
+    // 読み飛ばした後の位置にも数字が残らないため、未マッチのままであること。
+    const entries = parseLog("ts=99999999999999999999 WARNING out-of-range epoch");
+
+    assert.strictEqual(entries.length, 1);
+    assert.strictEqual(entries[0].matched, false);
+  });
+
+  test("keeps a continuation line that mentions a date inside the same entry", () => {
+    const entries = parseLog(
+      [
+        "2024-01-02T03:04:05Z ERROR request failed",
+        "  see 2024-01-02T03:04:05Z for details",
+      ].join("\n")
+    );
+
+    assert.strictEqual(entries.length, 1);
+    assert.strictEqual(entries[0].lines.length, 2);
+  });
+
+  test("does not change how the bundled demo logs are split into entries", () => {
+    // 走査位置を緩めた副作用でエントリが割れていないことを、実物のログで押さえる
+    // （スタックトレースの継続行・バナー行を含む）。
+    const demoRoot = path.resolve(__dirname, "../../..", "demo");
+    const counts: Record<string, number> = {
+      "sample.log": 29,
+      "large-sample.log": 96,
+    };
+
+    for (const [fileName, expected] of Object.entries(counts)) {
+      const text = fs.readFileSync(path.join(demoRoot, fileName), "utf8");
+      assert.strictEqual(parseLog(text).length, expected, `${fileName} entry count`);
+    }
   });
 });
 
