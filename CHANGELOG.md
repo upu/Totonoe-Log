@@ -10,6 +10,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- **JSON Lines (NDJSON) logs are normalized like any other format.** Records
+  written by zap, pino, bunyan, Serilog, structlog or Docker's `json-file`
+  driver used to be swallowed whole as one unrecognized entry, which meant no
+  merging, sorting, date filtering, severity filtering, collapsing or gap
+  detection worked on them. The timestamp, level and message are now read from
+  the usual field names (`ts`/`time`/`timestamp`/`@timestamp`/`t`,
+  `level`/`severity`/`lvl`, `msg`/`message`); the timestamp may be an ISO 8601
+  string or an epoch number, and numeric levels follow the bunyan/pino scale.
+  Remaining fields are appended to the message as `key=value` so they can be
+  filtered, masked and highlighted, while the original JSON line is preserved
+  (issue #300).
+
 - **Logs whose timestamp is not at the start of the line are now recognized.**
   Real Common/Combined Log Format access logs
   (`10.0.0.1 - - [02/Jan/2024:03:04:05 +0900] "GET /health HTTP/1.1" 200 1234`)

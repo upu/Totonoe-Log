@@ -306,6 +306,165 @@ suite("normalize / parseLog", () => {
   });
 });
 
+suite("normalize / parseLog JSON Lines (#300)", () => {
+  const JSON_LINE =
+    '{"ts":"2024-01-02T03:04:05.678Z","level":"info","msg":"request completed","dur_ms":250}';
+
+  test("reads the timestamp, level and message out of a JSON Lines record", () => {
+    const [entry] = parseLog(JSON_LINE);
+
+    assert.strictEqual(entry.matched, true);
+    assert.strictEqual(entry.timestampFormat, "json-lines");
+    assert.strictEqual(entry.timestampMs, Date.UTC(2024, 0, 2, 3, 4, 5, 678));
+    assert.strictEqual(entry.rawTimestamp, "2024-01-02T03:04:05.678Z");
+    assert.strictEqual(entry.severity, "INFO");
+  });
+
+  test("keeps the original JSON line in raw", () => {
+    const [entry] = parseLog(JSON_LINE);
+
+    assert.strictEqual(entry.raw, JSON_LINE);
+  });
+
+  test("appends the remaining fields to the message as key=value", () => {
+    const [entry] = parseLog(JSON_LINE);
+
+    assert.strictEqual(entry.message, "request completed dur_ms=250");
+  });
+
+  test("renders spilled-over values in a form that stays greppable", () => {
+    const [entry] = parseLog(
+      '{"ts":"2024-01-02T03:04:05Z","msg":"done","host":"db-01","note":"two words",' +
+        '"retries":null,"meta":{"a":1}}'
+    );
+
+    assert.strictEqual(
+      entry.message,
+      'done host=db-01 note="two words" retries=null meta={"a":1}'
+    );
+  });
+
+  test("reads epoch timestamps written as numbers", () => {
+    const [milliseconds] = parseLog('{"time":1704164645678,"msg":"ms"}');
+    assert.strictEqual(milliseconds.timestampMs, 1704164645678);
+
+    const [seconds] = parseLog('{"time":1704164645,"msg":"sec"}');
+    assert.strictEqual(seconds.timestampMs, 1704164645000);
+
+    const [fractional] = parseLog('{"time":1704164645.678,"msg":"float"}');
+    assert.strictEqual(fractional.timestampMs, 1704164645678);
+  });
+
+  test("normalizes the level the same way as plain-text severities", () => {
+    const [warning] = parseLog('{"ts":"2024-01-02T03:04:05Z","level":"warning","msg":"x"}');
+    assert.strictEqual(warning.severity, "WARN");
+
+    const [err] = parseLog('{"ts":"2024-01-02T03:04:05Z","level":"err","msg":"x"}');
+    assert.strictEqual(err.severity, "ERROR");
+  });
+
+  test("maps the numeric levels used by bunyan-style loggers", () => {
+    const [info] = parseLog('{"ts":"2024-01-02T03:04:05Z","level":30,"msg":"x"}');
+    assert.strictEqual(info.severity, "INFO");
+
+    // 表にない数値レベル（pino のカスタムレベル等）は捨てずにそのまま残す。
+    const [custom] = parseLog('{"ts":"2024-01-02T03:04:05Z","level":35,"msg":"x"}');
+    assert.strictEqual(custom.severity, "35");
+  });
+
+  test("applies the source offset to a JSON timestamp written without a zone", () => {
+    const [entry] = parseLog('{"ts":"2024-01-02 12:04:05","msg":"x"}', {
+      sourceUtcOffsetMinutes: 540,
+    });
+
+    assert.strictEqual(entry.timestampMs, Date.UTC(2024, 0, 2, 3, 4, 5));
+  });
+
+  test("uses the first timestamp field in candidate order and keeps the others as data", () => {
+    const [entry] = parseLog('{"t":"2020-01-01T00:00:00Z","time":"2024-01-02T03:04:05Z","msg":"x"}');
+
+    assert.strictEqual(entry.timestampMs, Date.UTC(2024, 0, 2, 3, 4, 5));
+    assert.strictEqual(entry.message, "x t=2020-01-01T00:00:00Z");
+  });
+
+  test("keeps JSON that carries no usable timestamp as an unrecognized line", () => {
+    for (const line of [
+      '{"level":"info","msg":"no timestamp here"}',
+      '{"ts":"abc","msg":"unparsable timestamp"}',
+      "[1,2,3]",
+    ]) {
+      const [entry] = parseLog(line);
+      assert.strictEqual(entry.matched, false, `${line} should stay unrecognized`);
+      assert.strictEqual(entry.raw, line);
+    }
+  });
+
+  test("treats a brace-prefixed line that is not JSON as a continuation line", () => {
+    const entries = parseLog(
+      ["2024-01-02T03:04:05Z ERROR dump follows", "{foo=bar, baz=qux}"].join("\n")
+    );
+
+    assert.strictEqual(entries.length, 1);
+    assert.strictEqual(entries[0].lines.length, 2);
+  });
+
+  test("recognizes JSON and plain lines in the same file", () => {
+    const entries = parseLog(
+      [
+        "==== starting ====",
+        "2024-01-02T03:04:05Z INFO plain line",
+        '{"ts":"2024-01-02T03:04:06Z","level":"error","msg":"json line"}',
+        "2024-01-02T03:04:07Z INFO plain again",
+      ].join("\n")
+    );
+
+    // 認識済みの行より前に出たバナーは、従来どおり単独の未認識エントリになる。
+    assert.strictEqual(entries.length, 4);
+    assert.strictEqual(entries[0].matched, false);
+    assert.strictEqual(entries[1].timestampFormat, "iso8601");
+    assert.strictEqual(entries[2].timestampFormat, "json-lines");
+    assert.strictEqual(entries[2].severity, "ERROR");
+    assert.strictEqual(entries[3].timestampFormat, "iso8601");
+  });
+
+  test("sorts JSON Lines together with other formats when merged", () => {
+    const merged = mergeLogFiles([
+      {
+        fileName: "app.log",
+        text: [
+          "2024-01-02T03:04:04Z INFO before",
+          "2024-01-02T03:04:06Z INFO after",
+        ].join("\n"),
+      },
+      {
+        fileName: "service.jsonl",
+        text: '{"ts":"2024-01-02T03:04:05Z","level":"warn","msg":"between"}',
+      },
+    ]);
+
+    assert.deepStrictEqual(
+      merged.map((item) => item.fileName),
+      ["app.log", "service.jsonl", "app.log"]
+    );
+  });
+
+  test("supports severity filtering and date ranges over JSON Lines", () => {
+    const entries = parseLog(
+      [
+        '{"ts":"2024-01-02T03:04:05Z","level":"info","msg":"one"}',
+        '{"ts":"2024-01-03T03:04:05Z","level":"error","msg":"two"}',
+      ].join("\n")
+    );
+
+    assert.deepStrictEqual(getDistinctSeverities(entries), ["INFO", "ERROR"]);
+    assert.strictEqual(filterEntriesBySeverity(entries, new Set(["ERROR"])).length, 1);
+    assert.strictEqual(
+      filterEntriesByDateRange(entries, { startMs: Date.UTC(2024, 0, 3) }).length,
+      1
+    );
+  });
+});
+
 suite("normalize / parseLog timestamps after leading fields (#301)", () => {
   const ACCESS_LOG_LINE =
     '10.0.0.1 - - [02/Jan/2024:03:04:05 +0900] "GET /health HTTP/1.1" 200 1234';

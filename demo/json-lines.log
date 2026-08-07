@@ -1,0 +1,9 @@
+{"ts":"2024-01-02T03:04:05.678Z","level":"info","msg":"request completed","route":"/api/orders","dur_ms":250}
+{"ts":"2024-01-02T03:04:06.001Z","level":"error","msg":"upstream timeout","host":"db-01","attempt":1}
+{"ts":"2024-01-02T03:04:06.400Z","level":"warn","msg":"retrying upstream call","host":"db-01","attempt":2}
+{"ts":"2024-01-02T03:04:07.100Z","level":"info","msg":"upstream recovered","host":"db-01"}
+{"time":1704164648000,"level":30,"msg":"epoch milliseconds and a numeric bunyan level"}
+{"timestamp":"2024-01-02T03:04:09Z","severity":"NOTICE","message":"alternative field names are recognized"}
+plain text that is not JSON, kept with the entry above instead of being dropped
+{"ts":"2024-01-02T03:04:12.000Z","level":"debug","msg":"cache warmed","entries":1024,"note":"two words"}
+{"ts":"2024-01-03T00:15:05.000Z","level":"error","msg":"payment gateway rejected transaction","txn":8842}
