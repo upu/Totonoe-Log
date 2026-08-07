@@ -47,6 +47,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- **A date range whose end boundary includes a time now covers the whole unit
+  you typed.** Entering `2024-01-02 10:30` as the end capped the range at
+  `10:30:00.000`, silently dropping everything from `10:30:00.001` through
+  `10:30:59.999`; `2024-01-02 10:30:45` likewise dropped `10:30:45.500`. The end
+  boundary now runs through the end of the smallest unit given (`10:30` →
+  `10:30:59.999`, `10:30:45` → `10:30:45.999`). A date without a time still
+  means `23:59:59.999`, and start boundaries still fill omitted units with zero
+  (issue #296).
+
 - **ISO 8601 timestamps with an hour-only UTC offset (`+09`) or a lowercase `z`
   are now read correctly.** Previously the offset was not recognized, so
   `2024-01-02T03:04:05+09 INFO request completed` was silently treated as having

@@ -13,7 +13,7 @@
   "Could not parse the start date and time: \"{0}\".": "開始日時を解釈できませんでした: \"{0}\"",
   "Date Range": "日付範囲",
   "Enter a pattern for lines to hide (interpreted as a regular expression; case-insensitive)": "非表示にする行のパターンを入力してください（正規表現として解釈されます。大文字小文字は区別しません）",
-  "Enter the end date and time (based on display timezone {0}; YYYY-MM-DD or YYYY-MM-DD HH:mm[:ss]; optional; a date without a time uses 23:59:59.999)": "終了日時を入力してください（表示タイムゾーン {0} 基準。YYYY-MM-DD、または YYYY-MM-DD HH:mm[:ss]。省略可。時刻省略時は23:59:59.999に補完）",
+  "Enter the end date and time (based on display timezone {0}; YYYY-MM-DD or YYYY-MM-DD HH:mm[:ss]; optional; inclusive through the end of the smallest unit given, so 2024-01-02 means 23:59:59.999 and 2024-01-02 10:30 means 10:30:59.999)": "終了日時を入力してください（表示タイムゾーン {0} 基準。YYYY-MM-DD、または YYYY-MM-DD HH:mm[:ss]。省略可。書いた最小単位の末尾まで含みます。2024-01-02 なら 23:59:59.999、2024-01-02 10:30 なら 10:30:59.999）",
   "Enter the start date and time (based on display timezone {0}; YYYY-MM-DD or YYYY-MM-DD HH:mm[:ss]; optional; a date without a time uses 00:00:00.000)": "開始日時を入力してください（表示タイムゾーン {0} 基準。YYYY-MM-DD、または YYYY-MM-DD HH:mm[:ss]。省略可。時刻省略時は00:00:00.000に補完）",
   "Entry {0}: not an object": "{0}番目の項目: オブジェクトではありません",
   "Entry {0}: offset is invalid (specify a UTC offset such as \"+09:00\")": "{0}番目の項目: offset が不正です（\"+09:00\" のような UTC オフセットを指定してください）",

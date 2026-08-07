@@ -1226,22 +1226,36 @@ suite("normalize / filterEntriesByDateRange", () => {
     );
   });
 
-  test("parseDateBoundary parses a date and time string as UTC regardless of boundary kind", () => {
+  test("parseDateBoundary fills omitted units with zero for a start boundary", () => {
     assert.strictEqual(
       parseDateBoundary("2024-01-02T03:04:05", "start"),
-      Date.UTC(2024, 0, 2, 3, 4, 5)
-    );
-    assert.strictEqual(
-      parseDateBoundary("2024-01-02T03:04:05", "end"),
-      Date.UTC(2024, 0, 2, 3, 4, 5)
+      Date.UTC(2024, 0, 2, 3, 4, 5, 0)
     );
     assert.strictEqual(
       parseDateBoundary("2024-01-02 03:04", "start"),
-      Date.UTC(2024, 0, 2, 3, 4, 0)
+      Date.UTC(2024, 0, 2, 3, 4, 0, 0)
+    );
+  });
+
+  test("parseDateBoundary extends an end boundary to the end of the smallest given unit (issue #296)", () => {
+    assert.strictEqual(
+      parseDateBoundary("2024-01-02 10:30", "end"),
+      Date.UTC(2024, 0, 2, 10, 30, 59, 999)
     );
     assert.strictEqual(
-      parseDateBoundary("2024-01-02 03:04", "end"),
-      Date.UTC(2024, 0, 2, 3, 4, 0)
+      parseDateBoundary("2024-01-02T10:30:45", "end"),
+      Date.UTC(2024, 0, 2, 10, 30, 45, 999)
+    );
+  });
+
+  test("parseDateBoundary extends a time-bearing end boundary on both timezone paths (issue #296)", () => {
+    assert.strictEqual(
+      parseDateBoundary("2024-01-02 10:30", "end", 9 * 60),
+      Date.UTC(2024, 0, 2, 1, 30, 59, 999)
+    );
+    assert.strictEqual(
+      parseDateBoundary("2024-01-02 10:30", "end", "local"),
+      new Date(2024, 0, 2, 10, 30, 59, 999).getTime()
     );
   });
 
@@ -1322,6 +1336,42 @@ suite("normalize / filterEntriesByDateRange", () => {
     assert.deepStrictEqual(
       filtered.map((entry) => entry.message),
       ["start of day", "end of day"]
+    );
+  });
+
+  test("filterEntriesByDateRange keeps a whole minute when the end boundary omits seconds (issue #296)", () => {
+    const text = [
+      "2024-01-02T10:30:00.000Z INFO start of minute",
+      "2024-01-02T10:30:59.000Z INFO end of minute",
+      "2024-01-02T10:31:00.000Z INFO next minute",
+    ].join("\n");
+    const entries = parseLog(text);
+
+    const filtered = filterEntriesByDateRange(entries, {
+      startMs: parseDateBoundary("2024-01-02 10:30", "start"),
+      endMs: parseDateBoundary("2024-01-02 10:30", "end"),
+    });
+
+    assert.deepStrictEqual(
+      filtered.map((entry) => entry.message),
+      ["start of minute", "end of minute"]
+    );
+  });
+
+  test("filterEntriesByDateRange keeps a whole second when the end boundary omits milliseconds (issue #296)", () => {
+    const text = [
+      "2024-01-02T10:30:45.999Z INFO end of second",
+      "2024-01-02T10:30:46.000Z INFO next second",
+    ].join("\n");
+    const entries = parseLog(text);
+
+    const filtered = filterEntriesByDateRange(entries, {
+      endMs: parseDateBoundary("2024-01-02 10:30:45", "end"),
+    });
+
+    assert.deepStrictEqual(
+      filtered.map((entry) => entry.message),
+      ["end of second"]
     );
   });
 

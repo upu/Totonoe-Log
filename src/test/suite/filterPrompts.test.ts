@@ -99,7 +99,8 @@ suite("Totonoe Log filter prompts (shared)", () => {
       assert.ok(ignorePatterns);
       assert.deepStrictEqual([...severities], ["ERROR"]);
       assert.strictEqual(dateRange.startMs, Date.UTC(2024, 0, 2));
-      assert.strictEqual(dateRange.endMs, Date.UTC(2024, 0, 2, 23, 59, 59));
+      // 終了境界は書かれた最小単位（ここでは秒）の末尾まで含む（#296）。
+      assert.strictEqual(dateRange.endMs, Date.UTC(2024, 0, 2, 23, 59, 59, 999));
       // この経路は1欄1パターンのままなので、配列に包まれた1件だけが載る（#206）。
       assert.strictEqual(ignorePatterns.length, 1);
       const [ignorePattern] = ignorePatterns;
