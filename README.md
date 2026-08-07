@@ -64,6 +64,22 @@ Process-ID masking, available here and in `Copy Masked Text`, covers syslog-styl
 
 Common timestamp formats are recognized out of the box: ISO 8601 (plain and bracketed), classic syslog, slash-separated dates (`2024/01/02 03:04:05`), Apache/Nginx access-log timestamps (`[02/Jan/2024:03:04:05 +0900]`), and leading epoch seconds/milliseconds. Formats not covered by the built-ins can be added via the `totonoeLog.timestampFormats` setting (see [Custom timestamp formats](#custom-timestamp-formats)).
 
+### Severity levels
+
+The severity is read from the token that follows the timestamp. The built-in vocabulary covers the common level names plus the syslog severities: `TRACE`, `VERBOSE`, `DEBUG`, `INFO`, `NOTICE`, `WARNING`, `WARN`, `ERROR`, `ERR`, `SEVERE`, `CRITICAL`, `CRIT`, `ALERT`, `EMERG`, `FATAL`, and `PANIC` (matched case-insensitively).
+
+Only names that are two spellings of the same level are folded together: `WARNING` is reported as `WARN`, `ERR` as `ERROR`, and `CRIT` as `CRITICAL`. Everything else keeps the spelling written in the log, so a `NOTICE` line stays `NOTICE` rather than being reported as `INFO` — what you see in a view is always a word that is actually in the file, which keeps views comparable with a plain `grep`.
+
+If your logs use a level name that isn't in that list, add it with the `totonoeLog.severityTokens` setting. Entries are plain names rather than regular expressions, and they are *added* to the built-in vocabulary, so listing your own level cannot switch the built-in ones off:
+
+```jsonc
+"totonoeLog.severityTokens": ["NOTICE2", "AUDIT"]
+```
+
+A name has to end in a letter, digit or underscore to be recognized, because the
+match is anchored to a word boundary so that `INFORMATION` is not read as `INFO`.
+A name ending in punctuation, such as `LEVEL!`, is never matched.
+
 Long silent stretches are marked, too: when the timestamp gap between consecutive entries exceeds a threshold, a `XXs gap` separator line is inserted so the quiet periods stand out during an incident investigation (applies to the normalized view and the merged view, and is recalculated after filtering; configure with `totonoeLog.gap.thresholdSeconds`). Text generated into the log body stays English regardless of your display language, so the same log always produces the same output to paste into a ticket or diff.
 
 ## Filter out the noise
@@ -241,6 +257,7 @@ All settings live under the `totonoeLog` namespace.
 | `totonoeLog.timezone.display` | string | `"UTC"` | The timezone every view renders timestamps in: `UTC`, `local` (this machine's timezone), or a UTC offset like `+09:00` (rendered as `2024-01-02T12:04:05.000+09:00`). |
 | `totonoeLog.clockSkew.fileOffsets` | array | `[]` | Shift the timestamps of logs from hosts with skewed clocks by ±N seconds, per file-name pattern. Applies to all recognized timestamps regardless of timezone notation; merged and normalized views use the corrected times. The first matching rule wins. See [Clock skew correction](#clock-skew-correction). |
 | `totonoeLog.timestampFormats` | array | `[]` | Add timestamp formats the built-ins don't recognize, as regular expressions with named capture groups. Tried before the built-in formats. See [Custom timestamp formats](#custom-timestamp-formats). |
+| `totonoeLog.severityTokens` | array | `[]` | Add severity/level names the built-ins don't recognize, as plain names. Added to the built-in vocabulary rather than replacing it. See [Severity levels](#severity-levels). |
 | `totonoeLog.highlightRules` | array | `[]` | Color the keywords/patterns you are looking for in `Show Interactive View`. Only the matched text is colored — no lines are removed. See [Highlight rules](#highlight-rules). |
 
 ## The Totonoe series

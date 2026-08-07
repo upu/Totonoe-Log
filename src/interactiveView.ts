@@ -49,6 +49,7 @@ import {
 import { readDisplayTimezone } from "./timezoneSettings";
 import { readGapThresholdMs } from "./gapThresholdSetting";
 import { readMaxDisplayLines } from "./interactiveViewSettings";
+import { readConfiguredSeverityTokens } from "./severityTokenSettings";
 import { readConfiguredTimestampFormats } from "./timestampFormatSettings";
 import { readMaskOptions } from "./copyMasked";
 import {
@@ -567,7 +568,10 @@ export class InteractiveViewPanelController implements vscode.Disposable {
 
     this.mergedEntries = mergeLogFiles(
       this.loadedFiles.map((file) => file.input),
-      { timestampFormats: readConfiguredTimestampFormats() }
+      {
+        timestampFormats: readConfiguredTimestampFormats(),
+        severityTokens: readConfiguredSeverityTokens(),
+      }
     );
     this.singleEntries = [];
     this.recognitionWarnings = buildLowTimestampRecognitionWarnings(

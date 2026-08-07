@@ -8,6 +8,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- **More severity names are recognized out of the box.** The syslog severities
+  (`NOTICE`, `EMERG`, `ALERT`, `CRIT`, `ERR`), `SEVERE`, `VERBOSE` and `PANIC`
+  now fill in the severity column and appear as their own checkbox in the
+  Interactive View, instead of leaving those lines unclassified. `ERR` and
+  `CRIT` are reported as `ERROR` and `CRITICAL`; every other name keeps the
+  spelling written in the log (issue #302).
+- **`totonoeLog.severityTokens` setting.** Lists extra severity/level names to
+  recognize — plain names, not regular expressions — for logs that use a level
+  the built-ins don't know. They are added to the built-in vocabulary rather
+  than replacing it, and changing the setting updates an open Interactive View
+  (issue #302).
+
 ### Fixed
 
 - **ISO 8601 timestamps with an hour-only UTC offset (`+09`) or a lowercase `z`

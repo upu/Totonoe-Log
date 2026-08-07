@@ -213,10 +213,13 @@ Totonoe Log が提供する全コマンドを、コマンドID・起動導線・
 | 設定 | 効果 |
 | --- | --- |
 | `totonoeLog.timestampFormats` | 組み込みが認識しないタイムスタンプ形式を追加する。組み込みより先に試されるため、組み込みの解釈を上書きもできる |
+| `totonoeLog.severityTokens` | 組み込みが認識しないセベリティ/レベル名を、組み込みの語彙に上乗せして追加する |
 | `totonoeLog.timezone.sourceOffset` | タイムゾーン情報を持たないタイムスタンプに想定する UTC オフセット |
 | `totonoeLog.timezone.fileOffsets` | 上をファイル名パターンごとに上書きする |
 | `totonoeLog.timezone.display` | 各ビューがタイムスタンプを表示するタイムゾーン。日時プロンプトの入力もこの基準で解釈される |
 | `totonoeLog.clockSkew.fileOffsets` | 時計がずれていたホストのログを ±N 秒補正する |
 
 `ログを比較` と `マスク済みテキストをコピー` は例外で、タイムラインを組み立てるのではなく
-元テキストをマスク・書き換えする処理のため、効くのは `timestampFormats` だけ。
+元テキストをマスク・書き換えする処理。ただし `ログを比較` はエントリのセベリティを
+出力に含めるため `timestampFormats` と `severityTokens` が効く。
+`マスク済みテキストをコピー` に効くのは `timestampFormats` だけ。

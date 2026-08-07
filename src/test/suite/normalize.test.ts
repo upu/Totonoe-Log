@@ -304,6 +304,95 @@ suite("normalize / parseLog", () => {
   });
 });
 
+suite("normalize / parseLog severity vocabulary (#302)", () => {
+  test("recognizes syslog severity names, keeping the spelling written in the log", () => {
+    for (const token of ["NOTICE", "EMERG", "ALERT", "SEVERE", "VERBOSE", "PANIC"]) {
+      const [entry] = parseLog(`2024-01-02T03:04:05Z ${token} something happened`);
+      assert.strictEqual(entry.severity, token, `${token} should be recognized`);
+      assert.strictEqual(entry.message, "something happened");
+    }
+  });
+
+  test("normalizes the syslog abbreviations that have a longer built-in spelling", () => {
+    const [err] = parseLog("2024-01-02T03:04:05Z ERR connection refused");
+    assert.strictEqual(err.severity, "ERROR");
+    assert.strictEqual(err.message, "connection refused");
+
+    const [crit] = parseLog("2024-01-02T03:04:05Z CRIT disk failure");
+    assert.strictEqual(crit.severity, "CRITICAL");
+    assert.strictEqual(crit.message, "disk failure");
+  });
+
+  test("does not confuse an abbreviation with its longer spelling", () => {
+    // 長いトークンを先に試していないと `ERROR` が `ERR` として食われ、
+    // message に `OR ...` が残る。両方向を message まで見て固定する。
+    const [error] = parseLog("2024-01-02T03:04:05Z ERROR connection refused");
+    assert.strictEqual(error.severity, "ERROR");
+    assert.strictEqual(error.message, "connection refused");
+
+    const [critical] = parseLog("2024-01-02T03:04:05Z CRITICAL disk failure");
+    assert.strictEqual(critical.severity, "CRITICAL");
+    assert.strictEqual(critical.message, "disk failure");
+  });
+
+  test("keeps normalizing WARNING to WARN", () => {
+    const [entry] = parseLog("2024-01-02T03:04:05Z WARNING disk usage at 85%");
+    assert.strictEqual(entry.severity, "WARN");
+    assert.strictEqual(entry.message, "disk usage at 85%");
+  });
+
+  test("recognizes extra tokens supplied by the caller", () => {
+    const [entry] = parseLog("2024-01-02T03:04:05Z NOTICE2 internal level", {
+      severityTokens: ["NOTICE2"],
+    });
+
+    assert.strictEqual(entry.severity, "NOTICE2");
+    assert.strictEqual(entry.message, "internal level");
+  });
+
+  test("keeps the built-in tokens when extra tokens are supplied", () => {
+    const [entry] = parseLog("2024-01-02T03:04:05Z INFO still built in", {
+      severityTokens: ["NOTICE2"],
+    });
+
+    assert.strictEqual(entry.severity, "INFO");
+    assert.strictEqual(entry.message, "still built in");
+  });
+
+  test("does not let an extra token shadow a built-in one that starts the same way", () => {
+    const [entry] = parseLog("2024-01-02T03:04:05Z NOTICE plain notice", {
+      severityTokens: ["NOTICE2"],
+    });
+
+    assert.strictEqual(entry.severity, "NOTICE");
+    assert.strictEqual(entry.message, "plain notice");
+  });
+
+  test("treats extra tokens as literal text rather than as a regular expression", () => {
+    const [literal] = parseLog("2024-01-02T03:04:05Z LEVEL.1 literal token", {
+      severityTokens: ["LEVEL.1"],
+    });
+    assert.strictEqual(literal.severity, "LEVEL.1");
+    assert.strictEqual(literal.message, "literal token");
+
+    // エスケープしていないと `.` が任意の1文字として効き、`LEVELX1` まで拾う。
+    const [unrelated] = parseLog("2024-01-02T03:04:05Z LEVELX1 unrelated token", {
+      severityTokens: ["LEVEL.1"],
+    });
+    assert.strictEqual(unrelated.severity, undefined);
+    assert.strictEqual(unrelated.message, "LEVELX1 unrelated token");
+  });
+
+  test("ignores blank extra tokens instead of matching every line", () => {
+    const [entry] = parseLog("2024-01-02T03:04:05Z plain message", {
+      severityTokens: ["", "   "],
+    });
+
+    assert.strictEqual(entry.severity, undefined);
+    assert.strictEqual(entry.message, "plain message");
+  });
+});
+
 suite("normalize / parseLog ISO 8601 timezone designators (#297)", () => {
   test("applies an hour-only UTC offset", () => {
     const [entry] = parseLog("2024-01-02T03:04:05+09 INFO msg");
