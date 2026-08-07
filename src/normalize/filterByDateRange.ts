@@ -3,10 +3,9 @@ import type { DisplayTimezone } from "./timezone";
 
 /**
  * 日付範囲の境界を開始境界として使うか終了境界として使うかの区別。
- * 時刻を省略した日付のみの入力を補完する際、開始境界なら「その日の
- * 始まり」（`00:00:00.000`）、終了境界なら「その日の終わり」
- * （`23:59:59.999`）に補完する（issue #93）。時刻を明示した入力には
- * 影響しない。
+ * 入力で省略された下位の時刻単位を補完する際、開始境界ならすべて 0
+ * （その単位の始まり）、終了境界なら最大値（その単位の終わり）に
+ * 補完する（issue #93 / #296）。
  */
 export type DateBoundaryKind = "start" | "end";
 
@@ -36,31 +35,18 @@ function parseDateBoundaryParts(
   }
 
   const captures: readonly (string | undefined)[] = match;
-  let hour = 0;
-  let minute = 0;
-  let second = 0;
-  let millisecond = 0;
-  if (captures[4] === undefined) {
-    if (boundaryKind === "end") {
-      hour = 23;
-      minute = 59;
-      second = 59;
-      millisecond = 999;
-    }
-  } else {
-    hour = Number(captures[4]);
-    minute = Number(match[5]);
-    second = captures[6] === undefined ? 0 : Number(captures[6]);
-  }
-
+  // 終了境界は、書かれていない下位単位を最大値で埋めて「書かれた最小単位の
+  // 末尾まで」を含める。ミリ秒は入力の文法上そもそも書けないため、終了境界
+  // では常に 999 になる。
+  const fillsToUnitEnd = boundaryKind === "end";
   const parts = {
     year: Number(match[1]),
     month: Number(match[2]) - 1,
     day: Number(match[3]),
-    hour,
-    minute,
-    second,
-    millisecond,
+    hour: captures[4] === undefined ? (fillsToUnitEnd ? 23 : 0) : Number(captures[4]),
+    minute: captures[5] === undefined ? (fillsToUnitEnd ? 59 : 0) : Number(captures[5]),
+    second: captures[6] === undefined ? (fillsToUnitEnd ? 59 : 0) : Number(captures[6]),
+    millisecond: fillsToUnitEnd ? 999 : 0,
   };
   if (!isValidBoundaryTime(parts)) {
     return undefined;
@@ -126,10 +112,11 @@ function fixedOffsetBoundaryToEpochMs(
  *
  * `YYYY-MM-DD` または `YYYY-MM-DD HH:mm[:ss]`（`T` 区切りも可）を受け付ける。
  * タイムゾーン表記は持たず、`displayTimezone` の壁時計時刻として解釈する。
- * 時刻を省略した場合、`boundaryKind` に応じて開始境界なら
- * `00:00:00.000`、終了境界なら `23:59:59.999` を補う（終了境界に開始境界
- * と同じ `00:00:00` を補うと、その日のエントリが `timestampMs > endMs`
- * の判定でほぼ除外されてしまうため）。
+ * 省略された下位単位は `boundaryKind` に応じて補い、開始境界はすべて 0、
+ * 終了境界は書かれた最小単位の末尾（`2024-01-02` なら `23:59:59.999`、
+ * `2024-01-02 10:30` なら `10:30:59.999`）とする。終了境界に開始境界と
+ * 同じ下位単位 0 を補うと、その単位のエントリが `timestampMs > endMs` の
+ * 判定でほぼ除外されてしまうため（issue #93 / #296）。
  *
  * `"local"` の DST 境界では、存在しない壁時計時刻は `undefined` を返す。
  * 2回現れる壁時計時刻は JavaScript `Date` の互換動作に合わせ、早い側の

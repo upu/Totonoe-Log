@@ -55,8 +55,8 @@ export async function promptSeveritySelection(
  * Esc 等でのキャンセル、および日時を解釈できない不正な入力の場合は、
  * どちらも呼び出し側に処理を中断させるため `null` を返す。
  *
- * `boundaryKind` は時刻を省略した日付のみの入力の補完先を決める
- * （開始境界なら当日の始まり、終了境界なら当日の終わり。issue #93）。
+ * `boundaryKind` は省略された下位単位の補完先を決める（開始境界なら
+ * その単位の始まり、終了境界なら書かれた最小単位の末尾。issue #93 / #296）。
  * プロンプトの説明文にもその補完先を明記し、ユーザーが挙動を予測できる
  * ようにする。
  */
@@ -73,7 +73,7 @@ export async function promptDateBoundary(
   const prompt =
     boundaryKind === "end"
       ? vscode.l10n.t(
-          "Enter the end date and time (based on display timezone {0}; YYYY-MM-DD or YYYY-MM-DD HH:mm[:ss]; optional; a date without a time uses 23:59:59.999)",
+          "Enter the end date and time (based on display timezone {0}; YYYY-MM-DD or YYYY-MM-DD HH:mm[:ss]; optional; inclusive through the end of the smallest unit given, so 2024-01-02 means 23:59:59.999 and 2024-01-02 10:30 means 10:30:59.999)",
           timezoneHint
         )
       : vscode.l10n.t(
