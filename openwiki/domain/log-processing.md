@@ -1,7 +1,7 @@
 ---
 type: ドメインモデル
 title: ログ処理ドメインと不変条件
-description: Totonoe Log が共有する LogEntry、MergedEntry、LineSource、時刻補正、フィルタ、折りたたみ、マスクの意味と処理順を定義する。
+description: Totonoe Log が共有する LogEntry、JSON Lines とプレーンログの解析、セベリティ、時刻補正、マージ、フィルタ、折りたたみ、マスクの意味と不変条件を定義する。
 tags: [domain, logs, normalization]
 ---
 
@@ -21,13 +21,40 @@ tags: [domain, logs, normalization]
 | --- | --- |
 | `timestampMs` | 認識できた絶対時刻。未認識なら `undefined` |
 | `rawTimestamp`, `timestampFormat` | 元の時刻文字列と認識した形式名 |
-| `severity` | 大文字へ正規化したレベル。`WARNING` は `WARN` |
+| `severity` | 大文字へ正規化したレベル。`WARNING` は `WARN`、`ERR` は `ERROR`、`CRIT` は `CRITICAL` |
 | `message` | 時刻・severityを除いた先頭行と継続行 |
 | `startLine` | 元ログの1始まり先頭行番号 |
 | `lines`, `raw` | 情報を失わない元物理行と結合テキスト |
 | `matched` | 先頭行のタイムスタンプを認識できたか |
 
-`parseLog` は認識済み時刻で始まる行を新しいエントリとし、それ以外を直前の継続行にする。最初の認識行より前の行や、全く認識できないログも `matched: false` で保持し、サイレントに捨てない。
+`parseLog` は認識済み時刻を持つ行を新しいエントリとし、それ以外を直前の継続行にする。最初の認識行より前の行や、全く認識できないログも `matched: false` で保持し、サイレントに捨てない。
+
+### 入力行から `LogEntry` への解析
+
+```mermaid
+flowchart TD
+  A["物理行"] --> B{"時刻を持つJSONオブジェクトか"}
+  B -->|"はい"| C["JSONフィールドを構造化解析"]
+  B -->|"いいえ"| D["既知の前置きフィールドをたどる"]
+  D --> E{"タイムスタンプを認識したか"}
+  E -->|"はい"| F["時刻直後のセベリティを解析"]
+  E -->|"いいえ"| G["直前エントリの継続行または未認識行"]
+  C --> H["LogEntry"]
+  F --> H
+  G --> H
+```
+
+この図は、JSON Linesを先に試し、該当しなければ制限付きのプレーンテキスト解析へ進む分岐を示す。
+
+プレーンテキストでは各 `TimestampFormat.regex` 自体を行頭アンカーのまま保ちつつ、`src/normalize/parseLog.ts` がその適用位置を移動する。読み飛ばせる前置きは、Common / Combined Log Formatのクライアント3フィールド、角括弧フィールド、`key=value` の3形だけで、先頭64文字以内かつ3個までである。前置きは `message` の先頭へ残し、セベリティはタイムスタンプ直後だけから読む。この制限は、本文中の日付を新規エントリと誤認してスタックトレースを分断しないためにある。
+
+セベリティの組み込み語彙は `TRACE`, `VERBOSE`, `DEBUG`, `INFO`, `NOTICE`, `WARNING`, `WARN`, `ERROR`, `ERR`, `SEVERE`, `CRITICAL`, `CRIT`, `ALERT`, `EMERG`, `FATAL`, `PANIC` で、大文字小文字を区別しない。`totonoeLog.severityTokens` は正規表現ではない追加トークンを上乗せし、組み込み語彙を置き換えない。設定は[VS Code統合](/openwiki/integrations/vscode.md)から `src/severityTokenSettings.ts` を経て、単一ビュー、マージビュー、Interactive Viewのparseへ渡る。
+
+### JSON Lines（NDJSON）
+
+`src/normalize/jsonLogLine.ts` は `{` で始まる各行だけをJSONオブジェクトとして試し、利用可能な時刻があるレコードを `timestampFormat: "json-lines"` の `LogEntry` にする。候補キーは優先順に、時刻が `ts`, `time`, `timestamp`, `@timestamp`, `t`、レベルが `level`, `severity`, `lvl`、本文が `msg`, `message` である。時刻値は既存の `TimestampFormat` 一覧へ戻して解釈するため、ISO 8601、エポック、custom format、source offsetの規則をプレーンログと共有する。
+
+文字列のレベルは通常の別名正規化を通し、数値 `10`, `20`, `30`, `40`, `50`, `60` はbunyan/pinoの `TRACE`, `DEBUG`, `INFO`, `WARN`, `ERROR`, `FATAL` へ対応する。表にない有限数値は文字列として保持する。採用しなかったフィールドは挿入順を保った `key=value` として `message` へ加わるため、[ログ調査ワークフロー](/openwiki/workflows/log-investigation.md)のfilter、mask、highlightから検索できる。一方、`raw` と `lines` は元JSONを保持する。壊れたJSON、オブジェクトでないJSON、解釈できる時刻がないJSONはこの経路で消費せず、通常の継続行または未認識行として保持する。
 
 ### `MergedEntry`
 
@@ -95,7 +122,9 @@ severity列は表示集合に合わせて幅を揃える。タイムスタンプ
 
 ## 変更時の不変条件
 
-- 未認識行を捨てない。
+- 未認識行を捨てない。JSONとして壊れている行や、利用可能な時刻がないJSONも通常経路へ戻す。
+- JSON Linesでは構造化した `message` と、変更しない `raw` / `lines` の両方を維持する。
+- 前置きフィールドの形・個数・長さを無制限に広げず、本文中の日時による誤分割を防ぐ。
 - 複数行エントリの物理行順、元のインデント、`startLine` を維持する。継続行を表示上字下げしても行数と元行対応は変えない。
 - 本文の行数を変える変換では `LineSource` も同時に更新する。
 - timezone情報がログに明示されている場合は設定よりログを優先する。
