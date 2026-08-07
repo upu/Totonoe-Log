@@ -344,6 +344,19 @@ suite("normalize / parseLog JSON Lines (#300)", () => {
     );
   });
 
+  test("keeps a message field that is not a string as data instead of dropping it", () => {
+    const [entry] = parseLog('{"ts":"2024-01-02T03:04:05Z","msg":123,"host":"db-01"}');
+
+    assert.strictEqual(entry.message, "msg=123 host=db-01");
+  });
+
+  test("keeps a level field it cannot read as a severity as data instead of dropping it", () => {
+    const [entry] = parseLog('{"ts":"2024-01-02T03:04:05Z","level":{"n":1},"msg":"x"}');
+
+    assert.strictEqual(entry.severity, undefined);
+    assert.strictEqual(entry.message, 'x level={"n":1}');
+  });
+
   test("reads epoch timestamps written as numbers", () => {
     const [milliseconds] = parseLog('{"time":1704164645678,"msg":"ms"}');
     assert.strictEqual(milliseconds.timestampMs, 1704164645678);

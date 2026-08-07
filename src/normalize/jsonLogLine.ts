@@ -139,6 +139,37 @@ function resolveTimestampField(
 }
 
 /**
+ * セベリティとして実際に採用できたフィールド。採用できなければ `undefined` を
+ * 返し、そのフィールドは普通のデータとして `key=value` 側へ回す（候補名だからと
+ * いって消費してしまうと、`{"level":{"n":1}}` のような値が message から消える）。
+ */
+function resolveSeverityField(
+  record: Record<string, unknown>
+): { readonly key: string; readonly severity: string } | undefined {
+  const key = findKey(record, LEVEL_KEYS);
+  if (key === undefined) {
+    return undefined;
+  }
+  const severity = resolveSeverity(record[key]);
+  return severity === undefined ? undefined : { key, severity };
+}
+
+/**
+ * 本文として実際に採用できたフィールド。文字列でない値（`{"msg":123}` 等）は
+ * 本文にできないので採用せず、`key=value` 側に残して情報を失わないようにする。
+ */
+function resolveMessageField(
+  record: Record<string, unknown>
+): { readonly key: string; readonly text: string } | undefined {
+  const key = findKey(record, MESSAGE_KEYS);
+  if (key === undefined) {
+    return undefined;
+  }
+  const value = record[key];
+  return typeof value === "string" ? { key, text: value } : undefined;
+}
+
+/**
  * 本文フィールドに、使わなかったフィールドを `key=value` で足した message を作る。
  *
  * 本文以外も残すのは、構造化ログの調査価値がそこにあるため。message は
@@ -146,13 +177,12 @@ function resolveTimestampField(
  * `host=db-01` で絞り込めない（元の JSON は `raw` に残るので、これは
  * 「見せる/絞り込める」ための整形であって保存のためではない）。
  */
-function buildMessage(record: Record<string, unknown>, usedKeys: ReadonlySet<string>): string {
-  const parts: string[] = [];
-  const messageKey = findKey(record, MESSAGE_KEYS);
-  const messageValue = messageKey === undefined ? undefined : record[messageKey];
-  if (typeof messageValue === "string" && messageValue !== "") {
-    parts.push(messageValue);
-  }
+function buildMessage(
+  record: Record<string, unknown>,
+  usedKeys: ReadonlySet<string>,
+  messageText: string
+): string {
+  const parts: string[] = messageText === "" ? [] : [messageText];
   for (const [key, value] of Object.entries(record)) {
     if (!usedKeys.has(key)) {
       parts.push(`${key}=${renderFieldValue(value)}`);
@@ -179,15 +209,16 @@ export function parseJsonLogLine(
     return undefined;
   }
 
-  const levelKey = findKey(record, LEVEL_KEYS);
+  const severityField = resolveSeverityField(record);
+  const messageField = resolveMessageField(record);
   const usedKeys = new Set(
-    [timestamp.key, levelKey, findKey(record, MESSAGE_KEYS)].filter((key) => key !== undefined)
+    [timestamp.key, severityField?.key, messageField?.key].filter((key) => key !== undefined)
   );
 
   return {
     timestampMs: timestamp.timestampMs,
     rawTimestamp: timestamp.rawTimestamp,
-    severity: levelKey === undefined ? undefined : resolveSeverity(record[levelKey]),
-    message: buildMessage(record, usedKeys),
+    severity: severityField?.severity,
+    message: buildMessage(record, usedKeys, messageField?.text ?? ""),
   };
 }
