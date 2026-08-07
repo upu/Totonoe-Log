@@ -158,8 +158,12 @@ export const ISO_8601_FORMAT: TimestampFormat = {
   // 未マッチのままログメッセージへ混入してしまう（#94）。
   // `Z` を tzz グループで捕捉するのは、「UTC の明示」と「タイムゾーン表記
   // なし」を区別してソースオフセット（#13）を後者にだけ適用するため。
+  // 小文字 `z` は形式全体の `i` フラグではなく文字クラスで受ける。`i` を付けると
+  // 他の形式（syslog の月名など）の判定にも影響が及ぶため（#297）。
+  // オフセットの分は省略可能にして時のみの `+09` 表記も読む。マッチしないと
+  // 無表記としてソースオフセットが適用され、時刻が黙ってずれてしまう（#297）。
   regex:
-    /^(?<y>\d{4})-(?<mo>\d{2})-(?<d>\d{2})[T ](?<h>\d{2}):(?<mi>\d{2}):(?<s>\d{2})(?:[.,](?<ms>\d{1,9}))?(?:(?<tzz>Z)|(?<tzs>[+-])(?<tzh>\d{2}):?(?<tzm>\d{2}))?/,
+    /^(?<y>\d{4})-(?<mo>\d{2})-(?<d>\d{2})[T ](?<h>\d{2}):(?<mi>\d{2}):(?<s>\d{2})(?:[.,](?<ms>\d{1,9}))?(?:(?<tzz>[Zz])|(?<tzs>[+-])(?<tzh>\d{2})(?::?(?<tzm>\d{2}))?)?/,
   parse(match, context) {
     return isoLikeGroupsToEpochMs(match.groups ?? {}, context?.fallbackUtcOffsetMinutes);
   },
@@ -171,9 +175,10 @@ export const ISO_8601_FORMAT: TimestampFormat = {
  */
 export const BRACKETED_ISO_8601_FORMAT: TimestampFormat = {
   name: "bracketed-iso8601",
-  // 小数秒の桁数上限・tzz グループの理由は ISO_8601_FORMAT のコメント参照。
+  // 小数秒の桁数上限・tzz グループ・タイムゾーン部の書き方の理由は
+  // ISO_8601_FORMAT のコメント参照。
   regex:
-    /^\[(?<y>\d{4})-(?<mo>\d{2})-(?<d>\d{2})[T ](?<h>\d{2}):(?<mi>\d{2}):(?<s>\d{2})(?:[.,](?<ms>\d{1,9}))?(?:(?<tzz>Z)|(?<tzs>[+-])(?<tzh>\d{2}):?(?<tzm>\d{2}))?\]/,
+    /^\[(?<y>\d{4})-(?<mo>\d{2})-(?<d>\d{2})[T ](?<h>\d{2}):(?<mi>\d{2}):(?<s>\d{2})(?:[.,](?<ms>\d{1,9}))?(?:(?<tzz>[Zz])|(?<tzs>[+-])(?<tzh>\d{2})(?::?(?<tzm>\d{2}))?)?\]/,
   parse(match, context) {
     return isoLikeGroupsToEpochMs(match.groups ?? {}, context?.fallbackUtcOffsetMinutes);
   },
