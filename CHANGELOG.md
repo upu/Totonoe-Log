@@ -8,6 +8,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- **ISO 8601 timestamps with an hour-only UTC offset (`+09`) or a lowercase `z`
+  are now read correctly.** Previously the offset was not recognized, so
+  `2024-01-02T03:04:05+09 INFO request completed` was silently treated as having
+  no timezone — shifting the entry by 9 hours in merged and sorted views — and
+  the leftover `+09 ` was left at the start of the message, which also hid the
+  severity token behind it. `+0900`, `+09:00`, `Z` and timestamps without a
+  timezone are unchanged (issue #297).
+
 ## [0.11.0] - 2026-08-06
 
 ### Changed

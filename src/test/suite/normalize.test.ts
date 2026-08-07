@@ -304,6 +304,62 @@ suite("normalize / parseLog", () => {
   });
 });
 
+suite("normalize / parseLog ISO 8601 timezone designators (#297)", () => {
+  test("applies an hour-only UTC offset", () => {
+    const [entry] = parseLog("2024-01-02T03:04:05+09 INFO msg");
+
+    // オフセットが読めていれば +09:00 表記と同じ前日18時台になる。落ちていると
+    // UTC 扱いのまま 03:04:05 に留まり、`+09 ` が message へ漏れる。
+    assert.strictEqual(entry.timestampMs, Date.UTC(2024, 0, 1, 18, 4, 5));
+    assert.strictEqual(entry.severity, "INFO");
+    assert.strictEqual(entry.message, "msg");
+  });
+
+  test("applies a negative hour-only UTC offset", () => {
+    const [entry] = parseLog("2024-01-02T03:04:05-05 INFO msg");
+
+    assert.strictEqual(entry.timestampMs, Date.UTC(2024, 0, 2, 8, 4, 5));
+    assert.strictEqual(entry.message, "msg");
+  });
+
+  test("applies an hour-only UTC offset in bracketed timestamps", () => {
+    const [entry] = parseLog("[2024-01-02 03:04:05+09] INFO msg");
+
+    assert.strictEqual(entry.timestampFormat, "bracketed-iso8601");
+    assert.strictEqual(entry.timestampMs, Date.UTC(2024, 0, 1, 18, 4, 5));
+    assert.strictEqual(entry.message, "msg");
+  });
+
+  test("treats a lowercase z as an explicit UTC designator", () => {
+    const [entry] = parseLog("2024-01-02T03:04:05z INFO msg", {
+      sourceUtcOffsetMinutes: 540,
+    });
+
+    assert.strictEqual(entry.timestampMs, Date.UTC(2024, 0, 2, 3, 4, 5));
+    assert.strictEqual(entry.severity, "INFO");
+    assert.strictEqual(entry.message, "msg");
+  });
+
+  test("keeps accepting colonless, colon-separated and Z offsets", () => {
+    const [colonless] = parseLog("2024-01-02T03:04:05+0900 INFO msg");
+    assert.strictEqual(colonless.timestampMs, Date.UTC(2024, 0, 1, 18, 4, 5));
+    assert.strictEqual(colonless.message, "msg");
+
+    const [withColon] = parseLog("2024-01-02T03:04:05+09:00 INFO msg");
+    assert.strictEqual(withColon.timestampMs, Date.UTC(2024, 0, 1, 18, 4, 5));
+
+    const [zulu] = parseLog("2024-01-02T03:04:05Z INFO msg", {
+      sourceUtcOffsetMinutes: 540,
+    });
+    assert.strictEqual(zulu.timestampMs, Date.UTC(2024, 0, 2, 3, 4, 5));
+
+    const [naive] = parseLog("2024-01-02T03:04:05 INFO msg", {
+      sourceUtcOffsetMinutes: 540,
+    });
+    assert.strictEqual(naive.timestampMs, Date.UTC(2024, 0, 1, 18, 4, 5));
+  });
+});
+
 suite("normalize / timestampFormats (built-in additions, #100)", () => {
   test("parses slash-separated dates", () => {
     const [entry] = parseLog("2024/01/02 03:04:05 INFO hello");
