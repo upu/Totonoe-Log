@@ -10,6 +10,17 @@
 
 ### Added
 
+- **JSON Lines（NDJSON）のログを他の形式と同じように正規化するようにした。**
+  zap・pino・bunyan・Serilog・structlog・Docker の `json-file` ドライバが書く
+  レコードは、これまで全行が未認識の巨大な1エントリに吸収され、マージ・並べ替え・
+  日付範囲の絞り込み・セベリティ絞り込み・折りたたみ・ギャップ検出のいずれも
+  効かなかった。時刻・レベル・本文を一般的なフィールド名
+  （`ts`/`time`/`timestamp`/`@timestamp`/`t`、`level`/`severity`/`lvl`、
+  `msg`/`message`）から読むようにし、時刻は ISO 8601 文字列でもエポック数値でも
+  受け付ける。数値のレベルは bunyan / pino の目盛りとして解釈する。残りの
+  フィールドは `key=value` として message の後ろに並ぶので絞り込み・マスク・
+  ハイライトの対象になり、元の JSON 行はそのまま保持される（issue #300）。
+
 - **タイムスタンプが行頭に無いログを認識するようにした。** 実物の Common /
   Combined Log Format のアクセスログ
   （`10.0.0.1 - - [02/Jan/2024:03:04:05 +0900] "GET /health HTTP/1.1" 200 1234`）が

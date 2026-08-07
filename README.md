@@ -64,6 +64,20 @@ Process-ID masking, available here and in `Copy Masked Text`, covers syslog-styl
 
 Common timestamp formats are recognized out of the box: ISO 8601 (plain and bracketed), classic syslog, slash-separated dates (`2024/01/02 03:04:05`), Apache/Nginx access-log timestamps (`[02/Jan/2024:03:04:05 +0900]`), and leading epoch seconds/milliseconds. Formats not covered by the built-ins can be added via the `totonoeLog.timestampFormats` setting (see [Custom timestamp formats](#custom-timestamp-formats)).
 
+### JSON Lines
+
+JSON Lines (NDJSON) logs — what zap, pino, bunyan, Serilog, structlog and Docker's `json-file` driver write — are read as structured records rather than as opaque text:
+
+```
+{"ts":"2024-01-02T03:04:05.678Z","level":"info","msg":"request completed","dur_ms":250}
+```
+
+The timestamp, level and message are taken from the first field present out of `ts` / `time` / `timestamp` / `@timestamp` / `t`, `level` / `severity` / `lvl`, and `msg` / `message`. The timestamp value may be an ISO 8601 string or an epoch number (seconds, milliseconds, or fractional seconds) — it is interpreted with exactly the same rules as a plain-text timestamp, including `totonoeLog.timezone.sourceOffset`. Numeric levels are read as the bunyan/pino scale (`30` is `INFO`); a level outside that scale is kept as written.
+
+The remaining fields are appended to the message as `key=value`, so `host=db-01` and `dur_ms=250` can be filtered, masked and highlighted like any other text. The untouched JSON line is still what `Copy Masked Text` and `Compare Logs` work from. A line that isn't valid JSON, or a JSON object with no usable timestamp field, is kept exactly as before rather than dropped — so a file that mixes JSON records with a plain startup banner works.
+
+### Timestamps that are not at the start of the line
+
 The timestamp doesn't have to be the first thing on the line. A few field shapes that are commonly written in front of it are stepped over, so real Common/Combined Log Format access logs work as they are:
 
 ```

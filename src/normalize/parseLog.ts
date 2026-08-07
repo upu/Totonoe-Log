@@ -1,4 +1,6 @@
 import { escapeForRegExp } from "./escapeForRegExp";
+import { parseJsonLogLine, type JsonLogLine } from "./jsonLogLine";
+import { normalizeSeverity } from "./severityNames";
 import { getDefaultTimestampFormats } from "./timestampFormats";
 import type { LogEntry, TimestampFormat, TimestampParseContext } from "./types";
 
@@ -31,20 +33,6 @@ const SEVERITY_TOKENS = [
 ];
 
 /**
- * 略記から、同じ重大度を指す組み込みの長い表記への対応表。
- *
- * 揃えるのは「同じ意味の語が2つある」ものだけに留める（issue #302 の案1）。
- * `NOTICE` や `SEVERE` を `INFO` / `ERROR` へ寄せると、元のログに書かれて
- * いない語がビューに出て grep と突き合わせられなくなるため、そのまま残す
- * （#279 の「整形結果は元テキストから再現できる」方針と同じ考え方）。
- */
-const SEVERITY_ALIASES: Record<string, string | undefined> = {
-  WARNING: "WARN",
-  ERR: "ERROR",
-  CRIT: "CRITICAL",
-};
-
-/**
  * セベリティを読み取る正規表現を組み立てる。
  *
  * \b を付けることで "ERRORCODE" のような単語の前置部分に誤マッチするのを防ぐ。
@@ -74,10 +62,8 @@ function buildSeverityRegex(additionalTokens: readonly string[]): RegExp {
 /** 追加トークンなしの既定。行ごとではなくパースごとに使い回す。 */
 const DEFAULT_SEVERITY_REGEX = buildSeverityRegex([]);
 
-function normalizeSeverity(token: string): string {
-  const upper = token.toUpperCase();
-  return SEVERITY_ALIASES[upper] ?? upper;
-}
+/** JSON Lines として読めたエントリの `timestampFormat`（issue #300）。 */
+const JSON_LINES_FORMAT_NAME = "json-lines";
 
 export interface ParseLogOptions {
   /**
@@ -254,6 +240,20 @@ function createMatchedEntry(
   };
 }
 
+/** JSON Lines として読めた行のエントリ（issue #300）。本文の切り出しは JSON 側で済んでいる。 */
+function createJsonEntry(line: string, lineNumber: number, parsed: JsonLogLine): MutableEntry {
+  return {
+    timestampMs: parsed.timestampMs,
+    rawTimestamp: parsed.rawTimestamp,
+    timestampFormat: JSON_LINES_FORMAT_NAME,
+    severity: parsed.severity,
+    firstLineMessage: parsed.message,
+    startLine: lineNumber,
+    lines: [line],
+    matched: true,
+  };
+}
+
 function createUnmatchedEntry(line: string, lineNumber: number): MutableEntry {
   return {
     timestampMs: undefined,
@@ -292,12 +292,27 @@ export function parseLog(text: string, options: ParseLogOptions = {}): LogEntry[
   const entries: LogEntry[] = [];
   let current: MutableEntry | undefined;
 
+  // JSON Lines の時刻フィールドも、プレーンな行と同じ形式一覧で解釈する
+  // （ISO 文字列・エポック数値・ソースオフセットの扱いを1つの規則に保つため）。
+  const resolveTimestamp = (value: string): { timestampMs: number; rawTimestamp: string } | undefined => {
+    const found = matchTimestampAt(value, 0, timestampFormats, parseContext);
+    return found === undefined
+      ? undefined
+      : { timestampMs: found.timestampMs, rawTimestamp: found.match[0] };
+  };
+
   for (let lineIndex = 0; lineIndex < lines.length; lineIndex++) {
     const line = lines[lineIndex];
     const lineNumber = lineIndex + 1;
-    const timestampMatch = findTimestampMatch(line, timestampFormats, parseContext);
+    const jsonLine = parseJsonLogLine(line, resolveTimestamp);
+    const timestampMatch = jsonLine ? undefined : findTimestampMatch(line, timestampFormats, parseContext);
 
-    if (timestampMatch) {
+    if (jsonLine) {
+      if (current) {
+        entries.push(finalizeEntry(current));
+      }
+      current = createJsonEntry(line, lineNumber, jsonLine);
+    } else if (timestampMatch) {
       if (current) {
         entries.push(finalizeEntry(current));
       }
