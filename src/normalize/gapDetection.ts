@@ -1,6 +1,7 @@
 /**
  * ギャップ区切り行のガター欄に表示するラベル。特定の行番号に対応しないことを表す。
- * {@link formatNormalizedLog}・{@link formatMergedLog} が共有する（issue #102）。
+ * ガターを持つ {@link formatNormalizedLog} 系だけが使う——マージ表示には
+ * ガター自体が無い（issue #171）。
  */
 export const GAP_MARKER_LABEL = "...";
 

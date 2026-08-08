@@ -23,8 +23,8 @@ export type FilterMergedEntriesResult =
  * `filterEntriesByCriteria` 内の各絞り込み関数はいずれも `Array#filter`
  * ベースの実装で、常に元の `LogEntry` インスタンスを複製せずそのまま
  * 部分列として返すため、参照比較で安全に引き当てられる。この方式により、
- * `formatMergedLog` が出力するテキスト（ファイル名/種類列や行番号ガター付き）
- * を再パースする必要がなく、フォーマットの変更に影響されずに済む。
+ * `formatMergedLog` が出力するテキスト（ファイル名/種類列付き）を再パースする
+ * 必要がなく、フォーマットの変更に影響されずに済む。
  */
 export async function filterMergedEntriesByCriteria(
   mergedEntries: readonly MergedEntry[],
