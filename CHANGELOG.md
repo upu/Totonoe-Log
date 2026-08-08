@@ -45,6 +45,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   than replacing it, and changing the setting updates an open Interactive View
   (issue #302).
 
+### Changed
+
+- **The merged view no longer shows a line-number column.** Those numbers were
+  each entry's line in its own source file, so once several files were
+  interleaved by time they repeated and ran backwards down the column, which
+  read as noise. A merged row's position is already shown by the editor's own
+  line numbers, and the original line is still reachable through
+  `Totonoe Log: Go to Source Line` and the Interactive View's hover — both
+  resolve it from an internal map, not from the column. The Interactive View's
+  merged display and its export drop the column too, including the line-number
+  range on collapsed group headers (issue #171).
+
 ### Fixed
 
 - **A date range whose end boundary includes a time now covers the whole unit

@@ -107,7 +107,7 @@ suite("Totonoe Log set filter on the merged view (#248): filtering and navigatio
 
         const fileNameWidth = "database_20240101.log".length;
         const kindWidth = "database".length;
-        const expected = `${"database_20240101.log".padEnd(fileNameWidth)} | ${"database".padEnd(kindWidth)} | 1 | 2024-01-02T03:04:06.000Z ERROR boom`;
+        const expected = `${"database_20240101.log".padEnd(fileNameWidth)} | ${"database".padEnd(kindWidth)} | 2024-01-02T03:04:06.000Z ERROR boom`;
         assert.strictEqual(
           await waitForDocumentText(document, (text) => text === expected),
           expected
@@ -191,8 +191,8 @@ suite("Totonoe Log set filter on the merged view (#248): clearing and cancellati
         const fileNameWidth = "app.log".length;
         const kindWidth = "app".length;
         const everyLine = [
-          `${"app.log".padEnd(fileNameWidth)} | ${"app".padEnd(kindWidth)} | 1 | 2024-01-02T03:04:05.000Z INFO  starting`,
-          `${"db.log".padEnd(fileNameWidth)} | ${"db".padEnd(kindWidth)} | 1 | 2024-01-02T03:04:06.000Z ERROR boom`,
+          `${"app.log".padEnd(fileNameWidth)} | ${"app".padEnd(kindWidth)} | 2024-01-02T03:04:05.000Z INFO  starting`,
+          `${"db.log".padEnd(fileNameWidth)} | ${"db".padEnd(kindWidth)} | 2024-01-02T03:04:06.000Z ERROR boom`,
         ].join("\n");
         assert.strictEqual(
           await waitForDocumentText(document, (text) => text === everyLine),

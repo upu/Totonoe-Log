@@ -1,8 +1,7 @@
-import { computeMaxLineNumber, formatGutter } from "./gutter";
 import type { FormattedLogWithLineSources, LineSource } from "./lineSources";
 import type { MergedEntry } from "./mergeLogFiles";
 import { type DisplayTimezone } from "./timezone";
-import { computeGapMs, formatGapMarkerText, GAP_MARKER_LABEL } from "./gapDetection";
+import { computeGapMs, formatGapMarkerText } from "./gapDetection";
 import {
   formatMaskableTimestamp,
   maskDisplayMessageLines,
@@ -46,10 +45,16 @@ function computeColumnWidth(
  * マージビュー（仮想ドキュメント）に表示するためのテキストへ整形する。
  *
  * 各行の先頭に、そのエントリの由来を示す「ファイル名」「種類」の2列と、
- * {@link formatNormalizedLog} と同じ元の行番号ガター・ISO統一タイムスタンプ
- * を付ける。複数行にまたがるエントリの継続行では、ファイル名・種類の列は
- * 空白で埋め、見出し情報が1エントリにつき1回だけ表示されるようにする
- * （行番号ガターは {@link formatNormalizedLog} と同様に継続行でも表示する）。
+ * {@link formatNormalizedLog} と同じISO統一タイムスタンプを付ける。複数行に
+ * またがるエントリの継続行では、ファイル名・種類の列は空白で埋め、見出し情報が
+ * 1エントリにつき1回だけ表示されるようにする。
+ *
+ * 単一ファイル向けの {@link formatNormalizedLog} と違い、元の行番号ガターは
+ * 付けない（issue #171）。マージ結果は複数ファイルの行を時系列で織り交ぜた
+ * ものなので、元ファイル基準の行番号は縦に並べると重複・前後してしまい、列
+ * としての意味を持たない。マージ結果内での位置はエディタ自身の行番号が示し、
+ * 元ファイルの行は `Go to Source Line`（issue #137）が
+ * {@link formatMergedLogWithLineSources} の対応表から解決する。
  *
  * `options.gapThresholdMs` を指定すると、配列上で隣り合うエントリ（元が
  * どのファイル由来でも、{@link mergeLogFiles} により時系列にソート済み）の
@@ -81,9 +86,6 @@ export function formatMergedLogWithLineSources(
   const gapThresholdMs = options.gapThresholdMs;
   const fileNameWidth = computeColumnWidth(mergedEntries, (m) => m.fileName);
   const kindWidth = computeColumnWidth(mergedEntries, (m) => m.kind);
-  const gutterWidth = String(
-    computeMaxLineNumber(mergedEntries.map((m) => m.entry))
-  ).length;
   const blankPrefix = `${" ".repeat(fileNameWidth)} | ${" ".repeat(kindWidth)} | `;
   const severityWidth = computeSeverityWidth(mergedEntries.map((merged) => merged.entry));
 
@@ -100,9 +102,7 @@ export function formatMergedLogWithLineSources(
         gapThresholdMs
       );
       if (gapMs !== undefined) {
-        outputLines.push(
-          blankPrefix + formatGutter(GAP_MARKER_LABEL, gutterWidth) + formatGapMarkerText(gapMs)
-        );
+        outputLines.push(blankPrefix + formatGapMarkerText(gapMs));
         lineSources.push(undefined);
       }
     }
@@ -120,18 +120,13 @@ export function formatMergedLogWithLineSources(
     const headerText = timestampText !== undefined
       ? `${timestampText} ${formatSeverity(entry.severity, severityWidth)} ${messageLines[0]}`
       : messageLines[0];
-    outputLines.push(headerPrefix + formatGutter(entry.startLine, gutterWidth) + headerText);
+    outputLines.push(headerPrefix + headerText);
     lineSources.push({ fileIndex, line: entry.startLine });
 
     const continuationIndent =
       timestampText !== undefined ? messageColumnIndent(timestampText, severityWidth) : "";
     for (let j = 1; j < messageLines.length; j++) {
-      outputLines.push(
-        blankPrefix +
-          formatGutter(entry.startLine + j, gutterWidth) +
-          continuationIndent +
-          messageLines[j]
-      );
+      outputLines.push(blankPrefix + continuationIndent + messageLines[j]);
       lineSources.push({ fileIndex, line: entry.startLine + j });
     }
   }

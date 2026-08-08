@@ -33,8 +33,8 @@ suite("Totonoe Log merged view: regular files", () => {
       assert.strictEqual(
         activeEditor.document.getText(),
         [
-          `${"database_20240101.log".padEnd(fileNameWidth)} | ${"database".padEnd(kindWidth)} | 1 | 2024-01-02T03:04:04.000Z ERROR boom`,
-          `${"app.log".padEnd(fileNameWidth)} | ${"app".padEnd(kindWidth)} | 1 | 2024-01-02T03:04:05.000Z INFO  hello`,
+          `${"database_20240101.log".padEnd(fileNameWidth)} | ${"database".padEnd(kindWidth)} | 2024-01-02T03:04:04.000Z ERROR boom`,
+          `${"app.log".padEnd(fileNameWidth)} | ${"app".padEnd(kindWidth)} | 2024-01-02T03:04:05.000Z INFO  hello`,
         ].join("\n")
       );
     } finally {
