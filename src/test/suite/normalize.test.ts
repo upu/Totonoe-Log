@@ -2480,7 +2480,7 @@ suite("normalize / display mask (#194)", () => {
 
     assert.strictEqual(
       formatMergedLog(merged, { mask: MASK_BOTH }),
-      "app.log | app | 1 | <TIMESTAMP> INFO from <HOST>"
+      "app.log | app | <TIMESTAMP> INFO from <HOST>"
     );
   });
 
@@ -2540,7 +2540,7 @@ suite("normalize / display mask (#194)", () => {
     assert.ok(result.ok);
     assert.strictEqual(
       result.text,
-      "app.log | app | 1 | <TIMESTAMP> INFO from <HOST>"
+      "app.log | app | <TIMESTAMP> INFO from <HOST>"
     );
   });
 
@@ -2571,7 +2571,7 @@ suite("normalize / display mask (#194)", () => {
     assert.ok(result.ok);
     assert.strictEqual(
       result.formatted.text,
-      "app.log | app | 1 | <TIMESTAMP> INFO from <HOST>"
+      "app.log | app | <TIMESTAMP> INFO from <HOST>"
     );
   });
 });
@@ -2931,7 +2931,7 @@ suite("normalize / custom mask pattern in the interactive builders (#195)", () =
     assert.ok(result.ok);
     assert.strictEqual(
       result.text,
-      "app.log | app | 1 | 2024-01-02T03:04:05.000Z INFO <MASKED> from 10.0.0.1"
+      "app.log | app | 2024-01-02T03:04:05.000Z INFO <MASKED> from 10.0.0.1"
     );
   });
 
@@ -3292,7 +3292,7 @@ suite("normalize / mergeLogFiles", () => {
 });
 
 suite("normalize / formatMergedLog", () => {
-  test("renders fileName/kind columns padded and aligned, alongside the unified timestamp/gutter", () => {
+  test("renders fileName/kind columns padded and aligned, alongside the unified timestamp", () => {
     const merged = mergeLogFiles([
       { fileName: "app.log", text: "2024-01-02T03:04:05Z INFO hello" },
       { fileName: "database_20240101.log", text: "2024-01-02T03:04:04Z ERROR boom" },
@@ -3303,14 +3303,14 @@ suite("normalize / formatMergedLog", () => {
     const fileNameWidth = "database_20240101.log".length;
     const kindWidth = "database".length;
     const expected = [
-      `${"database_20240101.log".padEnd(fileNameWidth)} | ${"database".padEnd(kindWidth)} | 1 | 2024-01-02T03:04:04.000Z ERROR boom`,
-      `${"app.log".padEnd(fileNameWidth)} | ${"app".padEnd(kindWidth)} | 1 | 2024-01-02T03:04:05.000Z INFO  hello`,
+      `${"database_20240101.log".padEnd(fileNameWidth)} | ${"database".padEnd(kindWidth)} | 2024-01-02T03:04:04.000Z ERROR boom`,
+      `${"app.log".padEnd(fileNameWidth)} | ${"app".padEnd(kindWidth)} | 2024-01-02T03:04:05.000Z INFO  hello`,
     ].join("\n");
 
     assert.strictEqual(output, expected);
   });
 
-  test("blanks the fileName/kind columns on continuation lines, keeping per-line numbering", () => {
+  test("blanks the fileName/kind columns on continuation lines", () => {
     const merged = mergeLogFiles([
       {
         fileName: "app.log",
@@ -3323,8 +3323,8 @@ suite("normalize / formatMergedLog", () => {
     const fileNameWidth = "app.log".length;
     const kindWidth = "app".length;
     const expected = [
-      `${"app.log".padEnd(fileNameWidth)} | ${"app".padEnd(kindWidth)} | 1 | 2024-01-02T03:04:05.000Z ERROR boom`,
-      `${" ".repeat(fileNameWidth)} | ${" ".repeat(kindWidth)} | 2 | ${" ".repeat(31)}  at Foo.bar`,
+      `${"app.log".padEnd(fileNameWidth)} | ${"app".padEnd(kindWidth)} | 2024-01-02T03:04:05.000Z ERROR boom`,
+      `${" ".repeat(fileNameWidth)} | ${" ".repeat(kindWidth)} | ${" ".repeat(31)}  at Foo.bar`,
     ].join("\n");
 
     assert.strictEqual(output, expected);
@@ -3356,9 +3356,9 @@ suite("normalize / formatMergedLog", () => {
     const fileNameWidth = "database.log".length;
     const kindWidth = "database".length;
     const expected = [
-      `${"app.log".padEnd(fileNameWidth)} | ${"app".padEnd(kindWidth)} | 1 | 2024-01-02T03:04:05.000Z INFO  before`,
-      `${" ".repeat(fileNameWidth)} | ${" ".repeat(kindWidth)} | ... | 30s gap`,
-      `${"database.log".padEnd(fileNameWidth)} | ${"database".padEnd(kindWidth)} | 1 | 2024-01-02T03:04:35.000Z ERROR after`,
+      `${"app.log".padEnd(fileNameWidth)} | ${"app".padEnd(kindWidth)} | 2024-01-02T03:04:05.000Z INFO  before`,
+      `${" ".repeat(fileNameWidth)} | ${" ".repeat(kindWidth)} | 30s gap`,
+      `${"database.log".padEnd(fileNameWidth)} | ${"database".padEnd(kindWidth)} | 2024-01-02T03:04:35.000Z ERROR after`,
     ].join("\n");
 
     assert.strictEqual(output, expected);
@@ -3453,6 +3453,128 @@ suite("normalize / formatMergedLog", () => {
     const output = formatMergedLog(merged, { gapThresholdMs: 30 * 60 * 1000 });
     assert.strictEqual(countGapMarkers(output), 1);
     assert.ok(output.includes("5400s gap"));
+  });
+});
+
+suite("normalize / merged view has no line-number gutter (#171)", () => {
+  test("formatMergedLog omits the gutter, leaving the file name / kind columns", () => {
+    // マージ結果は複数ファイルの行を織り交ぜるため、元ファイル基準の行番号は
+    // 重複・前後してその列に意味が無い。マージ結果内の位置はエディタ自身の
+    // 行番号が示す。
+    const merged = mergeLogFiles([
+      { fileName: "app.log", text: "2024-01-02T03:04:05Z INFO hello" },
+      { fileName: "database_20240101.log", text: "2024-01-02T03:04:04Z ERROR boom" },
+    ]);
+
+    const fileNameWidth = "database_20240101.log".length;
+    const kindWidth = "database".length;
+
+    assert.strictEqual(
+      formatMergedLog(merged),
+      [
+        `${"database_20240101.log".padEnd(fileNameWidth)} | ${"database".padEnd(kindWidth)} | 2024-01-02T03:04:04.000Z ERROR boom`,
+        `${"app.log".padEnd(fileNameWidth)} | ${"app".padEnd(kindWidth)} | 2024-01-02T03:04:05.000Z INFO  hello`,
+      ].join("\n")
+    );
+  });
+
+  test("keeps continuation lines aligned without a gutter", () => {
+    const merged = mergeLogFiles([
+      {
+        fileName: "app.log",
+        text: ["2024-01-02T03:04:05Z ERROR boom", "  at Foo.bar"].join("\n"),
+      },
+    ]);
+    const indent = " ".repeat("2024-01-02T03:04:05.000Z".length + 1 + "ERROR".length + 1);
+
+    assert.strictEqual(
+      formatMergedLog(merged),
+      [
+        "app.log | app | 2024-01-02T03:04:05.000Z ERROR boom",
+        `        |     | ${indent}  at Foo.bar`,
+      ].join("\n")
+    );
+  });
+
+  test("drops the gap marker's gutter label too", () => {
+    const merged = mergeLogFiles([
+      { fileName: "app.log", text: "2024-01-02T03:04:05Z INFO before" },
+      { fileName: "database.log", text: "2024-01-02T03:04:35Z ERROR after" },
+    ]);
+
+    const fileNameWidth = "database.log".length;
+    const kindWidth = "database".length;
+
+    assert.strictEqual(
+      formatMergedLog(merged, { gapThresholdMs: 30_000 }),
+      [
+        `${"app.log".padEnd(fileNameWidth)} | ${"app".padEnd(kindWidth)} | 2024-01-02T03:04:05.000Z INFO  before`,
+        `${" ".repeat(fileNameWidth)} | ${" ".repeat(kindWidth)} | 30s gap`,
+        `${"database.log".padEnd(fileNameWidth)} | ${"database".padEnd(kindWidth)} | 2024-01-02T03:04:35.000Z ERROR after`,
+      ].join("\n")
+    );
+  });
+
+  test("keeps the source line mapping that Go to Source Line uses (#137)", () => {
+    // 表示から消すのは行番号の「列」だけで、元行への対応表は従来どおり持つ。
+    const merged = mergeLogFiles([
+      {
+        fileName: "app.log",
+        text: ["2024-01-02T03:04:05Z ERROR boom", "  at Foo.bar"].join("\n"),
+      },
+      { fileName: "db.log", text: "2024-01-02T03:04:07Z ERROR other" },
+    ]);
+
+    const { lineSources } = formatMergedLogWithLineSources(merged);
+
+    assert.deepStrictEqual(lineSources, [
+      { fileIndex: 0, line: 1 },
+      { fileIndex: 0, line: 2 },
+      { fileIndex: 1, line: 1 },
+    ]);
+  });
+
+  test("omits the gutter in the merged collapsed display as well", () => {
+    const merged = mergeLogFiles([
+      {
+        fileName: "a.log",
+        text: [
+          "2024-01-02T03:04:05Z INFO polling",
+          "2024-01-02T03:04:06Z INFO polling",
+          "2024-01-02T03:04:07Z INFO polling",
+        ].join("\n"),
+      },
+    ]);
+
+    const items = buildInteractiveMergedCollapsedLines(merged, { threshold: 3 });
+
+    assert.strictEqual(items.length, 1);
+    if (items[0].kind !== "group") {
+      throw new Error("unreachable");
+    }
+    assert.strictEqual(
+      items[0].headerText,
+      "a.log | a | 2024-01-02T03:04:05.000Z INFO polling (x3, ~03:04:07.000Z)"
+    );
+    assert.deepStrictEqual(items[0].lines, [
+      "a.log | a | 2024-01-02T03:04:05.000Z INFO polling",
+      "a.log | a | 2024-01-02T03:04:06.000Z INFO polling",
+      "a.log | a | 2024-01-02T03:04:07.000Z INFO polling",
+    ]);
+  });
+
+  test("keeps the gutter in the single-file views", () => {
+    // 単一ファイルでは行番号が単調で、絞り込みで飛んだ位置を示す意味がある。
+    const entries = parseLog("2024-01-02T03:04:05Z INFO hello");
+
+    assert.strictEqual(
+      formatNormalizedLog(entries),
+      "1 | 2024-01-02T03:04:05.000Z INFO hello"
+    );
+    assert.strictEqual(
+      formatMaskedLogForCompare(entries),
+      "1 | <TIMESTAMP> INFO hello"
+    );
   });
 });
 
@@ -4135,7 +4257,7 @@ suite("normalize / display timezone in formatters (#13)", () => {
     ]);
     const output = formatMergedLog(merged, { displayTimezone: 540 });
 
-    assert.strictEqual(output, "app.log | app | 1 | 2024-01-02T12:04:05.000+09:00 INFO hello");
+    assert.strictEqual(output, "app.log | app | 2024-01-02T12:04:05.000+09:00 INFO hello");
   });
 
   test("formatCollapsedLog renders timestamps in the requested display timezone", () => {
@@ -5080,7 +5202,8 @@ suite("normalize / merged collapse (#158)", () => {
 
   test("does not show a line-number range for a group spanning several files", () => {
     // 由来ファイルが違えば行番号は同じスケールではないため、範囲表示は意味を
-    // 持たず、先頭より小さい終端（例: 8-5）にもなりうる。代表1件の行番号を出す。
+    // 持たず、先頭より小さい終端（例: 8-5）にもなりうる。#171 でマージ表示から
+    // 行番号ガターごと無くなったので、範囲も代表1件の行番号も出さない。
     const merged = mergeLogFiles([
       {
         fileName: "server-a.log",
@@ -5106,7 +5229,10 @@ suite("normalize / merged collapse (#158)", () => {
     assert.ok(group);
     // 先頭は server-a.log の3行目、末尾は server-b.log の2行目。範囲にすると 3-2。
     assert.doesNotMatch(group.headerText, /3-2/);
-    assert.match(group.headerText, /\| +3 /);
+    assert.strictEqual(
+      group.headerText,
+      "server-a.log, etc. | server-a, etc. | 2024-01-02T03:04:05.000Z INFO heartbeat ok (x4, ~03:04:16.000Z)"
+    );
   });
 
   test("keeps the file / kind columns aligned between the header and the expanded lines", () => {
@@ -5237,8 +5363,8 @@ suite("normalize / column alignment (#174)", () => {
     assert.strictEqual(
       formatMergedLog(merged),
       [
-        "app.log | app | 1 | 2024-01-02T03:04:05.000Z INFO  starting",
-        "db.log  | db  | 1 | 2024-01-02T03:04:06.000Z ERROR boom",
+        "app.log | app | 2024-01-02T03:04:05.000Z INFO  starting",
+        "db.log  | db  | 2024-01-02T03:04:06.000Z ERROR boom",
       ].join("\n")
     );
   });
@@ -5380,11 +5506,11 @@ suite("normalize / continuation line indent (#256)", () => {
     assert.strictEqual(
       formatMergedLog(merged),
       [
-        "app.log | app | 1 | 2024-01-02T03:04:05.000Z ERROR Unhandled exception",
-        `        |     | 2 | ${indent}java.lang.NullPointerException`,
-        `        |     | 3 | ${indent}    at com.example.Foo.bar(Foo.java:42)`,
-        "app.log | app | 4 | 2024-01-02T03:04:06.000Z INFO  recovered",
-        "db.log  | db  | 1 | 2024-01-02T03:04:07.000Z ERROR boom",
+        "app.log | app | 2024-01-02T03:04:05.000Z ERROR Unhandled exception",
+        `        |     | ${indent}java.lang.NullPointerException`,
+        `        |     | ${indent}    at com.example.Foo.bar(Foo.java:42)`,
+        "app.log | app | 2024-01-02T03:04:06.000Z INFO  recovered",
+        "db.log  | db  | 2024-01-02T03:04:07.000Z ERROR boom",
       ].join("\n")
     );
   });

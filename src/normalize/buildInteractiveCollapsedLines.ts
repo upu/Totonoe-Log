@@ -88,15 +88,15 @@ function computeGutterWidth(entries: readonly LogEntry[], items: readonly Collap
 }
 
 /**
- * 複数ファイルにまたがるグループの見出しガター（issue #158）。
- *
- * 行番号の範囲（`rangeLabel`）は使えない——由来ファイルが違えば行番号は同じ
- * スケールではないため、`8-5` のように逆転した無意味なラベルになりうる。
- * 代わりに代表1件（先頭エントリ）の行番号を出す。見出しが指す位置
- * （`headerLineSource`）も先頭エントリなので、そちらとも一致する。
+ * マージ表示は行番号ガターを持たない（issue #171）。整形の本体を単一ファイル
+ * 表示と共有したまま列だけ落とせるよう、`gutterWidth` が `undefined` のときは
+ * ガターを空文字にする。
  */
-function multiFileGroupGutterLabel(entries: readonly LogEntry[]): string {
-  return String(entries[0].startLine);
+function formatOptionalGutter(
+  label: string | number,
+  gutterWidth: number | undefined
+): string {
+  return gutterWidth === undefined ? "" : formatGutter(label, gutterWidth);
 }
 
 /** 整形済みの1行と、その行が由来する元ログ上の位置（issue #179）のペア。 */
@@ -111,11 +111,12 @@ interface FormattedEntryLine {
  *
  * `fileIndex` と `columnPrefix` は、マージ表示（issue #158）でそれぞれ由来
  * ファイルと「ファイル名 | 種別 |」の列を与えるためのもの。単一ファイル表示では
- * `fileIndex` は常に 0、列は無い。
+ * `fileIndex` は常に 0、列は無い。逆に `gutterWidth` はマージ表示では
+ * `undefined`（ガターを出さない、issue #171）。
  */
 function formatEntryLines(
   entry: LogEntry,
-  gutterWidth: number,
+  gutterWidth: number | undefined,
   severityWidth: number,
   displayTimezone: DisplayTimezone,
   mask: DisplayMaskOptions | undefined,
@@ -136,7 +137,7 @@ function formatEntryLines(
 
   const lines: FormattedEntryLine[] = [
     {
-      text: columnPrefix + formatGutter(entry.startLine, gutterWidth) + headerText,
+      text: columnPrefix + formatOptionalGutter(entry.startLine, gutterWidth) + headerText,
       lineSource: { fileIndex, line: entry.startLine },
     },
   ];
@@ -146,7 +147,7 @@ function formatEntryLines(
     lines.push({
       text:
         columnPrefix +
-        formatGutter(entry.startLine + i, gutterWidth) +
+        formatOptionalGutter(entry.startLine + i, gutterWidth) +
         continuationIndent +
         messageLines[i],
       lineSource: { fileIndex, line: entry.startLine + i },
@@ -178,12 +179,11 @@ function formatHeaderTimestamps(
 
 function formatGroupHeaderText(
   entries: readonly LogEntry[],
-  gutterWidth: number,
+  gutterWidth: number | undefined,
   severityWidth: number,
   displayTimezone: DisplayTimezone,
   mask: DisplayMaskOptions | undefined,
-  columnPrefix = "",
-  gutterLabel = rangeLabel(entries)
+  columnPrefix = ""
 ): string {
   const first = entries[0];
   const messageLines = maskDisplayMessageLines(
@@ -198,7 +198,7 @@ function formatGroupHeaderText(
     ? `${timestamps.startText} ${formatSeverity(first.severity, severityWidth)} ${messageLines[0]}${suffix}`
     : `${messageLines[0]}${suffix}`;
 
-  return columnPrefix + formatGutter(gutterLabel, gutterWidth) + headerText;
+  return columnPrefix + formatOptionalGutter(rangeLabel(entries), gutterWidth) + headerText;
 }
 
 /**
@@ -279,10 +279,10 @@ function distinctInOrder<T>(values: readonly T[]): T[] {
   return [...new Set(values)];
 }
 
+/** マージ表示にガター幅が無いのは issue #171（行番号列を出さない）のため。 */
 interface MergedDisplayLayout {
   readonly fileNameWidth: number;
   readonly kindWidth: number;
-  readonly gutterWidth: number;
   readonly severityWidth: number;
 }
 
@@ -292,19 +292,6 @@ function formatMergedColumnPrefix(
   layout: MergedDisplayLayout
 ): string {
   return `${fileName.padEnd(layout.fileNameWidth)} | ${kind.padEnd(layout.kindWidth)} | `;
-}
-
-/**
- * 見出しガターは、グループが1ファイルに収まっているときだけ行番号の範囲に
- * できる（複数ファイルにまたがる場合の理由は {@link multiFileGroupGutterLabel} 参照）。
- */
-function mergedGroupGutterLabel(
-  item: Extract<CollapsedMergedItem, { kind: "group" }>
-): string {
-  const entries = item.entries.map((merged) => merged.entry);
-  return distinctInOrder(item.entries.map((merged) => merged.fileIndex)).length > 1
-    ? multiFileGroupGutterLabel(entries)
-    : rangeLabel(entries);
 }
 
 function computeMergedDisplayLayout(
@@ -328,19 +315,9 @@ function computeMergedDisplayLayout(
     }
   }
 
-  let gutterWidth = String(
-    computeMaxLineNumber(mergedEntries.map((merged) => merged.entry))
-  ).length;
-  for (const item of items) {
-    if (item.kind === "group") {
-      gutterWidth = Math.max(gutterWidth, mergedGroupGutterLabel(item).length);
-    }
-  }
-
   return {
     fileNameWidth: fileNameCandidates.reduce((max, value) => Math.max(max, value.length), 0),
     kindWidth: kindCandidates.reduce((max, value) => Math.max(max, value.length), 0),
-    gutterWidth,
     severityWidth: computeSeverityWidth(mergedEntries.map((merged) => merged.entry)),
   };
 }
@@ -354,7 +331,7 @@ function formatMergedSingleDisplayLines(
   const { entry, fileName, kind, fileIndex } = item.merged;
   return formatEntryLines(
     entry,
-    layout.gutterWidth,
+    undefined,
     layout.severityWidth,
     displayTimezone,
     mask,
@@ -373,7 +350,7 @@ function formatMergedGroupDisplayItem(
   const groupLines = item.entries.flatMap((merged) =>
     formatEntryLines(
       merged.entry,
-      layout.gutterWidth,
+      undefined,
       layout.severityWidth,
       displayTimezone,
       mask,
@@ -387,7 +364,7 @@ function formatMergedGroupDisplayItem(
     kind: "group",
     headerText: formatGroupHeaderText(
       entries,
-      layout.gutterWidth,
+      undefined,
       layout.severityWidth,
       displayTimezone,
       mask,
@@ -398,8 +375,7 @@ function formatMergedGroupDisplayItem(
         ),
         formatGroupColumnValue(kinds, kinds.some((kind) => kind !== kinds[0])),
         layout
-      ),
-      mergedGroupGutterLabel(item)
+      )
     ),
     headerFileIndices: fileIndices,
     lines: groupLines.map((line) => line.text),
@@ -414,6 +390,11 @@ function formatMergedGroupDisplayItem(
  *
  * 列幅はエントリ行だけでなくグループ見出しの代表値（「先頭 + 他」）も含めて
  * 求める。見出しだけ列がはみ出すと、折りたたみを開いた瞬間に桁がずれるため。
+ *
+ * 行番号ガターは単一ファイル版と違って出さない（issue #171、理由は
+ * {@link formatMergedLog} 参照）。グループ見出しの行番号範囲（`1-5`）も同時に
+ * 消える——由来ファイルが違えば行番号のスケールが揃わず、そもそも範囲として
+ * 意味を持たなかった。
  *
  * グルーピングが由来ファイルを区別しない理由は
  * {@link collapseRepeatedMergedEntries} 参照。

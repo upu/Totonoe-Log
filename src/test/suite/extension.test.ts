@@ -549,8 +549,8 @@ suite("Totonoe Log merge from the explorer context menu", () => {
       assert.strictEqual(
         activeEditor.document.getText(),
         [
-          `${"database_20240101.log".padEnd(fileNameWidth)} | ${"database".padEnd(kindWidth)} | 1 | 2024-01-02T03:04:04.000Z ERROR boom`,
-          `${"app.log".padEnd(fileNameWidth)} | ${"app".padEnd(kindWidth)} | 1 | 2024-01-02T03:04:05.000Z INFO  hello`,
+          `${"database_20240101.log".padEnd(fileNameWidth)} | ${"database".padEnd(kindWidth)} | 2024-01-02T03:04:04.000Z ERROR boom`,
+          `${"app.log".padEnd(fileNameWidth)} | ${"app".padEnd(kindWidth)} | 2024-01-02T03:04:05.000Z INFO  hello`,
         ].join("\n")
       );
     } finally {
@@ -624,8 +624,8 @@ suite("Totonoe Log merge from the explorer context menu", () => {
       assert.strictEqual(
         activeEditor.document.getText(),
         [
-          `${"database_20240101.log".padEnd(fileNameWidth)} | ${"database".padEnd(kindWidth)} | 1 | 2024-01-02T03:04:04.000Z ERROR boom`,
-          `${"app.log".padEnd(fileNameWidth)} | ${"app".padEnd(kindWidth)} | 1 | 2024-01-02T03:04:05.000Z INFO  hello`,
+          `${"database_20240101.log".padEnd(fileNameWidth)} | ${"database".padEnd(kindWidth)} | 2024-01-02T03:04:04.000Z ERROR boom`,
+          `${"app.log".padEnd(fileNameWidth)} | ${"app".padEnd(kindWidth)} | 2024-01-02T03:04:05.000Z INFO  hello`,
         ].join("\n")
       );
     } finally {
@@ -890,9 +890,9 @@ suite("Totonoe Log timezone settings (#13)", () => {
       // しきい値（30秒）を超えるため「XX s gap」のギャップ区切り行が挿入される
       // （issue #102、マージビューへのギャップ検出追加）。
       const expected = [
-        "tokyo.log | tokyo | 1 | 2024-01-02T00:00:00.000Z INFO tokyo-entry",
-        "          |       | ... | 10800s gap",
-        "utc.log   | utc   | 1 | 2024-01-02T03:00:00.000Z INFO utc-entry",
+        "tokyo.log | tokyo | 2024-01-02T00:00:00.000Z INFO tokyo-entry",
+        "          |       | 10800s gap",
+        "utc.log   | utc   | 2024-01-02T03:00:00.000Z INFO utc-entry",
       ].join("\n");
       assert.strictEqual(activeEditor.document.getText(), expected);
     } finally {
@@ -1017,8 +1017,8 @@ suite("Totonoe Log clock skew settings (#15)", () => {
       const activeEditor = vscode.window.activeTextEditor;
       assert.ok(activeEditor, "a merged view editor should be shown");
       const expected = [
-        "fast.log   | fast   | 1 | 2024-01-02T03:03:50.000Z INFO fast-entry",
-        "steady.log | steady | 1 | 2024-01-02T03:04:00.000Z INFO steady-entry",
+        "fast.log   | fast   | 2024-01-02T03:03:50.000Z INFO fast-entry",
+        "steady.log | steady | 2024-01-02T03:04:00.000Z INFO steady-entry",
       ].join("\n");
       assert.strictEqual(activeEditor.document.getText(), expected);
     } finally {
