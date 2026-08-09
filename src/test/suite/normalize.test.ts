@@ -5004,6 +5004,35 @@ suite("normalize / highlightDisplayLines (#18)", () => {
     assert.deepStrictEqual(highlights.get(line), [{ start: 0, end: 11, color: "red" }]);
   });
 
+  test("lets the rule listed first win even when a later rule starts further left (#298)", async () => {
+    // 開始位置ではなく設定の並びが優先順位（issue #298）。より左から始まる後ろの
+    // ルールに、上に足したルールが潰されないこと。
+    const line = "connection timeout occurred";
+
+    const highlights = await highlightOk([line], [
+      { pattern: "timeout", color: "red" },
+      { pattern: "connection timeout occurred", color: "blue" },
+    ]);
+
+    assert.deepStrictEqual(highlights.get(line), [{ start: 11, end: 18, color: "red" }]);
+  });
+
+  test("drops only the overlapping ranges of a later rule, not the whole rule (#298)", async () => {
+    // 落とす単位は「ルール」ではなく「範囲」。同じルールの別の一致が、重ならない
+    // 限り残ること。
+    const line = "connection timeout occurred, connection lost";
+
+    const highlights = await highlightOk([line], [
+      { pattern: "timeout", color: "red" },
+      { pattern: "connection \\w+", color: "blue" },
+    ]);
+
+    assert.deepStrictEqual(highlights.get(line), [
+      { start: 11, end: 18, color: "red" },
+      { start: 29, end: 44, color: "blue" },
+    ]);
+  });
+
   test("keeps non-overlapping matches from several rules, sorted by position", async () => {
     const line = "OutOfMemory then a timeout";
 

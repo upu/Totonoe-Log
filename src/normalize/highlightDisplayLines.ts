@@ -44,7 +44,13 @@ export interface HighlightDisplayLinesOptions {
  *
  * 重なった範囲は**先に書かれたルールを優先**して落とす。重なりをそのまま返すと
  * 描画時にどちらの色を出すか決められないうえ、後勝ちにすると一覧の上に足した
- * ルールが効かなくなって驚くため。
+ * ルールが効かなくなって驚くため。開始位置ではなくルール順に採用していくのは、
+ * 開始位置を第1キーにすると「より左から始まった後ろのルール」が前のルールを
+ * 潰してしまい、この優先順位が崩れるため（issue #298）。落とす単位はルール
+ * 全体ではなく範囲ごとなので、同じルールでも重ならない一致は残る。
+ *
+ * 返す前に開始位置で並べ直すのは、Webview 側が先頭からカーソルを進めながら
+ * 描くため——昇順・重なり無しであることが描画の前提になっている。
  *
  * 幅0のマッチ（`x*` 等）は `lastIndex` が進まず無限ループになるので、必ず1つ
  * 進める。範囲としても残さない——色を付けても何も見えないため。
@@ -68,17 +74,18 @@ const highlights = lines.map((line) => {
     }
   });
 
-  found.sort((a, b) => a.start - b.start || a.ruleIndex - b.ruleIndex);
+  found.sort((a, b) => a.ruleIndex - b.ruleIndex || a.start - b.start);
 
   const accepted = [];
-  let lastEnd = 0;
   for (const range of found) {
-    if (range.start < lastEnd) {
+    const overlaps = accepted.some((other) => range.start < other.end && other.start < range.end);
+    if (overlaps) {
       continue;
     }
     accepted.push({ start: range.start, end: range.end, color: rules[range.ruleIndex].color });
-    lastEnd = range.end;
   }
+
+  accepted.sort((a, b) => a.start - b.start);
   return accepted;
 });
 

@@ -59,6 +59,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- **Overlapping highlight rules now resolve in the order they are listed.** When
+  two rules matched overlapping text, the one starting further left won
+  regardless of its position in the list, so a rule you added at the top of
+  `totonoeLog.highlightRules` could be silently swallowed by a broader rule below
+  it — highlighting `timeout` in red never showed up on a line where a later
+  `connection timeout occurred` rule also matched. The rule listed first now
+  keeps its range and the later rule loses only the ranges that actually overlap;
+  its other matches on the same line are still highlighted (issue #298).
+
 - **A date range whose end boundary includes a time now covers the whole unit
   you typed.** Entering `2024-01-02 10:30` as the end capped the range at
   `10:30:00.000`, silently dropping everything from `10:30:00.001` through
