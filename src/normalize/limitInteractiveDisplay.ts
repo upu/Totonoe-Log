@@ -26,19 +26,22 @@ export interface LimitedInteractiveDisplay extends InteractiveDisplayContent {
 }
 
 /**
- * 折りたたみグループが占める行数は、展開後の行数（`lines.length`）で数える。
- * 折りたたみ中は1行しか見えないが、Webview側は展開後の行も含めて最初から
- * DOMに載せる（`main.ts` の `appendGroupItem`）ため、DOMの重さは展開後の
- * 行数で決まる。
+ * 折りたたみグループが占める行数は、見出し行を足した `lines.length + 1` で
+ * 数える（issue #299）。折りたたみ中は見出しの1行しか見えないが、Webview側は
+ * 折りたたみ時の見出し行と展開後の行の両方を最初からDOMに載せて
+ * 表示/非表示を切り替えるだけ（`main.ts` の `appendGroupItem`）なので、
+ * DOMの重さは見出し行と展開後の行数の合計で決まる。
  */
 function countItemLines(item: InteractiveDisplayItem): number {
-  return item.kind === "line" ? 1 : item.lines.length;
+  return item.kind === "line" ? 1 : item.lines.length + 1;
 }
 
 /**
  * 上限に収まるところまで表示単位を詰める。グループ1件だけで上限を超える
- * 場合は、そのグループの `lines` を上限まで切り詰めて必ず1件は残す——
- * 何も表示されない画面を返さないため。
+ * 場合は、そのグループの `lines` を上限まで切り詰めて1件だけ残す——
+ * 何も表示されない画面を返さないため。ただし見出し行のぶんを引くと残せる
+ * `lines` が1行も無くなる場合（上限が1行のとき）だけは、展開しても何も
+ * 出ないグループになるので載せない。
  */
 function limitItems(
   items: readonly InteractiveDisplayItem[],
@@ -58,11 +61,13 @@ function limitItems(
       lineCount += itemLines;
       continue;
     }
-    if (limited.length === 0 && item.kind === "group") {
-      const lines = item.lines.slice(0, remaining);
+    // 見出し行のぶんを引いた残りが `lines` に割ける行数。
+    const remainingGroupLines = remaining - 1;
+    if (limited.length === 0 && item.kind === "group" && remainingGroupLines > 0) {
+      const lines = item.lines.slice(0, remainingGroupLines);
       limited.push(
         item.lineSources
-          ? { ...item, lines, lineSources: item.lineSources.slice(0, remaining) }
+          ? { ...item, lines, lineSources: item.lineSources.slice(0, remainingGroupLines) }
           : { ...item, lines }
       );
       lineCount += remaining;

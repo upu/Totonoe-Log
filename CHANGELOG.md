@@ -59,6 +59,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- **The Interactive View display limit now counts the header row of every
+  collapsed group.** `totonoeLog.interactiveView.maxDisplayLines` caps how many
+  rows the view puts into the page, but a collapsed group was counted by its
+  expanded lines only, ignoring the header row that is always rendered
+  alongside them. With the default collapse threshold that let a log made of
+  small groups exceed the limit by up to a third, which is exactly the margin
+  the limit exists to protect. A group now costs `1 + its lines`, so the number
+  of rows shown stays within the configured limit (issue #299).
+
 - **Overlapping highlight rules now resolve in the order they are listed.** When
   two rules matched overlapping text, the one starting further left won
   regardless of its position in the list, so a rule you added at the top of
