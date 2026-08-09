@@ -4786,7 +4786,7 @@ suite("normalize / limitInteractiveDisplay (#178)", () => {
     assert.strictEqual(limited.displayedLineCount, undefined);
   });
 
-  test("counts a collapsed group by its expanded line count", () => {
+  test("counts a collapsed group by its expanded line count plus the header row (#299)", () => {
     const content = {
       text: "",
       items: [
@@ -4795,10 +4795,27 @@ suite("normalize / limitInteractiveDisplay (#178)", () => {
       ] as const,
     };
 
-    const limited = limitInteractiveDisplay(content, 3);
+    // グループは見出し行を含めて4行ぶん占めるので、上限4はグループだけで埋まる。
+    const limited = limitInteractiveDisplay(content, 4);
 
     assert.deepStrictEqual(limited.items, [content.items[0]]);
-    assert.strictEqual(limited.displayedLineCount, 3);
+    assert.strictEqual(limited.displayedLineCount, 4);
+  });
+
+  test("keeps every item when the header rows still fit within the limit (#299)", () => {
+    const content = {
+      text: "",
+      items: [
+        { kind: "group", headerText: "g1", lines: ["l1", "l2"] },
+        { kind: "group", headerText: "g2", lines: ["l3", "l4", "l5"] },
+      ] as const,
+    };
+
+    // 3行 + 4行 = 7行ちょうどなので、どちらも切り詰めずに残る。
+    const limited = limitInteractiveDisplay(content, 7);
+
+    assert.deepStrictEqual(limited.items, content.items);
+    assert.strictEqual(limited.displayedLineCount, undefined);
   });
 
   test("keeps whole items and stops before the one that would exceed the limit", () => {
@@ -4824,12 +4841,24 @@ suite("normalize / limitInteractiveDisplay (#178)", () => {
       items: [{ kind: "group", headerText: "g1", lines: ["l1", "l2", "l3"] }] as const,
     };
 
+    // 見出し行のぶんを引いた残りだけ `lines` を残す（#299）。
     const limited = limitInteractiveDisplay(content, 2);
 
-    assert.deepStrictEqual(limited.items, [
-      { kind: "group", headerText: "g1", lines: ["l1", "l2"] },
-    ]);
+    assert.deepStrictEqual(limited.items, [{ kind: "group", headerText: "g1", lines: ["l1"] }]);
     assert.strictEqual(limited.displayedLineCount, 2);
+  });
+
+  test("drops a group whose lines would all be cut away by the limit (#299)", () => {
+    const content = {
+      text: "",
+      items: [{ kind: "group", headerText: "g1", lines: ["l1", "l2"] }] as const,
+    };
+
+    // 上限1では見出し行しか入らず、展開しても何も出ないグループになるため載せない。
+    const limited = limitInteractiveDisplay(content, 1);
+
+    assert.deepStrictEqual(limited.items, []);
+    assert.strictEqual(limited.displayedLineCount, 0);
   });
 
   test("truncates text and items together so both display paths respect the limit", () => {
@@ -4884,15 +4913,7 @@ suite("normalize / limitInteractiveDisplay (#178)", () => {
     const limited = limitInteractiveDisplay(content, 2);
 
     assert.deepStrictEqual(limited.items, [
-      {
-        kind: "group",
-        headerText: "g1",
-        lines: ["l1", "l2"],
-        lineSources: [
-          { fileIndex: 0, line: 1 },
-          { fileIndex: 0, line: 2 },
-        ],
-      },
+      { kind: "group", headerText: "g1", lines: ["l1"], lineSources: [{ fileIndex: 0, line: 1 }] },
     ]);
   });
 });
