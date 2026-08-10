@@ -203,7 +203,14 @@ export class PatternWorkerSession {
 
       worker.on("message", onMessage);
       worker.on("error", onError);
-      worker.postMessage({ ...job, id });
+      try {
+        worker.postMessage({ ...job, id });
+      } catch {
+        // 送れないワーカー（既に終了している等）は捨てて、次のジョブで作り直す。
+        // 呼び出し側から見えるのは他の失敗と同じ `error` で、絞り込みなら条件を
+        // 落とし、マスク・ハイライトならその処理だけ諦める。
+        onError();
+      }
     });
   }
 
@@ -227,6 +234,12 @@ export class PatternWorkerSession {
       worker.on("error", () => {
         this.discard(worker);
       });
+      // `error` を伴わずに終了することもある（外部からの終了・異常終了など）。
+      // 死んだワーカーを抱えたままだと次のジョブが届かずタイムアウトを待つ
+      // ことになるため、終了を見たら参照だけ外して作り直せるようにする。
+      worker.on("exit", () => {
+        this.forget(worker);
+      });
       this.worker = worker;
       this.spawned += 1;
     }
@@ -234,10 +247,15 @@ export class PatternWorkerSession {
   }
 
   private discard(worker: Worker): void {
+    this.forget(worker);
+    void worker.terminate();
+  }
+
+  /** 参照だけ外す（終了処理は呼び出し側の状況次第）。 */
+  private forget(worker: Worker): void {
     if (this.worker === worker) {
       this.worker = undefined;
     }
-    void worker.terminate();
   }
 }
 
