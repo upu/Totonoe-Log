@@ -7,6 +7,7 @@ import {
   type FilterByIgnorePatternResult,
 } from "./filterByIgnorePattern";
 import { filterEntriesByMatchPattern } from "./filterByMatchPattern";
+import type { PatternWorkerSession } from "./patternWorkerSession";
 
 /**
  * `filterEntriesByCriteria` に渡す絞り込み条件。各フィールドは省略可能で、
@@ -39,6 +40,8 @@ export interface FilterEntriesByCriteriaOptions {
   readonly ignorePatternTimeoutMs?: number;
   /** 一致パターンの評価に使うタイムアウト（ミリ秒）を上書きしたい場合に指定する（主にテスト用）。 */
   readonly matchPatternTimeoutMs?: number;
+  /** 同じ再描画の他のパターン処理と共有するワーカー（issue #303）。 */
+  readonly session?: PatternWorkerSession;
 }
 
 /**
@@ -76,6 +79,7 @@ export async function filterEntriesByCriteria(
   if (criteria.matchPatterns !== undefined) {
     const matchResult = await filterEntriesByMatchPattern(filtered, criteria.matchPatterns, {
       timeoutMs: options.matchPatternTimeoutMs,
+      session: options.session,
     });
     if (!matchResult.ok) {
       return matchResult;
@@ -86,6 +90,7 @@ export async function filterEntriesByCriteria(
   if (criteria.ignorePatterns !== undefined) {
     const ignoreResult = await filterEntriesByIgnorePattern(filtered, criteria.ignorePatterns, {
       timeoutMs: options.ignorePatternTimeoutMs,
+      session: options.session,
     });
     if (!ignoreResult.ok) {
       return ignoreResult;

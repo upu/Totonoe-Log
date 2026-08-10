@@ -11,6 +11,7 @@ import {
   highlightDisplayLines,
   limitInteractiveDisplay,
   mergeLogFiles,
+  PatternWorkerSession,
   DEFAULT_COLLAPSE_THRESHOLD,
   type BuildInteractivePayloadOptions,
   type BuildInteractiveExportTextOptions,
@@ -652,7 +653,8 @@ export class InteractiveViewPanelController implements vscode.Disposable {
     failedPayload: Extract<InteractivePayloadResult, { ok: false }>,
     prepared: PreparedInteractiveState,
     criteriaSnapshot: SerializedFilterCriteria,
-    revision: number
+    revision: number,
+    session: PatternWorkerSession
   ): Promise<void> {
     // 失敗した結果はどちらのパターン段で起きたかを区別しないため、
     // フォールバックでは両方を落とす（issue #182）。片方だけ残して再実行すると、
@@ -662,7 +664,10 @@ export class InteractiveViewPanelController implements vscode.Disposable {
       matchPatterns: undefined,
       ignorePatterns: undefined,
     };
-    const fallbackPayload = await this.computePayload(fallbackCriteria, prepared.formatOptions);
+    const fallbackPayload = await this.computePayload(fallbackCriteria, {
+      ...prepared.formatOptions,
+      session,
+    });
     if (!this.refreshGate.isCurrent(revision) || !fallbackPayload.ok) {
       return;
     }
@@ -684,7 +689,8 @@ export class InteractiveViewPanelController implements vscode.Disposable {
       ],
       prepared.collapsibleSupported,
       criteriaSnapshot,
-      revision
+      revision,
+      session
     );
   }
 
@@ -706,25 +712,37 @@ export class InteractiveViewPanelController implements vscode.Disposable {
     // 計算中に届いた新しい条件と、この計算の結果とが1つのメッセージに混ざる。
     const criteriaSnapshot = this.criteria;
     const prepared = this.prepareInteractiveState(criteriaSnapshot);
-    const payload = await this.computePayload(prepared.criteria, prepared.formatOptions);
-    if (!this.refreshGate.isCurrent(revision)) {
-      return;
-    }
+    // この再描画で走るパターン処理（一致・無視・マスク・ハイライトと、失敗時の
+    // 再計算）を1つのワーカーで順に処理する（issue #303）。再描画をまたいで
+    // 共有しないのは、重なった再描画が互いを待たされないようにするため。
+    const session = new PatternWorkerSession();
+    try {
+      const payload = await this.computePayload(prepared.criteria, {
+        ...prepared.formatOptions,
+        session,
+      });
+      if (!this.refreshGate.isCurrent(revision)) {
+        return;
+      }
 
-    if (payload.ok) {
-      await this.sendState(
-        payload,
-        [
-          ...prepared.warnings,
-          ...maskPatternFailureWarnings(payload.maskPatternFailure, "display"),
-        ],
-        prepared.collapsibleSupported,
-        criteriaSnapshot,
-        revision
-      );
-      return;
+      if (payload.ok) {
+        await this.sendState(
+          payload,
+          [
+            ...prepared.warnings,
+            ...maskPatternFailureWarnings(payload.maskPatternFailure, "display"),
+          ],
+          prepared.collapsibleSupported,
+          criteriaSnapshot,
+          revision,
+          session
+        );
+        return;
+      }
+      await this.postFallbackState(payload, prepared, criteriaSnapshot, revision, session);
+    } finally {
+      session.dispose();
     }
-    await this.postFallbackState(payload, prepared, criteriaSnapshot, revision);
   }
 
   /**
@@ -768,7 +786,8 @@ export class InteractiveViewPanelController implements vscode.Disposable {
     warnings: readonly string[],
     collapsibleSupported: boolean,
     criteria: SerializedFilterCriteria,
-    revision: number
+    revision: number,
+    session: PatternWorkerSession
   ): Promise<void> {
     // パネルが閉じられた後、および後から始まった再描画に追い越された後は送らない。
     const panel = this.panel;
@@ -788,7 +807,7 @@ export class InteractiveViewPanelController implements vscode.Disposable {
     // 求める（issue #18）。範囲は描画される文字列のオフセットなので、この段階
     // より前では計算できない。ワーカーを1回挟むぶん待ちが増えるため、追い越し
     // 判定はこの後にもう一度行う。
-    const highlights = await this.computeHighlights(limited);
+    const highlights = await this.computeHighlights(limited, session);
     if (this.panel !== panel || !this.refreshGate.isCurrent(revision)) {
       return;
     }
@@ -829,14 +848,15 @@ export class InteractiveViewPanelController implements vscode.Disposable {
    * 警告だけは出す。
    */
   private async computeHighlights(
-    limited: LimitedInteractiveDisplay
+    limited: LimitedInteractiveDisplay,
+    session: PatternWorkerSession
   ): Promise<LineHighlights | undefined> {
     const rules = readHighlightRules(this.highlightRulesResource());
     if (rules.length === 0) {
       return undefined;
     }
 
-    const result = await highlightDisplayLines(collectDisplayLines(limited), rules);
+    const result = await highlightDisplayLines(collectDisplayLines(limited), rules, { session });
     if (!result.ok) {
       const message =
         result.reason === "timeout"

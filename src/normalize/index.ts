@@ -136,3 +136,5 @@ export type {
   LineHighlight,
 } from "./highlightDisplayLines";
 export { highlightDisplayLines } from "./highlightDisplayLines";
+export type { PatternJobResult, PatternWorkerOptions } from "./patternWorkerSession";
+export { PatternWorkerSession } from "./patternWorkerSession";

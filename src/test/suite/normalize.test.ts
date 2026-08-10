@@ -53,6 +53,7 @@ import {
   compileHighlightRules,
   highlightDisplayLines,
   DEFAULT_HIGHLIGHT_COLOR,
+  PatternWorkerSession,
 } from "../../normalize";
 import * as maskForCompare from "../../normalize/maskForCompare";
 
@@ -5598,5 +5599,149 @@ suite("normalize / continuation line indent (#256)", () => {
         "4 | <TIMESTAMP> INFO recovered",
       ].join("\n")
     );
+  });
+});
+
+suite("normalize / PatternWorkerSession (#303)", () => {
+  const SESSION_LOG = [
+    "2024-01-02T03:04:05Z INFO alpha user=alice",
+    "2024-01-02T03:04:06Z ERROR beta user=bob",
+    "2024-01-02T03:04:07Z WARN gamma user=carol",
+  ].join("\n");
+
+  test("does not start a worker when there is nothing to evaluate", async () => {
+    const session = new PatternWorkerSession();
+    try {
+      const result = await filterEntriesByMatchPattern(parseLog(SESSION_LOG), [], { session });
+
+      assert.strictEqual(result.ok, true);
+      assert.strictEqual(session.spawnCount, 0);
+    } finally {
+      session.dispose();
+    }
+  });
+
+  test("runs the pattern stages of one redraw on a single worker", async () => {
+    const entries = parseLog(SESSION_LOG);
+    const session = new PatternWorkerSession();
+    try {
+      const matched = await filterEntriesByMatchPattern(entries, [/alpha|beta/], { session });
+      assert.strictEqual(matched.ok, true);
+      const ignored = await filterEntriesByIgnorePattern(matched.entries, [/beta/], { session });
+      assert.strictEqual(ignored.ok, true);
+      const masked = await maskEntriesByPatterns(ignored.entries, [/user=\w+/], { session });
+      assert.strictEqual(masked.ok, true);
+      const { rules } = compileHighlightRules([{ pattern: "alpha" }]);
+      const highlighted = await highlightDisplayLines(["alpha"], rules, { session });
+      assert.strictEqual(highlighted.ok, true);
+
+      assert.deepStrictEqual(
+        masked.entries.map((entry) => entry.message),
+        ["alpha <MASKED>"]
+      );
+      assert.strictEqual(session.spawnCount, 1);
+    } finally {
+      session.dispose();
+    }
+  });
+
+  test("produces the same results with a shared session as without one", async () => {
+    const entries = parseLog(SESSION_LOG);
+    const session = new PatternWorkerSession();
+    try {
+      const shared = await maskEntriesByPatterns(entries, [/user=\w+/], { session });
+      const transient = await maskEntriesByPatterns(entries, [/user=\w+/]);
+
+      assert.strictEqual(shared.ok, true);
+      assert.strictEqual(transient.ok, true);
+      assert.deepStrictEqual(shared.entries, transient.entries);
+    } finally {
+      session.dispose();
+    }
+  });
+
+  test("starts a new worker for the next job after one times out", async function () {
+    this.timeout(5000);
+
+    const entries = parseLog(SESSION_LOG);
+    const session = new PatternWorkerSession();
+    try {
+      // 他のタイムアウトのテストと同じく、破局的バックトラッキングを起こす
+      // 正規表現ではなく、安全なパターンに極端に短い timeoutMs を与える。
+      const timedOut = await filterEntriesByMatchPattern(entries, [/alpha/], {
+        session,
+        timeoutMs: 1,
+      });
+      assert.strictEqual(timedOut.ok, false);
+
+      // 打ち切ったワーカーは使い回せない（強制終了しているため）ので、
+      // 次のジョブは新しいワーカーで走り、結果は通常どおり返る。
+      const next = await filterEntriesByMatchPattern(entries, [/alpha/], { session });
+
+      assert.strictEqual(next.ok, true);
+      assert.deepStrictEqual(
+        next.entries.map((entry) => entry.message),
+        ["alpha user=alice"]
+      );
+      assert.strictEqual(session.spawnCount, 2);
+    } finally {
+      session.dispose();
+    }
+  });
+
+  test("discards the worker on dispose", async () => {
+    const entries = parseLog(SESSION_LOG);
+    const session = new PatternWorkerSession();
+    try {
+      await filterEntriesByMatchPattern(entries, [/alpha/], { session });
+      assert.strictEqual(session.spawnCount, 1);
+
+      session.dispose();
+      const afterDispose = await filterEntriesByMatchPattern(entries, [/alpha/], { session });
+
+      assert.strictEqual(afterDispose.ok, true);
+      assert.strictEqual(session.spawnCount, 2);
+    } finally {
+      session.dispose();
+    }
+  });
+
+  test("shares one worker across the pattern stages of buildInteractivePayload", async () => {
+    const entries = parseLog(SESSION_LOG);
+    const session = new PatternWorkerSession();
+    try {
+      const payload = await buildInteractivePayload(
+        entries,
+        { matchPatterns: [/user=/], ignorePatterns: [/gamma/] },
+        { maskPatterns: [/user=\w+/], session }
+      );
+
+      assert.strictEqual(payload.ok, true);
+      assert.match(payload.text, /alpha <MASKED>/);
+      assert.doesNotMatch(payload.text, /gamma/);
+      assert.strictEqual(session.spawnCount, 1);
+    } finally {
+      session.dispose();
+    }
+  });
+
+  test("shares one worker across the pattern stages of buildInteractiveMergedPayload", async () => {
+    const merged = mergeLogFiles([
+      { fileName: "app.log", text: SESSION_LOG },
+      { fileName: "worker.log", text: "2024-01-02T03:04:08Z INFO delta user=dave" },
+    ]);
+    const session = new PatternWorkerSession();
+    try {
+      const payload = await buildInteractiveMergedPayload(
+        merged,
+        { matchPatterns: [/user=/], ignorePatterns: [/gamma/] },
+        { maskPatterns: [/user=\w+/], session }
+      );
+
+      assert.strictEqual(payload.ok, true);
+      assert.strictEqual(session.spawnCount, 1);
+    } finally {
+      session.dispose();
+    }
   });
 });
