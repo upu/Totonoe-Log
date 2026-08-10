@@ -37,7 +37,7 @@ export async function buildInteractiveMergedPayload(
   const filterResult = await filterMergedEntriesByCriteria(
     filterMergedEntriesByFileIndex(mergedEntries, options.visibleFileIndices),
     criteria,
-    { ignorePatternTimeoutMs: options.ignorePatternTimeoutMs }
+    { ignorePatternTimeoutMs: options.ignorePatternTimeoutMs, session: options.session }
   );
   if (!filterResult.ok) {
     return filterResult;
@@ -45,6 +45,7 @@ export async function buildInteractiveMergedPayload(
 
   const masked = await applyMaskPatternsToMergedEntries(filterResult.entries, options.maskPatterns, {
     timeoutMs: options.maskPatternTimeoutMs,
+    session: options.session,
   });
 
   const formatted = formatMergedLogWithLineSources(masked.entries, {

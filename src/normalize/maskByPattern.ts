@@ -1,6 +1,6 @@
-import { Worker } from "node:worker_threads";
 import type { LogEntry } from "./types";
 import type { MergedEntry } from "./mergeLogFiles";
+import { runPatternJob, type PatternWorkerOptions } from "./patternWorkerSession";
 
 /** 任意パターンで伏せた箇所の表示に使うプレースホルダー（issue #195）。 */
 export const CUSTOM_MASK_PLACEHOLDER = "<MASKED>";
@@ -23,32 +23,7 @@ export type MaskByPatternResult<TEntry> =
   | { readonly ok: true; readonly entries: TEntry[] }
   | { readonly ok: false; readonly reason: "timeout" | "error" };
 
-export interface MaskByPatternOptions {
-  /** 既定のタイムアウトを上書きしたい場合に指定する（主にテスト用）。 */
-  readonly timeoutMs?: number;
-}
-
-/**
- * ワーカースレッド側で実行する置換処理本体。`filterByIgnorePattern` と同じ理由で
- * 素の JS の文字列として複製している（ワーカーが呼び出し元のモジュールを
- * `require` できないため）。
- *
- * 行単位で置換するのは、`[\s\S]+` のような改行をまたぐパターンでも行数を
- * 変えないため——行数が変わると行ジャンプ（issue #179）と表示上限
- * （issue #178）が前提にしている「マスクしても行構成は変わらない」が崩れる。
- */
-const WORKER_SOURCE = `
-const { parentPort, workerData } = require("node:worker_threads");
-const { patterns, placeholder, texts } = workerData;
-const maskers = patterns.map(({ source, flags }) => new RegExp(source, flags));
-const masked = texts.map((text) =>
-  text
-    .split("\\n")
-    .map((line) => maskers.reduce((current, masker) => current.replace(masker, placeholder), line))
-    .join("\\n")
-);
-parentPort.postMessage(masked);
-`;
+export type MaskByPatternOptions = PatternWorkerOptions;
 
 /**
  * ユーザーが入力した任意の正規表現に一致した箇所を、プレースホルダーへ
@@ -153,7 +128,7 @@ export async function applyMaskPatternsToMergedEntries(
  * 関数と、置換後のメッセージでエントリを作り直す関数を受け取ることで、
  * ワーカーの起動とタイムアウト管理を1か所に閉じ込める。
  */
-function maskMessages<TEntry>(
+async function maskMessages<TEntry>(
   entries: readonly TEntry[],
   getMessage: (entry: TEntry) => string,
   withMessage: (entry: TEntry, message: string) => TEntry,
@@ -161,60 +136,33 @@ function maskMessages<TEntry>(
   options: MaskByPatternOptions
 ): Promise<MaskByPatternResult<TEntry>> {
   if (entries.length === 0) {
-    return Promise.resolve({ ok: true, entries: [] });
+    return { ok: true, entries: [] };
   }
 
-  const timeoutMs = options.timeoutMs ?? DEFAULT_TIMEOUT_MS;
   const texts = entries.map(getMessage);
+  const masked = await runPatternJob<string[]>(
+    options.session,
+    {
+      kind: "mask",
+      patterns: patterns.map((pattern) => ({
+        source: pattern.source,
+        // 一致箇所を「全て」置き換えるため、呼び出し側のフラグに関わらず `g` を
+        // 足す（`RegExp#replace` は `g` が無いと最初の1件しか置換しない）。
+        flags: pattern.flags.includes("g") ? pattern.flags : `${pattern.flags}g`,
+      })),
+      placeholder: CUSTOM_MASK_PLACEHOLDER,
+      texts,
+    },
+    options.timeoutMs ?? DEFAULT_TIMEOUT_MS
+  );
+  if (!masked.ok) {
+    return masked;
+  }
 
-  return new Promise((resolve) => {
-    const worker = new Worker(WORKER_SOURCE, {
-      eval: true,
-      workerData: {
-        patterns: patterns.map((pattern) => ({
-          source: pattern.source,
-          // 一致箇所を「全て」置き換えるため、呼び出し側のフラグに関わらず `g` を
-          // 足す（`RegExp#replace` は `g` が無いと最初の1件しか置換しない）。
-          flags: pattern.flags.includes("g") ? pattern.flags : `${pattern.flags}g`,
-        })),
-        placeholder: CUSTOM_MASK_PLACEHOLDER,
-        texts,
-      },
-    });
-
-    let settled = false;
-    const finish = (result: MaskByPatternResult<TEntry>): void => {
-      if (settled) {
-        return;
-      }
-      settled = true;
-      clearTimeout(timer);
-      void worker.terminate();
-      resolve(result);
-    };
-
-    const timer = setTimeout(() => {
-      finish({ ok: false, reason: "timeout" });
-    }, timeoutMs);
-
-    worker.once("message", (masked: string[]) => {
-      // タイムアウト済みなら、捨てられると分かっている結果は組み立てない
-      // （issue #237。`filterByIgnorePattern` と同じ理由）。
-      if (settled) {
-        return;
-      }
-      finish({
-        ok: true,
-        entries: entries.map((entry, index) =>
-          masked[index] === texts[index] ? entry : withMessage(entry, masked[index])
-        ),
-      });
-    });
-
-    // パターンは呼び出し側で `new RegExp` によりコンパイル済みのため通常は
-    // 到達しないが、ワーカー内での予期しない例外に備えたフェイルセーフ。
-    worker.once("error", () => {
-      finish({ ok: false, reason: "error" });
-    });
-  });
+  return {
+    ok: true,
+    entries: entries.map((entry, index) =>
+      masked.value[index] === texts[index] ? entry : withMessage(entry, masked.value[index])
+    ),
+  };
 }

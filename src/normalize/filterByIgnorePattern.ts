@@ -1,5 +1,9 @@
-import { Worker } from "node:worker_threads";
 import type { LogEntry } from "./types";
+import {
+  runPatternJob,
+  serializePatterns,
+  type PatternWorkerOptions,
+} from "./patternWorkerSession";
 
 /**
  * マッチング処理を打ち切るまでの既定タイムアウト（ミリ秒）。
@@ -21,37 +25,7 @@ export type FilterByIgnorePatternResult =
   | { readonly ok: true; readonly entries: LogEntry[] }
   | { readonly ok: false; readonly reason: "timeout" | "error" };
 
-export interface FilterByIgnorePatternOptions {
-  /** 既定のタイムアウトを上書きしたい場合に指定する（主にテスト用）。 */
-  readonly timeoutMs?: number;
-}
-
-/**
- * ワーカースレッド側で実行するマッチング処理本体。
- *
- * `Worker` に `eval: true` で渡す文字列のため、TypeScript の型チェックの
- * 外で実行される素の JS として書く。ロジックはこのファイルの以前の実装
- * （`RegExp#test` を複製したインスタンスで呼ぶだけ）と同一で、
- * ワーカーが呼び出し元のモジュールを `require` できない都合上、
- * 内容を文字列として複製している（数行のため保守コストは小さい）。
- *
- * 複数パターンは `{ source, flags }` の配列として受け取り、ここで `some()`
- * 判定する（issue #206）。交替正規表現へ連結しないのは、どのパターンが不正
- * なのかの帰属が失われ、破局的バックトラッキングのリスクも合成で増えるため。
- * ワーカーの起動は1回のままなので、パターンが増えても追加コストはほぼ無い。
- */
-const WORKER_SOURCE = `
-const { parentPort, workerData } = require("node:worker_threads");
-const { patterns, texts } = workerData;
-const matchers = patterns.map(({ source, flags }) => new RegExp(source, flags));
-const excluded = texts.map((text) =>
-  matchers.some((matcher) => {
-    matcher.lastIndex = 0;
-    return matcher.test(text);
-  })
-);
-parentPort.postMessage(excluded);
-`;
+export type FilterByIgnorePatternOptions = PatternWorkerOptions;
 
 /**
  * 指定した正規表現の**どれか**にマッチするエントリを除外する（issue #206）。
@@ -80,60 +54,25 @@ parentPort.postMessage(excluded);
  * させない）を満たし切れないため、実行時タイムアウトのみを唯一の対策
  * として採用する。
  */
-export function filterEntriesByIgnorePattern(
+export async function filterEntriesByIgnorePattern(
   entries: readonly LogEntry[],
   patterns: readonly RegExp[],
   options: FilterByIgnorePatternOptions = {}
 ): Promise<FilterByIgnorePatternResult> {
   if (entries.length === 0) {
-    return Promise.resolve({ ok: true, entries: [] });
+    return { ok: true, entries: [] };
   }
   if (patterns.length === 0) {
-    return Promise.resolve({ ok: true, entries: [...entries] });
+    return { ok: true, entries: [...entries] };
   }
 
-  const timeoutMs = options.timeoutMs ?? DEFAULT_TIMEOUT_MS;
-  const texts = entries.map((entry) => entry.raw);
-
-  return new Promise((resolve) => {
-    const worker = new Worker(WORKER_SOURCE, {
-      eval: true,
-      workerData: {
-        patterns: patterns.map((pattern) => ({ source: pattern.source, flags: pattern.flags })),
-        texts,
-      },
-    });
-
-    let settled = false;
-    const finish = (result: FilterByIgnorePatternResult): void => {
-      if (settled) {
-        return;
-      }
-      settled = true;
-      clearTimeout(timer);
-      void worker.terminate();
-      resolve(result);
-    };
-
-    const timer = setTimeout(() => {
-      finish({ ok: false, reason: "timeout" });
-    }, timeoutMs);
-
-    worker.once("message", (excluded: boolean[]) => {
-      // `worker.terminate()` は非同期なので、タイムアウトで打ち切った直後に
-      // ワーカーのメッセージが届くことがある。`finish` が捨てると分かって
-      // いる結果を組み立てても無駄なので、その前に降りる（issue #237）。
-      if (settled) {
-        return;
-      }
-      const filtered = entries.filter((_entry, index) => !excluded[index]);
-      finish({ ok: true, entries: filtered });
-    });
-
-    // パターンは呼び出し側で `new RegExp` によりコンパイル済みのため通常は
-    // 到達しないが、ワーカー内での予期しない例外に備えたフェイルセーフ。
-    worker.once("error", () => {
-      finish({ ok: false, reason: "error" });
-    });
-  });
+  const excluded = await runPatternJob<boolean[]>(
+    options.session,
+    { kind: "test", patterns: serializePatterns(patterns), texts: entries.map((entry) => entry.raw) },
+    options.timeoutMs ?? DEFAULT_TIMEOUT_MS
+  );
+  if (!excluded.ok) {
+    return excluded;
+  }
+  return { ok: true, entries: entries.filter((_entry, index) => !excluded.value[index]) };
 }

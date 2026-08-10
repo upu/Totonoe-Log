@@ -6,6 +6,7 @@ import { getDistinctSeverities } from "./filterBySeverity";
 import { filterEntriesByCriteria, type FilterCriteria } from "./filterEntries";
 import { isFileIndexVisible, SINGLE_FILE_INDEX } from "./filterByFile";
 import { applyMaskPatternsToEntries } from "./maskByPattern";
+import type { PatternWorkerSession } from "./patternWorkerSession";
 import { formatNormalizedLogWithLineSources } from "./formatNormalizedLog";
 import { buildInteractiveCollapsedLines, type InteractiveDisplayItem } from "./buildInteractiveCollapsedLines";
 
@@ -49,6 +50,13 @@ export interface BuildInteractivePayloadOptions {
    * しないようにするため。
    */
   readonly visibleFileIndices?: ReadonlySet<number>;
+
+  /**
+   * 一致・無視・マスクのパターン処理で共有するワーカー（issue #303）。
+   * Interactive View は再描画1回ぶんのセッションを渡し、ハイライトも同じものを
+   * 使う。未指定なら各処理がそれぞれワーカーを起動する（従来どおり）。
+   */
+  readonly session?: PatternWorkerSession;
 }
 
 export type InteractivePayloadResult =
@@ -95,6 +103,7 @@ export async function buildInteractivePayload(
     : [];
   const filterResult = await filterEntriesByCriteria(fileVisibleEntries, criteria, {
     ignorePatternTimeoutMs: options.ignorePatternTimeoutMs,
+    session: options.session,
   });
   if (!filterResult.ok) {
     return filterResult;
@@ -104,6 +113,7 @@ export async function buildInteractivePayload(
   // 絞り込むという既存の扱い（`mask` のコメント参照）を、こちらでも揃えるため。
   const masked = await applyMaskPatternsToEntries(filterResult.entries, options.maskPatterns, {
     timeoutMs: options.maskPatternTimeoutMs,
+    session: options.session,
   });
 
   const formatted = formatNormalizedLogWithLineSources(masked.entries, {

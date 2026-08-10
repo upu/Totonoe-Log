@@ -1,5 +1,5 @@
-import { Worker } from "node:worker_threads";
 import type { HighlightColor, HighlightRule } from "./highlightRules";
+import { runPatternJob, type PatternWorkerOptions } from "./patternWorkerSession";
 
 /**
  * マッチング処理を打ち切るまでの既定タイムアウト（ミリ秒）。
@@ -32,65 +32,7 @@ export type HighlightDisplayLinesResult =
   | { readonly ok: true; readonly highlights: [string, LineHighlight[]][] }
   | { readonly ok: false; readonly reason: "timeout" | "error" };
 
-export interface HighlightDisplayLinesOptions {
-  /** 既定のタイムアウトを上書きしたい場合に指定する（主にテスト用）。 */
-  readonly timeoutMs?: number;
-}
-
-/**
- * ワーカースレッド側で実行するマッチング処理本体。`filterByIgnorePattern` と
- * 同じ理由で素の JS の文字列として複製している（ワーカーが呼び出し元の
- * モジュールを `require` できないため）。
- *
- * 重なった範囲は**先に書かれたルールを優先**して落とす。重なりをそのまま返すと
- * 描画時にどちらの色を出すか決められないうえ、後勝ちにすると一覧の上に足した
- * ルールが効かなくなって驚くため。開始位置ではなくルール順に採用していくのは、
- * 開始位置を第1キーにすると「より左から始まった後ろのルール」が前のルールを
- * 潰してしまい、この優先順位が崩れるため（issue #298）。落とす単位はルール
- * 全体ではなく範囲ごとなので、同じルールでも重ならない一致は残る。
- *
- * 返す前に開始位置で並べ直すのは、Webview 側が先頭からカーソルを進めながら
- * 描くため——昇順・重なり無しであることが描画の前提になっている。
- *
- * 幅0のマッチ（`x*` 等）は `lastIndex` が進まず無限ループになるので、必ず1つ
- * 進める。範囲としても残さない——色を付けても何も見えないため。
- */
-const WORKER_SOURCE = `
-const { parentPort, workerData } = require("node:worker_threads");
-const { rules, lines } = workerData;
-const matchers = rules.map(({ source, flags }) => new RegExp(source, flags));
-
-const highlights = lines.map((line) => {
-  const found = [];
-  matchers.forEach((matcher, ruleIndex) => {
-    matcher.lastIndex = 0;
-    let match;
-    while ((match = matcher.exec(line)) !== null) {
-      if (match[0].length === 0) {
-        matcher.lastIndex += 1;
-        continue;
-      }
-      found.push({ start: match.index, end: match.index + match[0].length, ruleIndex });
-    }
-  });
-
-  found.sort((a, b) => a.ruleIndex - b.ruleIndex || a.start - b.start);
-
-  const accepted = [];
-  for (const range of found) {
-    const overlaps = accepted.some((other) => range.start < other.end && other.start < range.end);
-    if (overlaps) {
-      continue;
-    }
-    accepted.push({ start: range.start, end: range.end, color: rules[range.ruleIndex].color });
-  }
-
-  accepted.sort((a, b) => a.start - b.start);
-  return accepted;
-});
-
-parentPort.postMessage(highlights);
-`;
+export type HighlightDisplayLinesOptions = PatternWorkerOptions;
 
 /**
  * 表示する行のうち、ハイライトルールに一致した箇所の範囲を求める（issue #18）。
@@ -103,69 +45,46 @@ parentPort.postMessage(highlights);
  * ホストがフリーズしうる。別スレッドに逃がしてタイムアウトで強制終了する
  * 対処は絞り込み（`filterByIgnorePattern`）・マスク（`maskByPattern`）と同じで、
  * 詳しい背景はそちらのコメント参照。
+ *
+ * 重なった範囲の扱い（#298）と幅0のマッチの扱いを含むマッチング本体は、
+ * 4種類のパターン処理で1つのワーカーを共有するため `patternWorkerSession` に
+ * ある（issue #303）。
  */
-export function highlightDisplayLines(
+export async function highlightDisplayLines(
   lines: readonly string[],
   rules: readonly HighlightRule[],
   options: HighlightDisplayLinesOptions = {}
 ): Promise<HighlightDisplayLinesResult> {
   if (rules.length === 0 || lines.length === 0) {
-    return Promise.resolve({ ok: true, highlights: [] });
+    return { ok: true, highlights: [] };
   }
 
-  const timeoutMs = options.timeoutMs ?? DEFAULT_TIMEOUT_MS;
   const distinctLines = [...new Set(lines)];
+  const matched = await runPatternJob<(LineHighlight[] | undefined)[]>(
+    options.session,
+    {
+      kind: "highlight",
+      rules: rules.map((rule) => ({
+        source: rule.regex.source,
+        flags: rule.regex.flags,
+        color: rule.color,
+      })),
+      lines: distinctLines,
+    },
+    options.timeoutMs ?? DEFAULT_TIMEOUT_MS
+  );
+  if (!matched.ok) {
+    return matched;
+  }
 
-  return new Promise((resolve) => {
-    const worker = new Worker(WORKER_SOURCE, {
-      eval: true,
-      workerData: {
-        rules: rules.map((rule) => ({
-          source: rule.regex.source,
-          flags: rule.regex.flags,
-          color: rule.color,
-        })),
-        lines: distinctLines,
-      },
-    });
-
-    let settled = false;
-    const finish = (result: HighlightDisplayLinesResult): void => {
-      if (settled) {
-        return;
-      }
-      settled = true;
-      clearTimeout(timer);
-      void worker.terminate();
-      resolve(result);
-    };
-
-    const timer = setTimeout(() => {
-      finish({ ok: false, reason: "timeout" });
-    }, timeoutMs);
-
-    worker.once("message", (matched: (LineHighlight[] | undefined)[]) => {
-      // タイムアウト済みなら、捨てられると分かっている結果は組み立てない
-      // （issue #237。`filterByIgnorePattern` と同じ理由）。
-      if (settled) {
-        return;
-      }
-      const highlights: [string, LineHighlight[]][] = [];
-      distinctLines.forEach((line, index) => {
-        const ranges = matched[index];
-        // 一致が無かった行は組そのものを作らない（Webview 側は引けなければ
-        // 従来どおりのプレーンな1行として描く）。
-        if (ranges && ranges.length > 0) {
-          highlights.push([line, ranges]);
-        }
-      });
-      finish({ ok: true, highlights });
-    });
-
-    // ルールは呼び出し側で `new RegExp` によりコンパイル済みのため通常は
-    // 到達しないが、ワーカー内での予期しない例外に備えたフェイルセーフ。
-    worker.once("error", () => {
-      finish({ ok: false, reason: "error" });
-    });
+  const highlights: [string, LineHighlight[]][] = [];
+  distinctLines.forEach((line, index) => {
+    const ranges = matched.value[index];
+    // 一致が無かった行は組そのものを作らない（Webview 側は引けなければ
+    // 従来どおりのプレーンな1行として描く）。
+    if (ranges && ranges.length > 0) {
+      highlights.push([line, ranges]);
+    }
   });
+  return { ok: true, highlights };
 }

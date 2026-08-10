@@ -57,6 +57,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   merged display and its export drop the column too, including the line-number
   range on collapsed group headers (issue #171).
 
+- **The Interactive View redraws faster on large logs.** Match patterns, ignore
+  patterns, mask patterns and highlight rules each started their own worker
+  thread, so every redraw paid four thread startups (about 20 ms each). They now
+  share one worker per redraw. On a 200,000-line (20 MiB) log with a filter that
+  keeps a fifth of the lines, a redraw went from 267 ms to 203 ms; a redraw with
+  no patterns and no highlight rules starts no worker at all. Results, warnings
+  and the way pattern processing degrades on timeout are unchanged (issue #303).
+
 ### Fixed
 
 - **The Interactive View display limit now counts the header row of every
