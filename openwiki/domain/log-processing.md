@@ -62,7 +62,7 @@ flowchart TD
 
 ### `LineSource`
 
-表示行を `{ fileIndex, line }` へ結び付ける。ギャップマーカー等の生成行は `undefined` である。formatterは本文と行対応を同時に作り、フィルタや折りたたみ後も可能な範囲で元行ジャンプを維持する。この関係は[ログ調査ワークフロー](/openwiki/workflows/log-investigation.md)と[VS Code統合](/openwiki/integrations/vscode.md)の双方で使われる。
+表示行を `{ fileIndex, line }` へ結び付ける。ギャップマーカー等の生成行は `undefined` である。formatterは本文と行対応を同時に作り、フィルタや折りたたみ後も可能な範囲で元行ジャンプを維持する。マージ表示は複数ファイル間で重複・前後する元行番号をガターに出さないが、`LineSource` と `LogEntry.startLine` は保持するため、元行ジャンプの契約は変わらない。この関係は[ログ調査ワークフロー](/openwiki/workflows/log-investigation.md)と[VS Code統合](/openwiki/integrations/vscode.md)の双方で使われる。
 
 ```mermaid
 erDiagram
@@ -90,7 +90,7 @@ erDiagram
 
 `FilterCriteria` の指定フィールド間はAND、`matchPatterns` 内と `ignorePatterns` 内はそれぞれORである。適用順はseverity、date range、match、ignore。軽い条件を先に適用し、通常は強く絞るmatchをignoreより先にして、workerで評価する件数を減らす。
 
-matchとignoreは `raw` ではなく複数行の `message` を対象にする。時刻とseverityには専用条件があり、メッセージ中のスタックトレースをエントリ単位で残すためである。正規表現の評価失敗時は、誤った全件表示へ黙ってfallbackせず、呼び出し側が警告と現在表示の維持を選べる結果を返す。
+matchとignoreは `raw` ではなく複数行の `message` を対象にする。時刻とseverityには専用条件があり、メッセージ中のスタックトレースをエントリ単位で残すためである。日付範囲は両端を含み、`YYYY-MM-DD HH:mm[:ss]` の終了境界では、書かれた最小単位の末尾までを含める。たとえば `2024-01-02 10:30` は `10:30:59.999`、秒まで指定した場合もその秒の `.999` が上限になる。開始境界の省略単位は従来どおり0で補う。正規表現の評価失敗時は、誤った全件表示へ黙ってfallbackせず、呼び出し側が警告と現在表示の維持を選べる結果を返す。
 
 ## マスクと折りたたみ
 

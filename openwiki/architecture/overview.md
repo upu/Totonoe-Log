@@ -78,7 +78,7 @@ sequenceDiagram
 
 この図は、Webviewを描画専用に保ち、処理とexportを拡張ホストへ集約する流れを示す。
 
-ユーザー入力の正規表現は重くなり得る。match、ignore、mask、highlightはworkerとタイムアウトで拡張ホストを守る。さらに `RefreshRevisionGate` がlatest-winsを保証し、古い重い条件の完了結果が新しい表示を巻き戻さないようにする。詳細な操作順は[ログ調査ワークフロー](/openwiki/workflows/log-investigation.md)、回帰確認は[テスト戦略](/openwiki/testing/guide.md)を参照する。
+ユーザー入力の正規表現は重くなり得る。match、ignore、mask、highlightはworkerとジョブ単位のタイムアウトで拡張ホストを守る。`src/normalize/patternWorkerSession.ts` の `PatternWorkerSession` は、1回の再描画内ではこれらの処理に同じworkerを使い、起動コストを抑える。セッションは再描画をまたいで共有せず、重なった再描画を別workerで並行できるようにする。timeoutまたはworkerエラー時はそのworkerを破棄し、次のジョブで再生成する。さらに `RefreshRevisionGate` がlatest-winsを保証し、古い重い条件の完了結果が新しい表示を巻き戻さないようにする。詳細な操作順は[ログ調査ワークフロー](/openwiki/workflows/log-investigation.md)、回帰確認は[テスト戦略](/openwiki/testing/guide.md)を参照する。
 
 ## ビルド境界
 
