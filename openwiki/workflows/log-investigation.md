@@ -46,26 +46,28 @@ sequenceDiagram
   participant NM as 正規化処理
   UI->>CT: filterChanged
   CT->>CT: revisionを開始
-  CT->>WK: match ignore maskを評価
+  CT->>WK: 同じsessionでmatch ignore maskを評価
   WK-->>CT: 結果またはtimeout
   CT->>CT: revisionが最新か確認
-  CT->>NM: collapse format limit highlight
-  NM-->>CT: 表示状態
+  CT->>NM: collapse format limit
+  NM-->>CT: 表示候補
+  CT->>WK: 同じsessionでhighlightを評価
+  WK-->>CT: ハイライト範囲またはtimeout
   CT-->>UI: state
 ```
 
-この図は、重い正規表現評価を隔離し、古い要求の結果を捨てるlatest-wins再描画を示す。
+この図は、重い正規表現評価を隔離し、1回の再描画内ではmatch・ignore・mask・highlightに同じ `PatternWorkerSession` を使いながら、古い要求の結果を捨てるlatest-wins再描画を示す。セッションは再描画ごとに破棄されるため、重なった再描画は互いのworker待ちにならない。
 
 1ファイルでは元の行順を維持し、2ファイル以上で時刻順へmergeする。ファイル表示、severity、date、match、ignoreを適用した後、custom mask、collapse、format、表示上限、highlightの順に状態を作る。設定変更のうち `timestampFormats`、source/file timezone offset、clock skewは再parseを必要とし、その他は保持済みエントリから再描画する。
 
-match・ignoreの各欄は欄内OR、欄同士ANDである。不正な個別パターンは名指しして外し、残りを動かす。表示上限 `totonoeLog.interactiveView.maxDisplayLines` はWebview送信時だけに効き、exportは全結果を対象にする。
+match・ignoreの各欄は欄内OR、欄同士ANDである。不正な個別パターンは名指しして外し、残りを動かす。日付範囲の終了値は入力した最小単位の末尾までを含み、たとえば分までの入力はその分の `59.999` 秒まで残す。表示上限 `totonoeLog.interactiveView.maxDisplayLines` はWebview送信時だけに効き、折りたたみでは見出し行と展開後の全行を合わせたDOM行数を数える。exportは切り詰めず全結果を対象にする。
 
 ## マスク、折りたたみ、ハイライト
 
 - マスクは標準対象のtimestamp、host/IP、PIDに加え、キー値と任意正規表現を扱う。
 - キー・任意パターンは設定へ保存しない。隠したい語自体を設定に残さないためである。
 - マスク後に同じに見える連続行はcollapseできる。マージでは由来ファイルをまたいでまとめる。
-- highlightは行を消すfilterとは別で、周辺文脈を残したまま一致箇所へ色を付ける。設定の唯一の置き場は `totonoeLog.highlightRules` で、パネル編集もそこへ書き戻す。
+- highlightは行を消すfilterとは別で、周辺文脈を残したまま一致箇所へ色を付ける。範囲が重なる場合は `totonoeLog.highlightRules` で先に書かれたルールを優先し、後続ルールの非重複一致は残す。設定の唯一の置き場は同じ `totonoeLog.highlightRules` で、パネル編集もそこへ書き戻す。
 - マルチルートでは既存定義のあるfolder scopeへ書き戻すことを `src/highlightRuleSettings.ts` が保証する。
 
 ## Export as Virtual Document
@@ -82,6 +84,6 @@ exportにはファイル表示、filter、merge、collapse、mask、行対応が
 
 ## 元行ジャンプ
 
-仮想文書はproviderの `SourceLineMap`、Interactive Viewは各表示項目の `LineSource` を使い、最終的に `revealSourceLine` へ渡す。ギャップ等の生成行には対応先がない。collapse見出しはWebviewでは展開操作を優先し、export文書ではグループ先頭へ対応付けられる。
+仮想文書はproviderの `SourceLineMap`、Interactive Viewは各表示項目の `LineSource` を使い、最終的に `revealSourceLine` へ渡す。マージ表示では複数ファイル間で意味の揃わない元行番号ガターを表示しないが、この対応表は維持される。単一ファイル表示の行番号ガターは残る。ギャップ等の生成行には対応先がない。collapse見出しはWebviewでは展開操作を優先し、export文書ではグループ先頭へ対応付けられる。
 
 この一連のVS Code接続は[VS Code統合](/openwiki/integrations/vscode.md)、変更箇所は[ソースマップ](/openwiki/source-map.md)、回帰テストは[テスト戦略](/openwiki/testing/guide.md)を参照する。

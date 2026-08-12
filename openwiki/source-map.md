@@ -20,6 +20,7 @@ tags: [source-map, history, navigation]
 | mask・compare | `maskForCompare.ts`, `displayMask.ts` | `copyMasked.ts`, `compareView.ts` |
 | collapse | `collapseRepeatedEntries.ts`, `collapseMergedEntries.ts` | `buildInteractiveCollapsedLines.ts` |
 | highlight | `highlightRules.ts`, `highlightDisplayLines.ts` | `highlightRuleSettings.ts`, Webview `main.ts` |
+| worker・pattern評価 | `src/normalize/patternWorkerSession.ts` | `filterByMatchPattern.ts`, `filterByIgnorePattern.ts`, `maskByPattern.ts`, `highlightDisplayLines.ts`, `buildInteractivePayload.ts`, `normalize.test.ts` |
 | Interactive View | `src/interactiveView.ts`, `src/interactiveViewHtml.ts` | `protocol.ts`, `main.ts`, `interactiveView.test.ts`, `interactiveViewHtml.test.ts` |
 | 仮想文書 lifecycle | `src/virtualDocumentContentProvider.ts` | `normalizedView.ts`, `mergedView.ts`, `compareView.ts`, `virtualDocumentGuard.test.ts` |
 | 元行ジャンプ | `lineSources.ts`, `revealSourceLine.ts` | `goToSourceLine.ts`, `goToSourceLine.test.ts`, Webview message |
