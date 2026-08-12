@@ -8,6 +8,8 @@
 
 ## [Unreleased]
 
+## [0.12.0] - 2026-08-12
+
 ### Added
 
 - **JSON Lines（NDJSON）のログを他の形式と同じように正規化するようにした。**
@@ -747,7 +749,8 @@
   ドットファイルの場合に名前全体が消えてしまい、`/.normalized-1.log`
   のようなパスになっていた問題を修正。先頭のドットは保持されるようにした。
 
-[Unreleased]: https://github.com/upu/Totonoe-Log/compare/v0.11.0...HEAD
+[Unreleased]: https://github.com/upu/Totonoe-Log/compare/v0.12.0...HEAD
+[0.12.0]: https://github.com/upu/Totonoe-Log/releases/tag/v0.12.0
 [0.11.0]: https://github.com/upu/Totonoe-Log/releases/tag/v0.11.0
 [0.10.0]: https://github.com/upu/Totonoe-Log/releases/tag/v0.10.0
 [0.9.0]: https://github.com/upu/Totonoe-Log/releases/tag/v0.9.0
