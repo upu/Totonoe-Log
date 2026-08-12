@@ -8,6 +8,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.12.0] - 2026-08-12
+
 ### Added
 
 - **JSON Lines (NDJSON) logs are normalized like any other format.** Records
@@ -800,7 +802,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   entire base name for dotfiles with no other extension (e.g. `.env`),
   producing a path like `/.normalized-1.log`. Leading dots are now preserved.
 
-[Unreleased]: https://github.com/upu/Totonoe-Log/compare/v0.11.0...HEAD
+[Unreleased]: https://github.com/upu/Totonoe-Log/compare/v0.12.0...HEAD
+[0.12.0]: https://github.com/upu/Totonoe-Log/releases/tag/v0.12.0
 [0.11.0]: https://github.com/upu/Totonoe-Log/releases/tag/v0.11.0
 [0.10.0]: https://github.com/upu/Totonoe-Log/releases/tag/v0.10.0
 [0.9.0]: https://github.com/upu/Totonoe-Log/releases/tag/v0.9.0

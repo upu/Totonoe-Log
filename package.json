@@ -2,7 +2,7 @@
   "name": "totonoe-log",
   "displayName": "%displayName%",
   "description": "%description%",
-  "version": "0.11.0",
+  "version": "0.12.0",
   "publisher": "upu",
   "icon": "media/icon.png",
   "license": "MIT",
