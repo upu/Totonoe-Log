@@ -42,5 +42,21 @@ export function buildInteractiveViewLabels(): InteractiveViewLabels {
       "The display limit of {0} lines was exceeded, so only the first {1} lines are shown. Filter the results to view all matching lines, or use Export as Virtual Document to open the complete result."
     ),
     statusMessage: vscode.l10n.t("Showing {0} / {1} lines"),
+    timestampFormatNameAriaLabel: vscode.l10n.t("Timestamp format name (optional)"),
+    timestampFormatPatternAriaLabel: vscode.l10n.t("Pattern to recognize (regular expression)"),
+    removeTimestampFormatTitle: vscode.l10n.t("Delete this timestamp format"),
+    removeTimestampFormatAriaLabel: vscode.l10n.t("Delete this timestamp format"),
+    suggestFromSelectionLabel: vscode.l10n.t("Suggest from selection"),
+    noSelectionMessage: vscode.l10n.t("Select part of a line first."),
+    addProposalLabel: vscode.l10n.t("+ Add to timestamp formats"),
+    ambiguousDayMonthOrderHint: vscode.l10n.t(
+      "The day/month order was ambiguous — pick one if this looks wrong:"
+    ),
+    dayMonthOrderDmyLabel: vscode.l10n.t("Use day, month order"),
+    dayMonthOrderMdyLabel: vscode.l10n.t("Use month, day order"),
+    matchSummaryMessage: vscode.l10n.t("{0} / {1} unrecognized lines matched"),
+    savedToWorkspaceLabel: vscode.l10n.t("Saved to workspace settings"),
+    savedToUserLabel: vscode.l10n.t("Saved to user settings"),
+    unrecognizedLinesEmptyMessage: vscode.l10n.t("No unrecognized lines to select from."),
   };
 }

@@ -28,6 +28,14 @@ import {
 } from "../../highlightRuleSettings";
 import { DEFAULT_HIGHLIGHT_COLOR } from "../../normalize";
 import { reresolveLogFileOffsets } from "../../logFileReading";
+import {
+  currentTimestampFormatsScope,
+  readTimestampFormatRows,
+  resolveTimestampFormatsTarget,
+  toTimestampFormatRows,
+  toTimestampFormatSettings,
+  writeTimestampFormatRows,
+} from "../../timestampFormatSettings";
 import type {
   SerializedFilterCriteria,
   SerializedFilterPattern,
@@ -1155,6 +1163,211 @@ suite("highlightRuleSettings / resource scope (#240)", () => {
       await writeHighlightRuleRows([{ pattern: "boom", color: "red" }], undefined);
       assert.deepStrictEqual(stub.scopes, [undefined]);
       assert.strictEqual(stub.updates[0].target, vscode.ConfigurationTarget.Global);
+    } finally {
+      stub.restore();
+    }
+  });
+});
+
+suite("timestampFormatSettings / toTimestampFormatRows (#316)", () => {
+  test("turns each setting entry into an editable row", () => {
+    const rows = toTimestampFormatRows([
+      { name: "jp-date", pattern: "(?<y>\\d{4})年" },
+      { pattern: "(?<epochMs>\\d{13})" },
+    ]);
+
+    assert.deepStrictEqual(rows, [
+      { name: "jp-date", pattern: "(?<y>\\d{4})年" },
+      { name: "", pattern: "(?<epochMs>\\d{13})" },
+    ]);
+  });
+
+  test("keeps a pattern that is an invalid regex, so it can be repaired in the panel", () => {
+    // compileCustomTimestampFormats はこれを弾くが、パネルからは見えて直せる
+    // 必要がある——隠すと「設定したのに一覧に無い」になる（#238 と同じ理由）。
+    const rows = toTimestampFormatRows([{ name: "broken", pattern: "(unterminated" }]);
+
+    assert.strictEqual(rows.length, 1);
+    assert.strictEqual(rows[0].pattern, "(unterminated");
+  });
+
+  test("skips entries that are not objects at all", () => {
+    const rows = toTimestampFormatRows(["nonsense", null, { pattern: "kept" }]);
+
+    assert.deepStrictEqual(
+      rows.map((row) => row.pattern),
+      ["kept"]
+    );
+  });
+
+  test("treats a setting that is not an array as no rows at all", () => {
+    assert.deepStrictEqual(toTimestampFormatRows({ pattern: "oops" } as never), []);
+  });
+
+  test("falls back to empty strings when the fields are not strings", () => {
+    const rows = toTimestampFormatRows([{ name: 42, pattern: null }]);
+
+    assert.deepStrictEqual(rows, [{ name: "", pattern: "" }]);
+  });
+});
+
+suite("timestampFormatSettings / toTimestampFormatSettings (#316)", () => {
+  test("writes back the pattern and a non-empty name", () => {
+    const settings = toTimestampFormatSettings([{ name: "jp-date", pattern: "(?<y>\\d{4})年" }]);
+
+    assert.deepStrictEqual(settings, [{ name: "jp-date", pattern: "(?<y>\\d{4})年" }]);
+  });
+
+  test("omits an empty name instead of writing an empty string", () => {
+    const settings = toTimestampFormatSettings([{ name: "  ", pattern: "(?<epochMs>\\d{13})" }]);
+
+    assert.deepStrictEqual(settings, [{ pattern: "(?<epochMs>\\d{13})" }]);
+  });
+
+  test("drops rows whose pattern is still blank", () => {
+    // 「+ 追加」を押した直後の行は、まだ形式ではないので設定に書かない。
+    const settings = toTimestampFormatSettings([
+      { name: "", pattern: "  " },
+      { name: "", pattern: "kept" },
+    ]);
+
+    assert.deepStrictEqual(settings, [{ pattern: "kept" }]);
+  });
+
+  test("survives rows that are not shaped as expected", () => {
+    const settings = toTimestampFormatSettings(["nonsense", null, { pattern: 42 }, { pattern: "kept" }]);
+
+    assert.deepStrictEqual(settings, [{ pattern: "kept" }]);
+  });
+
+  test("keeps the row order, since it decides which format is tried first", () => {
+    const settings = toTimestampFormatSettings([
+      { name: "", pattern: "first" },
+      { name: "", pattern: "second" },
+    ]);
+
+    assert.deepStrictEqual(
+      settings.map((setting) => setting.pattern),
+      ["first", "second"]
+    );
+  });
+});
+
+suite("timestampFormatSettings / resolveTimestampFormatsTarget (#316)", () => {
+  test("writes back to the workspace when the formats are defined there", () => {
+    assert.strictEqual(
+      resolveTimestampFormatsTarget({ workspaceValue: [] }, true),
+      vscode.ConfigurationTarget.Workspace
+    );
+  });
+
+  test("writes back to the user settings when the formats are defined there", () => {
+    assert.strictEqual(
+      resolveTimestampFormatsTarget({ globalValue: [] }, true),
+      vscode.ConfigurationTarget.Global
+    );
+  });
+
+  test("uses the user settings the first time, when the formats are defined nowhere", () => {
+    assert.strictEqual(resolveTimestampFormatsTarget({}, true), vscode.ConfigurationTarget.Global);
+  });
+
+  test("falls back to the user settings when no workspace is open to write to", () => {
+    assert.strictEqual(
+      resolveTimestampFormatsTarget({ workspaceValue: [] }, false),
+      vscode.ConfigurationTarget.Global
+    );
+  });
+});
+
+suite("timestampFormatSettings / resource-less scope (#316)", () => {
+  /**
+   * `readConfiguredTimestampFormats`（パース経路）がリソース無しで読む都合上、
+   * 書き戻しも常にリソース無しで行う必要がある——`highlightRuleSettings` と違い
+   * `WorkspaceFolder` 層を持たないのはこのため（#320 の設計判断）。この
+   * スタブは `totonoeLog` セクションに渡された scope 引数を記録し、常に
+   * `undefined` であることを確認する。
+   */
+  function stubConfiguration(options: {
+    readonly value?: unknown[];
+    readonly withWorkspaceFolder?: boolean;
+  }): {
+    readonly scopes: (vscode.ConfigurationScope | null | undefined)[];
+    readonly updates: { key: string; value: unknown; target: unknown }[];
+    restore(): void;
+  } {
+    const scopes: (vscode.ConfigurationScope | null | undefined)[] = [];
+    const updates: { key: string; value: unknown; target: unknown }[] = [];
+    const original = vscode.workspace.getConfiguration;
+
+    (vscode.workspace as any).getConfiguration = (
+      section?: string,
+      scope?: vscode.ConfigurationScope | null
+    ) => {
+      if (section !== "totonoeLog") {
+        return original(section, scope);
+      }
+      scopes.push(scope);
+      return {
+        get: (key: string, defaultValue: unknown) =>
+          key === "timestampFormats" ? (options.value ?? defaultValue) : defaultValue,
+        inspect: () => ({ workspaceValue: options.value }),
+        update: async (key: string, value: unknown, target: unknown) => {
+          updates.push({ key, value, target });
+        },
+      };
+    };
+
+    const originalFolders = Object.getOwnPropertyDescriptor(vscode.workspace, "workspaceFolders");
+    if (options.withWorkspaceFolder) {
+      Object.defineProperty(vscode.workspace, "workspaceFolders", {
+        configurable: true,
+        get: () => [{ uri: vscode.Uri.file("/folder-a"), name: "folder-a", index: 0 }],
+      });
+    }
+
+    return {
+      scopes,
+      updates,
+      restore: () => {
+        (vscode.workspace as any).getConfiguration = original;
+        if (options.withWorkspaceFolder && originalFolders) {
+          Object.defineProperty(vscode.workspace, "workspaceFolders", originalFolders);
+        }
+      },
+    };
+  }
+
+  test("readTimestampFormatRows reads without scoping to any resource", () => {
+    const stub = stubConfiguration({ value: [{ pattern: "boom" }] });
+    try {
+      const rows = readTimestampFormatRows();
+      assert.deepStrictEqual(stub.scopes, [undefined]);
+      assert.deepStrictEqual(
+        rows.map((row) => row.pattern),
+        ["boom"]
+      );
+    } finally {
+      stub.restore();
+    }
+  });
+
+  test("writeTimestampFormatRows writes without scoping to any resource, even in a workspace", async () => {
+    const stub = stubConfiguration({ withWorkspaceFolder: true });
+    try {
+      await writeTimestampFormatRows([{ pattern: "boom" }]);
+      assert.deepStrictEqual(stub.scopes, [undefined]);
+      assert.strictEqual(stub.updates.length, 1);
+      assert.strictEqual(stub.updates[0].key, "timestampFormats");
+    } finally {
+      stub.restore();
+    }
+  });
+
+  test("currentTimestampFormatsScope reports workspace once a value is defined there", () => {
+    const stub = stubConfiguration({ value: [{ pattern: "boom" }], withWorkspaceFolder: true });
+    try {
+      assert.strictEqual(currentTimestampFormatsScope(), "workspace");
     } finally {
       stub.restore();
     }

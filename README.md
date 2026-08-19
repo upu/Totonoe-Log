@@ -48,6 +48,10 @@ The setting is a plain array, so you can also write it by hand — and commit it
 
 When two rules match overlapping text the rule listed first wins, so put the more specific ones higher — that is what ▲▼ are for. A rule with an invalid regular expression or an unknown color is skipped with a warning naming it, while the remaining rules keep working; it still shows up in the panel so you can repair it. Editing the setting by hand recolors an open panel right away, and the panel writes back to wherever the rules are already defined (workspace settings if that is where they live, your user settings otherwise).
 
+### Timestamp format helper
+
+Writing the named-group regular expression in [Custom timestamp formats](#custom-timestamp-formats) by hand is the part that needs regex experience. The **タイムスタンプ ▾** button opens a helper for it: select part of a line — either from the panel's own list of unrecognized lines, or directly in the log body — and click "Suggest from selection" to get a proposed name and pattern. Review it, click "+ タイムスタンプ形式に追加" to add the row, and it saves the same way highlight rules do: no separate save step, and the row shows either a validation error or how many of the unrecognized lines it now matches, right there. When the day/month order in the selection is ambiguous (`02.03.2024` could be either), two buttons let you pick before adding it. Rows can also be added or edited directly with a hand-written pattern — the same validation and match-count feedback applies either way, which covers the "visualize whether an existing pattern's groups are complete" half of the job.
+
 ### Masking your own identifiers
 
 No general rule can recognize in-house identifiers — user names, tokens, contract IDs — so the mask panel has two fields for them.
@@ -224,7 +228,9 @@ with the `totonoeLog.timestampFormats` setting. Each entry is a regular
 expression whose named capture groups tell Totonoe Log how to interpret the
 match. Custom formats are tried before the built-in ones, so they can also
 override a built-in interpretation. Patterns are automatically anchored to
-the start of the line.
+the start of the line. The Interactive View's
+[Timestamp format helper](#timestamp-format-helper) can propose a pattern
+from a selection instead of writing the regular expression by hand.
 
 When most lines of a log are left without a timestamp, Totonoe Log says so
 instead of quietly folding them into one huge entry: the virtual-document

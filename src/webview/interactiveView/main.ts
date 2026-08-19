@@ -2,9 +2,13 @@ import type {
   ExtensionToWebviewMessage,
   HighlightRuleRow,
   InteractiveViewLabels,
+  InteractiveViewStateMessage,
   LineHighlight,
   SerializedFilterCriteria,
   SerializedFilterPattern,
+  TimestampFormatRow,
+  TimestampFormatRowPreview,
+  TimestampPatternInferenceResponse,
 } from "./protocol";
 
 /**
@@ -33,11 +37,11 @@ function arrayValueAt<T>(values: readonly T[], index: number): T | undefined {
   return values[index];
 }
 
-/** {@link ExtensionToWebviewMessage.items} の要素の型（Webview側は `normalize` を直接importできないため、メッセージ型からの導出で参照する）。 */
-type DisplayItem = NonNullable<ExtensionToWebviewMessage["items"]>[number];
+/** `state` メッセージの `items` の要素の型（Webview側は `normalize` を直接importできないため、メッセージ型からの導出で参照する）。 */
+type DisplayItem = NonNullable<InteractiveViewStateMessage["items"]>[number];
 
 /** 行1件分の元ログ上の位置（{@link DisplayItem} と同じ理由でメッセージ型から導出する）。 */
-type LineSource = NonNullable<NonNullable<ExtensionToWebviewMessage["lineSources"]>[number]>;
+type LineSource = NonNullable<NonNullable<InteractiveViewStateMessage["lineSources"]>[number]>;
 
 const vscodeApi = acquireVsCodeApi();
 
@@ -57,6 +61,39 @@ const highlightOptionsButton = document.getElementById(
 const highlightPanel = document.getElementById("highlight-panel") as HTMLDivElement;
 const highlightRuleList = document.getElementById("highlight-rules") as HTMLDivElement;
 const addHighlightRuleButton = document.getElementById("add-highlight-rule") as HTMLButtonElement;
+const timestampOptionsButton = document.getElementById(
+  "timestamp-options-button"
+) as HTMLButtonElement;
+const timestampPanel = document.getElementById("timestamp-panel") as HTMLDivElement;
+const timestampFormatList = document.getElementById("timestamp-formats") as HTMLDivElement;
+const addTimestampFormatButton = document.getElementById(
+  "add-timestamp-format"
+) as HTMLButtonElement;
+const timestampScopeLabel = document.getElementById("timestamp-scope-label") as HTMLParagraphElement;
+const unrecognizedLinesList = document.getElementById(
+  "timestamp-unrecognized-lines"
+) as HTMLDivElement;
+const suggestFromSelectionButton = document.getElementById(
+  "suggest-from-selection"
+) as HTMLButtonElement;
+const timestampSelectionStatus = document.getElementById(
+  "timestamp-selection-status"
+) as HTMLParagraphElement;
+const timestampProposalContainer = document.getElementById("timestamp-proposal") as HTMLDivElement;
+const timestampProposalNameInput = document.getElementById(
+  "timestamp-proposal-name"
+) as HTMLInputElement;
+const timestampProposalPatternInput = document.getElementById(
+  "timestamp-proposal-pattern"
+) as HTMLInputElement;
+const addTimestampProposalButton = document.getElementById(
+  "add-timestamp-proposal"
+) as HTMLButtonElement;
+const timestampAmbiguousHint = document.getElementById(
+  "timestamp-ambiguous-hint"
+) as HTMLParagraphElement;
+const timestampDmyButton = document.getElementById("timestamp-dmy-button") as HTMLButtonElement;
+const timestampMdyButton = document.getElementById("timestamp-mdy-button") as HTMLButtonElement;
 const loadedFilesElement = document.getElementById("loaded-files") as HTMLDivElement;
 const severitiesContainer = document.getElementById("severities") as HTMLDivElement;
 const dateStartInput = document.getElementById("date-start") as HTMLInputElement;
@@ -588,6 +625,285 @@ function applyHighlightRules(rules: readonly HighlightRuleRow[]): void {
   });
 }
 
+/** タイムスタンプ形式パネル（issue #316）の開閉。閉じても行は設定に残り、効いたまま。 */
+function setTimestampPanelExpanded(expanded: boolean): void {
+  timestampPanel.hidden = !expanded;
+  timestampOptionsButton.setAttribute("aria-expanded", String(expanded));
+}
+
+timestampOptionsButton.addEventListener("click", () => {
+  if (labels) {
+    setTimestampPanelExpanded(timestampOptionsButton.getAttribute("aria-expanded") !== "true");
+  }
+});
+
+/** タイムスタンプ形式編集パネルの現在の行を集める（保存済みの検証情報は含めない）。 */
+function collectTimestampFormatRows(): TimestampFormatRow[] {
+  return Array.from(
+    timestampFormatList.querySelectorAll<HTMLElement>(".timestamp-format-row"),
+    (row) => ({
+      name: row.querySelector<HTMLInputElement>(".timestamp-format-name")?.value ?? "",
+      pattern: row.querySelector<HTMLInputElement>(".timestamp-format-pattern")?.value ?? "",
+    })
+  );
+}
+
+/** ルールを設定へ書き戻す。結果は設定変更として戻ってくる（#183）ので、描画はそちらに任せる。 */
+function postTimestampFormatsChanged(): void {
+  vscodeApi.postMessage({
+    type: "timestampFormatsChanged",
+    rows: collectTimestampFormatRows(),
+  });
+}
+
+const postTimestampFormatsChangedDebounced = debounce(postTimestampFormatsChanged, 300);
+
+/**
+ * 行の検証フィードバック（issue #316、#320）。エラーがあればそれを、無ければ
+ * 未認識行サンプルに対するマッチ件数を出す——保存時と同じ検証をその場で見せる、
+ * この機能の主目的にあたる部分。
+ */
+function renderTimestampFormatFeedback(row: HTMLElement, preview: TimestampFormatRowPreview): void {
+  let feedback = row.querySelector<HTMLParagraphElement>(".timestamp-format-feedback");
+  if (!feedback) {
+    feedback = document.createElement("p");
+    feedback.className = "timestamp-format-feedback";
+    row.appendChild(feedback);
+  }
+  if (preview.errorMessage) {
+    feedback.textContent = preview.errorMessage;
+    feedback.classList.add("timestamp-format-error");
+    return;
+  }
+  feedback.classList.remove("timestamp-format-error");
+  feedback.textContent =
+    preview.totalSampleCount > 0
+      ? formatLabel(
+          currentLabels().matchSummaryMessage,
+          preview.matchedSampleCount,
+          preview.totalSampleCount
+        )
+      : "";
+}
+
+function createTimestampFormatRow(row: TimestampFormatRow): HTMLElement {
+  const localized = currentLabels();
+  const element = document.createElement("div");
+  element.className = "timestamp-format-row";
+
+  const nameInput = document.createElement("input");
+  nameInput.type = "text";
+  nameInput.className = "timestamp-format-name";
+  nameInput.value = row.name;
+  nameInput.placeholder = localized.ruleNamePlaceholder;
+  nameInput.setAttribute("aria-label", localized.timestampFormatNameAriaLabel);
+  nameInput.addEventListener("input", postTimestampFormatsChangedDebounced);
+
+  const patternInput = document.createElement("input");
+  patternInput.type = "text";
+  patternInput.className = "timestamp-format-pattern";
+  patternInput.value = row.pattern;
+  patternInput.placeholder = localized.regularExpressionPlaceholder;
+  patternInput.setAttribute("aria-label", localized.timestampFormatPatternAriaLabel);
+  patternInput.addEventListener("input", postTimestampFormatsChangedDebounced);
+
+  const removeButton = document.createElement("button");
+  removeButton.type = "button";
+  removeButton.textContent = "✕";
+  removeButton.title = localized.removeTimestampFormatTitle;
+  removeButton.setAttribute("aria-label", localized.removeTimestampFormatAriaLabel);
+  removeButton.addEventListener("click", () => {
+    element.remove();
+    postTimestampFormatsChanged();
+  });
+
+  element.append(nameInput, patternInput, removeButton);
+  return element;
+}
+
+addTimestampFormatButton.addEventListener("click", () => {
+  if (labels) {
+    const row = createTimestampFormatRow({ name: "", pattern: "" });
+    timestampFormatList.appendChild(row);
+    row.querySelector<HTMLInputElement>(".timestamp-format-pattern")?.focus();
+  }
+});
+
+/** フォーカスが外れてから反映する、直近に届いた行（issue #238 の highlightRules と同じ理由）。 */
+let pendingTimestampFormatRows: readonly TimestampFormatRowPreview[] | undefined;
+
+function applyTimestampFormatRows(rows: readonly TimestampFormatRowPreview[]): void {
+  const rowElements = timestampFormatList.querySelectorAll<HTMLElement>(".timestamp-format-row");
+
+  if (rowElements.length !== rows.length) {
+    timestampFormatList.textContent = "";
+    for (const row of rows) {
+      const element = createTimestampFormatRow(row);
+      timestampFormatList.appendChild(element);
+      renderTimestampFormatFeedback(element, row);
+    }
+    return;
+  }
+
+  rowElements.forEach((element, index) => {
+    const nameInput = element.querySelector<HTMLInputElement>(".timestamp-format-name");
+    const patternInput = element.querySelector<HTMLInputElement>(".timestamp-format-pattern");
+    if (nameInput) {
+      syncTextInputIfNotFocused(nameInput, rows[index].name);
+    }
+    if (patternInput) {
+      syncTextInputIfNotFocused(patternInput, rows[index].pattern);
+    }
+    renderTimestampFormatFeedback(element, rows[index]);
+  });
+}
+
+function renderTimestampFormatRows(rows: readonly TimestampFormatRowPreview[]): void {
+  if (timestampFormatList.contains(document.activeElement)) {
+    pendingTimestampFormatRows = rows;
+    return;
+  }
+  pendingTimestampFormatRows = undefined;
+  applyTimestampFormatRows(rows);
+}
+
+timestampFormatList.addEventListener("focusout", (event) => {
+  if (event.relatedTarget instanceof Node && timestampFormatList.contains(event.relatedTarget)) {
+    return;
+  }
+  if (pendingTimestampFormatRows) {
+    const rows = pendingTimestampFormatRows;
+    pendingTimestampFormatRows = undefined;
+    applyTimestampFormatRows(rows);
+  }
+});
+
+function renderTimestampFormatsScope(scope: "workspace" | "user"): void {
+  const localized = currentLabels();
+  timestampScopeLabel.textContent =
+    scope === "workspace" ? localized.savedToWorkspaceLabel : localized.savedToUserLabel;
+}
+
+/**
+ * 未認識行の一覧（issue #316）。各行の生テキストを `data-raw-line` に持たせる
+ * ——{@link findSelectionSource} が、選択範囲の入れ物を汎用に探せるようにする
+ * ため（ログ本文の `.source-line` 要素も同じ属性を持つ）。
+ */
+function renderUnrecognizedLines(lines: readonly string[]): void {
+  unrecognizedLinesList.textContent = "";
+  if (lines.length === 0) {
+    const empty = document.createElement("p");
+    empty.className = "timestamp-format-feedback";
+    empty.textContent = currentLabels().unrecognizedLinesEmptyMessage;
+    unrecognizedLinesList.appendChild(empty);
+    return;
+  }
+  for (const line of lines) {
+    const element = document.createElement("div");
+    element.className = "timestamp-sample-line";
+    element.dataset.rawLine = line;
+    // ログ本文と同じく非信頼な外部データのため textContent で設定する。
+    element.textContent = line;
+    unrecognizedLinesList.appendChild(element);
+  }
+}
+
+/**
+ * いま選ばれているテキストが、どの行（未認識行の一覧、またはログ本文の
+ * `.source-line`）の何文字目から何文字目かを求める。`Range` を使った厳密な
+ * オフセット計算は、行が矢印などの飾り（{@link PLAIN_ROW_PREFIX} 等）を
+ * 含むため複雑になる——選択されたテキスト自体を `data-raw-line` の中で
+ * `indexOf` する方が単純で、複数行にまたがる選択（一致しない）も自然に弾ける。
+ */
+function findSelectionSource(): { line: string; start: number; end: number } | undefined {
+  const selection = window.getSelection();
+  if (!selection || selection.isCollapsed) {
+    return undefined;
+  }
+  const selectedText = selection.toString();
+  if (selectedText.trim() === "") {
+    return undefined;
+  }
+  const anchorNode = selection.anchorNode;
+  const anchorElement = anchorNode instanceof Element ? anchorNode : anchorNode?.parentElement;
+  const container = anchorElement?.closest<HTMLElement>("[data-raw-line]");
+  const line = container?.dataset.rawLine;
+  if (line === undefined) {
+    return undefined;
+  }
+  const start = line.indexOf(selectedText);
+  if (start === -1) {
+    return undefined;
+  }
+  return { line, start, end: start + selectedText.length };
+}
+
+/** 直近にホストへ送った推論要求（issue #316）。日/月順の選び直しで同じ選択範囲を再送するために覚えておく。 */
+let lastInferenceRequestSource: { line: string; start: number; end: number } | undefined;
+
+function requestTimestampPatternInference(
+  source: { line: string; start: number; end: number },
+  dayMonthOrder?: "dmy" | "mdy"
+): void {
+  lastInferenceRequestSource = source;
+  vscodeApi.postMessage({
+    type: "timestampPatternRequested",
+    request: {
+      line: source.line,
+      selectionStart: source.start,
+      selectionEnd: source.end,
+      dayMonthOrder,
+    },
+  });
+}
+
+suggestFromSelectionButton.addEventListener("click", () => {
+  const source = findSelectionSource();
+  if (!source) {
+    timestampSelectionStatus.textContent = currentLabels().noSelectionMessage;
+    return;
+  }
+  timestampSelectionStatus.textContent = "";
+  requestTimestampPatternInference(source);
+});
+
+/** 提案の追加（issue #316）。既存の保存済み行 + この1行を送り、通常の書き戻し経路で保存する。 */
+addTimestampProposalButton.addEventListener("click", () => {
+  const rows = [
+    ...collectTimestampFormatRows(),
+    { name: timestampProposalNameInput.value, pattern: timestampProposalPatternInput.value },
+  ];
+  vscodeApi.postMessage({ type: "timestampFormatsChanged", rows });
+  timestampProposalContainer.hidden = true;
+  timestampAmbiguousHint.hidden = true;
+});
+
+timestampDmyButton.addEventListener("click", () => {
+  if (lastInferenceRequestSource) {
+    requestTimestampPatternInference(lastInferenceRequestSource, "dmy");
+  }
+});
+timestampMdyButton.addEventListener("click", () => {
+  if (lastInferenceRequestSource) {
+    requestTimestampPatternInference(lastInferenceRequestSource, "mdy");
+  }
+});
+
+/** パターン推論の結果（issue #316、#320）を、提案プレビュー欄に反映する。 */
+function handleTimestampPatternResult(response: TimestampPatternInferenceResponse): void {
+  if (!response.ok) {
+    timestampSelectionStatus.textContent = response.message;
+    timestampProposalContainer.hidden = true;
+    timestampAmbiguousHint.hidden = true;
+    return;
+  }
+  timestampSelectionStatus.textContent = "";
+  timestampProposalNameInput.value = response.suggestedName;
+  timestampProposalPatternInput.value = response.pattern;
+  timestampProposalContainer.hidden = false;
+  timestampAmbiguousHint.hidden = !response.ambiguousDayMonthOrder;
+}
+
 function renderSeverities(distinctSeverities: readonly string[], checked: readonly string[]): void {
   const checkedSet = new Set(checked);
   severitiesContainer.textContent = "";
@@ -760,6 +1076,10 @@ function createSourceLineElement(
   const row = document.createElement("span");
   row.className = "source-line";
   appendDecoratedText(row, text, prefix, suffix);
+  // タイムスタンプ形式パネル（issue #316）が、ログ本文で選んだ範囲からパターンを
+  // 提案する導線（issue #320）の入口。矢印などの飾り抜きの生テキストを持たせる
+  // ことで、{@link findSelectionSource} が prefix/suffix を意識せずに拾える。
+  row.dataset.rawLine = text;
 
   const sourceFilePath = arrayValueAt(sourceFilePaths, lineSource.fileIndex);
   if (sourceFilePath !== undefined) {
@@ -889,7 +1209,7 @@ function renderItems(items: readonly DisplayItem[]): void {
  * 行ごとに要素を分けてクリック可能にし、無ければ従来どおり本文を1つの
  * テキストとして流し込む（要素数を増やさずに済むため）。
  */
-function renderText(text: string, lineSources: ExtensionToWebviewMessage["lineSources"]): void {
+function renderText(text: string, lineSources: InteractiveViewStateMessage["lineSources"]): void {
   if (!lineSources) {
     // ログ本文は非信頼な外部データのため、HTMLとして解釈されないよう
     // 必ず textContent で設定する（innerHTML は使わない）。
@@ -911,7 +1231,7 @@ function renderText(text: string, lineSources: ExtensionToWebviewMessage["lineSo
  * だけなので、`#warning`（無視パターンの失敗など）とは別の行に出す。全体を
  * 見る手段として、既にUIにある「Export as Virtual Document」へ誘導する。
  */
-function renderDisplayLimit(displayLimit: ExtensionToWebviewMessage["displayLimit"]): void {
+function renderDisplayLimit(displayLimit: InteractiveViewStateMessage["displayLimit"]): void {
   if (!displayLimit) {
     displayLimitElement.textContent = "";
     return;
@@ -923,7 +1243,7 @@ function renderDisplayLimit(displayLimit: ExtensionToWebviewMessage["displayLimi
   );
 }
 
-function renderState(state: ExtensionToWebviewMessage): void {
+function renderState(state: InteractiveViewStateMessage): void {
   labels = state.labels;
   setControlsDisabled(false);
   // 本文の描画（ホバー表示・ハイライト）より先に更新する必要がある。
@@ -932,6 +1252,9 @@ function renderState(state: ExtensionToWebviewMessage): void {
   // ログ本文がキーになる都合上 `__proto__` 等と衝突しうるため、`Map` にする。
   lineHighlights = new Map(state.highlights ?? []);
   renderHighlightRules(state.highlightRules);
+  renderTimestampFormatRows(state.timestampFormatRows);
+  renderTimestampFormatsScope(state.timestampFormatsScope);
+  renderUnrecognizedLines(state.unrecognizedSampleLines);
   renderLoadedFiles(state.loadedFileNames, state.sourceFilePaths, state.criteria.visibleFiles);
   renderSeverities(state.distinctSeverities, state.criteria.severities);
   syncTextInputIfNotFocused(dateStartInput, state.criteria.dateRangeStart);
@@ -963,14 +1286,15 @@ function renderState(state: ExtensionToWebviewMessage): void {
 
 window.addEventListener("message", (event: MessageEvent<unknown>) => {
   const message = event.data;
-  if (
-    typeof message === "object" &&
-    message !== null &&
-    "type" in message &&
-    message.type === "state"
-  ) {
-    renderState(message as ExtensionToWebviewMessage);
+  if (typeof message !== "object" || message === null || !("type" in message)) {
+    return;
   }
+  const typed = message as ExtensionToWebviewMessage;
+  if (typed.type === "state") {
+    renderState(typed);
+    return;
+  }
+  handleTimestampPatternResult(typed.response);
 });
 
 vscodeApi.postMessage({ type: "ready" });

@@ -181,6 +181,62 @@ export interface SerializedFilterCriteria {
   readonly visibleFiles: readonly boolean[];
 }
 
+/**
+ * カスタムタイムスタンプ形式編集パネル（issue #316）の1行。ハイライトルール行
+ * （{@link HighlightRuleRow}）と同じく、設定として不正な値（空パターン等）も
+ * 編集中の状態として取りうる。
+ */
+export interface TimestampFormatRow {
+  readonly name: string;
+  readonly pattern: string;
+}
+
+/**
+ * {@link TimestampFormatRow} に、保存時の検証結果を添えたもの。issue #316 の
+ * 「保存時に compileCustomTimestampFormats と同じ検証をその場でフィードバック
+ * する」の実体で、拡張機能本体側が `previewTimestampFormat`（issue #320）を
+ * 通してから毎回の `state` で送る。
+ */
+export interface TimestampFormatRowPreview extends TimestampFormatRow {
+  /** `compileCustomTimestampFormats` と同じエラーコードから組み立てた文言。無ければ有効。 */
+  readonly errorMessage?: string;
+  /** {@link ExtensionToWebviewMessage.unrecognizedSampleLines} のうち、このパターンで認識できた件数。 */
+  readonly matchedSampleCount: number;
+  /** 評価対象にしたサンプル件数（`unrecognizedSampleLines.length` と同じ）。 */
+  readonly totalSampleCount: number;
+}
+
+/**
+ * ログ本文で選んだ範囲からパターンを推論する要求（issue #316、#320）。
+ * `line` は選択元の1行分の生テキスト、`selectionStart`/`selectionEnd` はその
+ * 中の文字インデックス。
+ */
+export interface TimestampPatternInferenceRequest {
+  readonly line: string;
+  readonly selectionStart: number;
+  readonly selectionEnd: number;
+  /** 日/月の並びが曖昧なときの解決方法。省略時は年の位置から既定を決める。 */
+  readonly dayMonthOrder?: "dmy" | "mdy";
+}
+
+/**
+ * パターン推論の結果。失敗理由（`inferTimestampPattern` の
+ * `TimestampPatternInferenceFailureReason`）は拡張機能本体側で翻訳済みの
+ * 文言にしてから送る——Webview側は理由コードの一覧を持たない。
+ */
+export type TimestampPatternInferenceResponse =
+  | {
+      readonly ok: true;
+      readonly pattern: string;
+      readonly suggestedName: string;
+      /** true のとき、Webview側は日/月の並びを選び直すボタンを出す。 */
+      readonly ambiguousDayMonthOrder: boolean;
+    }
+  | { readonly ok: false; readonly message: string };
+
+/** カスタムタイムスタンプ形式が実際に保存されているスコープ（issue #316）。 */
+export type TimestampFormatsScope = "workspace" | "user";
+
 /** Webview → 拡張機能本体 のメッセージ。 */
 export type WebviewToExtensionMessage =
   | { readonly type: "ready" }
@@ -207,7 +263,16 @@ export type WebviewToExtensionMessage =
    * `totonoeLog.highlightRules` 設定そのもの——書き戻した結果は設定変更として
    * 戻ってきて（#183）、表示に反映される。
    */
-  | { readonly type: "highlightRulesChanged"; readonly rules: readonly HighlightRuleRow[] };
+  | { readonly type: "highlightRulesChanged"; readonly rules: readonly HighlightRuleRow[] }
+  /**
+   * カスタムタイムスタンプ形式編集パネル（issue #316）の内容を設定へ書き戻す
+   * 要求。ハイライトルールと同じく、状態の置き場は Webview ではなく
+   * `totonoeLog.timestampFormats` 設定そのもの——書き戻した結果は設定変更として
+   * 戻ってきて（#183）、パネルと実際のパース結果の両方に反映される。
+   */
+  | { readonly type: "timestampFormatsChanged"; readonly rows: readonly TimestampFormatRow[] }
+  /** ログ本文で選んだ範囲からパターンを推論する要求（issue #316、#320）。 */
+  | { readonly type: "timestampPatternRequested"; readonly request: TimestampPatternInferenceRequest };
 
 /** Webview側で動的に作る要素へ使う、翻訳済みのUI文言。 */
 export interface InteractiveViewLabels {
@@ -245,14 +310,38 @@ export interface InteractiveViewLabels {
   readonly sourceFilesTitle: string;
   readonly displayLimitMessage: string;
   readonly statusMessage: string;
+  readonly timestampFormatNameAriaLabel: string;
+  readonly timestampFormatPatternAriaLabel: string;
+  readonly removeTimestampFormatTitle: string;
+  readonly removeTimestampFormatAriaLabel: string;
+  readonly suggestFromSelectionLabel: string;
+  readonly noSelectionMessage: string;
+  readonly addProposalLabel: string;
+  readonly ambiguousDayMonthOrderHint: string;
+  readonly dayMonthOrderDmyLabel: string;
+  readonly dayMonthOrderMdyLabel: string;
+  readonly matchSummaryMessage: string;
+  readonly savedToWorkspaceLabel: string;
+  readonly savedToUserLabel: string;
+  readonly unrecognizedLinesEmptyMessage: string;
 }
 
 /**
  * 拡張機能本体 → Webview のメッセージ。`criteria` は絞り込み条件の解析結果
  * （不正な入力は無視した後の状態）をエコーバックし、Webview側のフォームを
  * 常に拡張機能側の実際の適用状態と一致させる。
+ *
+ * `state` 以外の型を持つのはパターン推論の結果（issue #316）だけ——設定への
+ * 保存を経ないため、他の状態と違って `state` の再送信に乗せる理由がない。
  */
-export interface ExtensionToWebviewMessage {
+export type ExtensionToWebviewMessage =
+  | InteractiveViewStateMessage
+  | {
+      readonly type: "timestampPatternResult";
+      readonly response: TimestampPatternInferenceResponse;
+    };
+
+export interface InteractiveViewStateMessage {
   readonly type: "state";
   readonly labels: InteractiveViewLabels;
   readonly criteria: SerializedFilterCriteria;
@@ -312,4 +401,24 @@ export interface ExtensionToWebviewMessage {
     /** 切り詰めた結果、実際に描画する行数。 */
     readonly displayedLineCount: number;
   };
+  /**
+   * カスタムタイムスタンプ形式編集パネル（issue #316）に表示する行。
+   * `totonoeLog.timestampFormats` 設定そのものを写したもの
+   * （{@link ExtensionToWebviewMessage.highlightRules} と同じ関係）。
+   */
+  readonly timestampFormatRows: readonly TimestampFormatRowPreview[];
+  /**
+   * 上の設定が実際に定義されているスコープ。`readConfiguredTimestampFormats`
+   * がリソース無しで読む都合上、書き戻し先はワークスペース/ユーザーの2段しか
+   * 無い（{@link resolveTimestampFormatsTarget} 参照）。パネルにこれを出すのは、
+   * 「保存したのに次に開いたら効かない」を起こさないため——マルチルートで
+   * 別フォルダの設定に定義があるといった食い違いをその場で気づけるようにする。
+   */
+  readonly timestampFormatsScope: TimestampFormatsScope;
+  /**
+   * タイムスタンプを認識できなかった行のサンプル（issue #316、上限あり）。
+   * パネルの「未認識行から選ぶ」導線の元データで、`timestampFormatRows` の
+   * 検証プレビューが対象にするサンプルとも一致する。
+   */
+  readonly unrecognizedSampleLines: readonly string[];
 }

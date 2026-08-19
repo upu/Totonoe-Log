@@ -8,6 +8,17 @@
 
 ## [Unreleased]
 
+### Added
+
+- **Interactive View で、選択範囲から `totonoeLog.timestampFormats` の
+  パターンを提案できるようにした。** 新しい **タイムスタンプ ▾** ボタンが
+  未認識行の一覧を出し、その一部（一覧内、またはログ本文のどちらでも）を
+  選択すると名前とパターンの案が出る。保存時と同じ検証
+  （`compileCustomTimestampFormats`）と、未認識行に対するマッチ件数がその場で
+  行に表示される。手書きのパターンで行を直接追加・編集することもでき、
+  保存はハイライトルールと同じ方式（別の保存ボタンはなく
+  `totonoeLog.timestampFormats` へそのまま書き戻す）（issue #316）。
+
 ## [0.12.0] - 2026-08-12
 
 ### Added
