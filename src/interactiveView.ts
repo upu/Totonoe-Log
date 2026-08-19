@@ -8,9 +8,12 @@ import {
   buildInteractiveExportText,
   buildInteractiveMergedExportText,
   buildKeyMaskPattern,
+  collectUnrecognizedLines,
   highlightDisplayLines,
+  inferTimestampPattern,
   limitInteractiveDisplay,
   mergeLogFiles,
+  previewTimestampFormat,
   PatternWorkerSession,
   DEFAULT_COLLAPSE_THRESHOLD,
   type BuildInteractivePayloadOptions,
@@ -59,6 +62,13 @@ import {
   writeHighlightRuleRows,
 } from "./highlightRuleSettings";
 import {
+  currentTimestampFormatsScope,
+  readTimestampFormatRows,
+  writeTimestampFormatRows,
+} from "./timestampFormatSettings";
+import { formatTimestampPatternInferenceFailureReason } from "./timestampPatternMessages";
+import { formatSettingsValidationErrors } from "./settingsErrorMessages";
+import {
   addNewlyAppearedSeverities,
   buildIgnoredInputWarning,
   compileMaskPattern,
@@ -75,6 +85,9 @@ import type {
   ExtensionToWebviewMessage,
   LineHighlights,
   SerializedFilterCriteria,
+  TimestampFormatRowPreview,
+  TimestampFormatsScope,
+  TimestampPatternInferenceRequest,
   WebviewToExtensionMessage,
 } from "./webview/interactiveView/protocol";
 
@@ -86,6 +99,13 @@ const WEBVIEW_SCRIPT_RELATIVE_PATH = ["out", "webview", "interactiveView", "main
 
 /** 折りたたみのしきい値を読み込むVSCode設定のセクション名。 */
 const COLLAPSE_CONFIG_SECTION = "totonoeLog.collapse";
+
+/**
+ * タイムスタンプ形式パネル（issue #316）の「未認識行から選ぶ」に出すサンプル
+ * 行の上限。読み込んだファイルが丸ごと未対応形式（`unrecognized-format.log`
+ * のようなケース）だと際限なく続きうるため、パネルが埋まり過ぎない範囲に絞る。
+ */
+const MAX_UNRECOGNIZED_SAMPLE_LINES = 10;
 
 interface PreparedInteractiveState {
   readonly criteria: FilterCriteria;
@@ -414,8 +434,47 @@ export class InteractiveViewPanelController implements vscode.Disposable {
       await writeHighlightRuleRows(message.rules, this.highlightRulesResource());
       return;
     }
+    if (message.type === "timestampFormatsChanged") {
+      // ハイライトルールと同じく、書き戻しは設定変更イベント経由で reparse
+      // （`totonoeLog.timestampFormats` は REPARSE_SECTIONS）が起こすため、
+      // ここでは postState を呼ばない。
+      await writeTimestampFormatRows(message.rows);
+      return;
+    }
+    if (message.type === "timestampPatternRequested") {
+      await this.sendTimestampPatternResult(message.request);
+      return;
+    }
     this.criteria = resolveIncomingCriteria(message.criteria, this.loadedFiles.length);
     await this.postState();
+  }
+
+  /**
+   * ログ本文で選んだ範囲からパターンを推論し（issue #320）、結果を送り返す。
+   * 設定への書き戻しを経ないため、他の状態と違って `state` の再送信には乗せず
+   * 専用のメッセージ型で返す——提案の段階ではまだ何も保存されていない。
+   */
+  private async sendTimestampPatternResult(
+    request: TimestampPatternInferenceRequest
+  ): Promise<void> {
+    const panel = this.panel;
+    if (!panel) {
+      return;
+    }
+    const result = inferTimestampPattern(request.line, request.selectionStart, request.selectionEnd, {
+      dayMonthOrder: request.dayMonthOrder,
+    });
+    await panel.webview.postMessage({
+      type: "timestampPatternResult",
+      response: result.ok
+        ? {
+            ok: true,
+            pattern: result.proposal.pattern,
+            suggestedName: result.proposal.suggestedName,
+            ambiguousDayMonthOrder: result.proposal.ambiguousDayMonthOrder,
+          }
+        : { ok: false, message: formatTimestampPatternInferenceFailureReason(result.reason) },
+    });
   }
 
   /**
@@ -620,6 +679,45 @@ export class InteractiveViewPanelController implements vscode.Disposable {
     return this.loadedFiles[0]?.uri;
   }
 
+  /**
+   * タイムスタンプを認識できなかった行のサンプル（issue #316）。`matched: false`
+   * になり得るのは「最初に認識できたタイムスタンプより前に現れた行」に限られる
+   * （`timestampCoverage.ts`）ため、単一ファイル/マージのどちらでも
+   * `collectUnrecognizedLines` にそのまま渡せる。
+   */
+  private unrecognizedSampleLines(): readonly string[] {
+    const entries: readonly LogEntry[] = this.isSingleFile()
+      ? this.singleEntries
+      : this.mergedEntries.map((merged) => merged.entry);
+    return collectUnrecognizedLines(entries, MAX_UNRECOGNIZED_SAMPLE_LINES);
+  }
+
+  /**
+   * タイムスタンプ形式パネル（issue #316）へ送る状態一式。保存済みの各行を
+   * `previewTimestampFormat`（issue #320）に通し、保存時と同じ検証結果を
+   * その場でフィードバックする——ここが highlightRules との違い（あちらは
+   * 保存後のトースト通知1回きりで、パネル内には出さない）。
+   */
+  private buildTimestampFormatPanelState(): {
+    readonly rows: readonly TimestampFormatRowPreview[];
+    readonly scope: TimestampFormatsScope;
+    readonly sampleLines: readonly string[];
+  } {
+    const sampleLines = this.unrecognizedSampleLines();
+    const rows = readTimestampFormatRows().map((row): TimestampFormatRowPreview => {
+      const preview = previewTimestampFormat(row.name, row.pattern, sampleLines);
+      return {
+        name: row.name,
+        pattern: row.pattern,
+        errorMessage:
+          preview.errors.length > 0 ? formatSettingsValidationErrors(preview.errors) : undefined,
+        matchedSampleCount: preview.matches.filter((match) => match.matched).length,
+        totalSampleCount: preview.matches.length,
+      };
+    });
+    return { rows, scope: currentTimestampFormatsScope(), sampleLines };
+  }
+
   private prepareInteractiveState(
     criteriaSnapshot: SerializedFilterCriteria
   ): PreparedInteractiveState {
@@ -812,6 +910,7 @@ export class InteractiveViewPanelController implements vscode.Disposable {
       return;
     }
 
+    const timestampFormatPanel = this.buildTimestampFormatPanelState();
     const message: ExtensionToWebviewMessage = {
       type: "state",
       labels: this.labels,
@@ -833,6 +932,9 @@ export class InteractiveViewPanelController implements vscode.Disposable {
         limited.displayedLineCount !== undefined
           ? { maxDisplayLines, displayedLineCount: limited.displayedLineCount }
           : undefined,
+      timestampFormatRows: timestampFormatPanel.rows,
+      timestampFormatsScope: timestampFormatPanel.scope,
+      unrecognizedSampleLines: timestampFormatPanel.sampleLines,
     };
     await panel.webview.postMessage(message);
   }

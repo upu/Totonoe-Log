@@ -6,7 +6,11 @@ suite("interactiveViewLabels (#278)", () => {
     const labels = buildInteractiveViewLabels();
 
     assert.deepStrictEqual(Object.keys(labels).sort(), [
+      "addProposalLabel",
+      "ambiguousDayMonthOrderHint",
       "cannotRemoveLastFileLabel",
+      "dayMonthOrderDmyLabel",
+      "dayMonthOrderMdyLabel",
       "displayLimitMessage",
       "hideFileTitle",
       "hideFileWithPathTitle",
@@ -22,10 +26,12 @@ suite("interactiveViewLabels (#278)", () => {
       "highlightPatternAriaLabel",
       "maskDisabledLabel",
       "maskEnabledLabel",
+      "matchSummaryMessage",
       "moveRuleDownAriaLabel",
       "moveRuleDownTitle",
       "moveRuleUpAriaLabel",
       "moveRuleUpTitle",
+      "noSelectionMessage",
       "patternAriaLabel",
       "patternEnabledAriaLabel",
       "patternToggleTitle",
@@ -35,10 +41,18 @@ suite("interactiveViewLabels (#278)", () => {
       "removePatternTitle",
       "removeRuleAriaLabel",
       "removeRuleTitle",
+      "removeTimestampFormatAriaLabel",
+      "removeTimestampFormatTitle",
       "ruleNameAriaLabel",
       "ruleNamePlaceholder",
+      "savedToUserLabel",
+      "savedToWorkspaceLabel",
       "sourceFilesTitle",
       "statusMessage",
+      "suggestFromSelectionLabel",
+      "timestampFormatNameAriaLabel",
+      "timestampFormatPatternAriaLabel",
+      "unrecognizedLinesEmptyMessage",
       "unrecognizedSeverity",
     ]);
     assert.ok(labels.unrecognizedSeverity.length > 0);

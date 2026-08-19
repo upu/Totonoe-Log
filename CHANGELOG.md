@@ -8,6 +8,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- **Interactive View can now suggest a `totonoeLog.timestampFormats` pattern
+  from a selection.** The new **タイムスタンプ ▾** button lists unrecognized
+  lines and lets you select part of one (in the list or in the log body) to
+  get a proposed name and pattern, with the same validation
+  (`compileCustomTimestampFormats`) and a match count against the
+  unrecognized lines shown right in the row. Rows can also be added or
+  edited directly with a hand-written pattern; saving works the same way as
+  Highlight rules — no separate save step, written straight back to
+  `totonoeLog.timestampFormats` (issue #316).
+
 ## [0.12.0] - 2026-08-12
 
 ### Added

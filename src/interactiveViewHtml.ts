@@ -307,9 +307,106 @@ const INTERACTIVE_VIEW_STYLES = `  body {
      ホバーの背景色だけで示す。 */
   .source-line:hover {
     background-color: var(--vscode-list-hoverBackground);
+  }
+  /* タイムスタンプ形式パネル（issue #316）。マスク・ハイライトと同じ、
+     ボタン直下にせり出す作法にする。未認識行の一覧とプレビュー欄を含むぶん
+     ハイライトパネルよりさらに幅を取る。 */
+  #timestamp-container {
+    position: relative;
+    display: flex;
+  }
+  #timestamp-panel {
+    position: absolute;
+    z-index: 1;
+    top: 100%;
+    left: 0;
+    margin-top: 2px;
+    padding: 6px 10px;
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    width: 28em;
+    white-space: normal;
+    background-color: var(--vscode-editorWidget-background, var(--vscode-editor-background));
+    border: 1px solid var(--vscode-editorWidget-border, var(--vscode-panel-border));
+  }
+  #timestamp-panel[hidden] {
+    display: none;
+  }
+  .timestamp-format-row {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    flex-wrap: wrap;
+  }
+  .timestamp-format-row .timestamp-format-name {
+    width: 8em;
+  }
+  .timestamp-format-row .timestamp-format-pattern {
+    width: 14em;
+  }
+  .timestamp-format-row button {
+    background-color: transparent;
+    color: inherit;
+    padding: 0 4px;
+    opacity: 0.7;
+  }
+  .timestamp-format-feedback {
+    flex-basis: 100%;
+    font-size: 0.9em;
+    opacity: 0.8;
+    margin: 0;
+  }
+  .timestamp-format-feedback.timestamp-format-error {
+    color: var(--vscode-errorForeground);
+    opacity: 1;
+  }
+  #timestamp-scope-label {
+    margin: 2px 0;
+    font-size: 0.85em;
+    opacity: 0.7;
+  }
+  #timestamp-unrecognized-lines {
+    display: flex;
+    flex-direction: column;
+    max-height: 8em;
+    overflow-y: auto;
+    font-family: var(--vscode-editor-font-family, monospace);
+    font-size: 0.9em;
+    background-color: var(--vscode-editor-background);
+    border: 1px solid var(--vscode-panel-border);
+    padding: 2px 4px;
+  }
+  .timestamp-sample-line {
+    white-space: pre;
+    cursor: text;
+  }
+  #timestamp-selection-status {
+    font-size: 0.85em;
+    opacity: 0.8;
+    margin: 0;
+  }
+  #timestamp-proposal {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    padding-top: 4px;
+    border-top: 1px solid var(--vscode-panel-border);
+  }
+  #timestamp-proposal[hidden] {
+    display: none;
+  }
+  #timestamp-ambiguous-hint {
+    margin: 0;
+    font-size: 0.85em;
+    opacity: 0.8;
+  }
+  #timestamp-ambiguous-hint[hidden] {
+    display: none;
   }`;
 
-function buildInteractiveViewBodyLabels() {
+/** ファイルパネル（追加・書き出し・マスク・ハイライト・タイムスタンプ形式）の静的文言。 */
+function buildFilesPanelLabels() {
   return {
     addFiles: escapeHtml(vscode.l10n.t("+ Add Files...")),
     exportVirtualDocument: escapeHtml(vscode.l10n.t("Export as Virtual Document")),
@@ -345,7 +442,25 @@ function buildInteractiveViewBodyLabels() {
     highlightHint: escapeHtml(
       vscode.l10n.t("Higher rows take priority when ranges overlap.")
     ),
+    timestampFormatsTitle: escapeHtml(
+      vscode.l10n.t(
+        "Add timestamp formats not recognized by the built-ins, or suggest one from a selection (saved in Settings)"
+      )
+    ),
+    timestampFormatsLabel: escapeHtml(vscode.l10n.t("Timestamp ▾")),
+    timestampFormats: escapeHtml(vscode.l10n.t("Timestamp formats")),
+    addTimestampFormat: escapeHtml(vscode.l10n.t("Add a timestamp format")),
+    unrecognizedLines: escapeHtml(vscode.l10n.t("Unrecognized lines")),
+    unrecognizedLinesHint: escapeHtml(
+      vscode.l10n.t("Select part of a line below (or in the log) to get a pattern suggestion.")
+    ),
     loadedFiles: escapeHtml(vscode.l10n.t("Loaded files:")),
+  };
+}
+
+/** 絞り込みパネル（日付・パターン・折りたたみ）の静的文言。 */
+function buildFilterPanelLabels() {
+  return {
     datePlaceholder: escapeHtml(vscode.l10n.t("YYYY-MM-DD")),
     startDateTime: escapeHtml(vscode.l10n.t("Start date and time")),
     endDateTime: escapeHtml(vscode.l10n.t("End date and time")),
@@ -361,6 +476,11 @@ function buildInteractiveViewBodyLabels() {
     addIgnorePattern: escapeHtml(vscode.l10n.t("Add an ignore pattern")),
     collapseRepeated: escapeHtml(vscode.l10n.t("Collapse repeated entries")),
   };
+}
+
+/** `max-lines-per-function` を超えないよう、パネルごとに分けた文言を1つにまとめる。 */
+function buildInteractiveViewBodyLabels() {
+  return { ...buildFilesPanelLabels(), ...buildFilterPanelLabels() };
 }
 
 type InteractiveViewBodyLabels = ReturnType<typeof buildInteractiveViewBodyLabels>;
@@ -393,6 +513,30 @@ function buildFilesPanel(labels: InteractiveViewBodyLabels): string {
         <div id="highlight-rules" role="group" aria-label="${labels.highlightRules}"></div>
         <button id="add-highlight-rule" type="button" class="add-pattern" aria-label="${labels.addHighlightRule}">${labels.add}</button>
         <p id="highlight-panel-hint">${labels.highlightHint}</p>
+      </div>
+    </div>
+    <!-- タイムスタンプ形式（issue #316）。マスク・ハイライトと同じ「▾」で開く
+         折りたたみパネルにする。行の一覧に加えて、未認識行から選んでパターンを
+         提案してもらう導線を持つ（issue #320 の inferTimestampPattern を使う）。 -->
+    <div id="timestamp-container">
+      <button id="timestamp-options-button" type="button" aria-expanded="false" aria-controls="timestamp-panel" title="${labels.timestampFormatsTitle}">${labels.timestampFormatsLabel}</button>
+      <div id="timestamp-panel" hidden>
+        <div id="timestamp-formats" role="group" aria-label="${labels.timestampFormats}"></div>
+        <button id="add-timestamp-format" type="button" class="add-pattern" aria-label="${labels.addTimestampFormat}">${labels.add}</button>
+        <p id="timestamp-scope-label"></p>
+        <div id="timestamp-unrecognized-lines" role="group" aria-label="${labels.unrecognizedLines}"></div>
+        <p id="timestamp-unrecognized-lines-hint">${labels.unrecognizedLinesHint}</p>
+        <button id="suggest-from-selection" type="button"></button>
+        <p id="timestamp-selection-status"></p>
+        <div id="timestamp-proposal" hidden>
+          <input type="text" id="timestamp-proposal-name">
+          <input type="text" id="timestamp-proposal-pattern">
+          <button id="add-timestamp-proposal" type="button"></button>
+          <p id="timestamp-ambiguous-hint" hidden>
+            <button id="timestamp-dmy-button" type="button"></button>
+            <button id="timestamp-mdy-button" type="button"></button>
+          </p>
+        </div>
       </div>
     </div>
     <span id="loaded-files-label">${labels.loadedFiles}</span>

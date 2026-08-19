@@ -1,7 +1,8 @@
 import * as assert from "node:assert";
 import * as vscode from "vscode";
 import { createClockSkewResolver } from "../../clockSkewSettings";
-import { readConfiguredTimestampFormats } from "../../timestampFormatSettings";
+import { parseLog } from "../../normalize";
+import { readConfiguredTimestampFormats, writeTimestampFormatRows } from "../../timestampFormatSettings";
 import { createSourceOffsetResolver } from "../../timezoneSettings";
 import { activateTotonoeLogExtension } from "./support/activateTotonoeLogExtension";
 import { waitForDocumentText } from "./support/waitForDocumentText";
@@ -738,6 +739,52 @@ suite("Totonoe Log custom timestamp formats", () => {
       );
     } finally {
       (vscode.window as any).showWarningMessage = originalShowWarningMessage;
+      await config.update("timestampFormats", undefined, vscode.ConfigurationTarget.Global);
+    }
+  });
+
+  test("a format saved via the panel's write path (issue #316) is recognized on the next parse, with no reload", async function () {
+    // #320 の推論 UI（issue #316）が保存に使うのは config.update ではなく
+    // writeTimestampFormatRows。保存した内容が readConfiguredTimestampFormats
+    // 経由で実際に反映されることを、この往復だけで確認する——「保存したのに
+    // 次回効かない」の回帰を、この1本で捕まえる。
+    this.timeout(10000);
+    await activateTotonoeLogExtension();
+
+    const config = vscode.workspace.getConfiguration("totonoeLog");
+    try {
+      await writeTimestampFormatRows([
+        {
+          name: "dotted-date",
+          pattern:
+            "(?<d>\\d{1,2})\\.(?<mo>\\d{1,2})\\.(?<y>\\d{4}) (?<h>\\d{1,2}):(?<mi>\\d{2}):(?<s>\\d{2})",
+        },
+      ]);
+
+      // 拡張機能を再起動せず、書き込んだ直後に readConfiguredTimestampFormats
+      // を呼び直すだけで反映されることを確認する（キャッシュを持たないため）。
+      const formats = readConfiguredTimestampFormats();
+      const [entry] = parseLog("02.01.2024 03:04:00 INFO started via panel", {
+        timestampFormats: formats,
+      });
+      assert.strictEqual(entry.matched, true);
+      assert.strictEqual(entry.timestampMs, Date.UTC(2024, 0, 2, 3, 4, 0));
+
+      // 別のドキュメントを新たに開いても（＝別ファイルでも）同じ設定が効く
+      // ——ファイル単位ではなく設定として保存されていることの確認。
+      const source = await vscode.workspace.openTextDocument({
+        content: "02.01.2024 03:04:00 INFO started via panel",
+        language: "log",
+      });
+      await vscode.window.showTextDocument(source);
+      await vscode.commands.executeCommand("totonoeLog.openVirtualDocument");
+      const activeEditor = vscode.window.activeTextEditor;
+      assert.ok(activeEditor, "a normalized view editor should be shown");
+      assert.strictEqual(
+        activeEditor.document.getText(),
+        "1 | 2024-01-02T03:04:00.000Z INFO started via panel"
+      );
+    } finally {
       await config.update("timestampFormats", undefined, vscode.ConfigurationTarget.Global);
     }
   });
