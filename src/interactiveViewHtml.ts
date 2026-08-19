@@ -454,6 +454,13 @@ function buildFilesPanelLabels() {
     unrecognizedLinesHint: escapeHtml(
       vscode.l10n.t("Select part of a line below (or in the log) to get a pattern suggestion.")
     ),
+    suggestFromSelection: escapeHtml(vscode.l10n.t("Suggest from selection")),
+    addProposal: escapeHtml(vscode.l10n.t("+ Add to timestamp formats")),
+    ambiguousDayMonthOrderHint: escapeHtml(
+      vscode.l10n.t("The day/month order was ambiguous — pick one if this looks wrong:")
+    ),
+    dayMonthOrderDmy: escapeHtml(vscode.l10n.t("Use day, month order")),
+    dayMonthOrderMdy: escapeHtml(vscode.l10n.t("Use month, day order")),
     loadedFiles: escapeHtml(vscode.l10n.t("Loaded files:")),
   };
 }
@@ -488,6 +495,42 @@ function buildInteractiveViewBodyLabels() {
 
 type InteractiveViewBodyLabels = ReturnType<typeof buildInteractiveViewBodyLabels>;
 
+/**
+ * タイムスタンプ形式パネル（issue #316）。マスク・ハイライトと同じ「▾」で
+ * 開く折りたたみパネルにする。行の一覧に加えて、未認識行から選んでパターンを
+ * 提案してもらう導線を持つ（issue #320 の inferTimestampPattern を使う）。
+ * `buildFilesPanel` を60行以内に収めるための分割（issue #325）。
+ */
+function buildTimestampFormatPanel(labels: InteractiveViewBodyLabels): string {
+  return `    <div id="timestamp-container">
+      <button id="timestamp-options-button" type="button" aria-expanded="false" aria-controls="timestamp-panel" title="${labels.timestampFormatsTitle}">${labels.timestampFormatsLabel}</button>
+      <div id="timestamp-panel" hidden>
+        <div id="timestamp-formats" role="group" aria-label="${labels.timestampFormats}"></div>
+        <button id="add-timestamp-format" type="button" class="add-pattern" aria-label="${labels.addTimestampFormat}">${labels.add}</button>
+        <!-- 保存済みの行が1件も無い間は空のまま——何もしていないのに
+             「保存されました」と出てしまわないよう、main.ts 側で
+             件数を見てから文言を入れる（issue #325）。 -->
+        <p id="timestamp-scope-label"></p>
+        <!-- 案内文を一覧より先に置く。「下の行を選択」という文言と実際の
+             位置を一致させる（issue #325）。 -->
+        <p id="timestamp-unrecognized-lines-hint">${labels.unrecognizedLinesHint}</p>
+        <div id="timestamp-unrecognized-lines" role="group" aria-label="${labels.unrecognizedLines}"></div>
+        <button id="suggest-from-selection" type="button">${labels.suggestFromSelection}</button>
+        <p id="timestamp-selection-status"></p>
+        <div id="timestamp-proposal" hidden>
+          <input type="text" id="timestamp-proposal-name">
+          <input type="text" id="timestamp-proposal-pattern">
+          <button id="add-timestamp-proposal" type="button">${labels.addProposal}</button>
+          <p id="timestamp-ambiguous-hint" hidden>
+            ${labels.ambiguousDayMonthOrderHint}
+            <button id="timestamp-dmy-button" type="button">${labels.dayMonthOrderDmy}</button>
+            <button id="timestamp-mdy-button" type="button">${labels.dayMonthOrderMdy}</button>
+          </p>
+        </div>
+      </div>
+    </div>`;
+}
+
 function buildFilesPanel(labels: InteractiveViewBodyLabels): string {
   return `  <div id="files-panel">
     <button id="add-files-button" type="button">${labels.addFiles}</button>
@@ -518,30 +561,7 @@ function buildFilesPanel(labels: InteractiveViewBodyLabels): string {
         <p id="highlight-panel-hint">${labels.highlightHint}</p>
       </div>
     </div>
-    <!-- タイムスタンプ形式（issue #316）。マスク・ハイライトと同じ「▾」で開く
-         折りたたみパネルにする。行の一覧に加えて、未認識行から選んでパターンを
-         提案してもらう導線を持つ（issue #320 の inferTimestampPattern を使う）。 -->
-    <div id="timestamp-container">
-      <button id="timestamp-options-button" type="button" aria-expanded="false" aria-controls="timestamp-panel" title="${labels.timestampFormatsTitle}">${labels.timestampFormatsLabel}</button>
-      <div id="timestamp-panel" hidden>
-        <div id="timestamp-formats" role="group" aria-label="${labels.timestampFormats}"></div>
-        <button id="add-timestamp-format" type="button" class="add-pattern" aria-label="${labels.addTimestampFormat}">${labels.add}</button>
-        <p id="timestamp-scope-label"></p>
-        <div id="timestamp-unrecognized-lines" role="group" aria-label="${labels.unrecognizedLines}"></div>
-        <p id="timestamp-unrecognized-lines-hint">${labels.unrecognizedLinesHint}</p>
-        <button id="suggest-from-selection" type="button"></button>
-        <p id="timestamp-selection-status"></p>
-        <div id="timestamp-proposal" hidden>
-          <input type="text" id="timestamp-proposal-name">
-          <input type="text" id="timestamp-proposal-pattern">
-          <button id="add-timestamp-proposal" type="button"></button>
-          <p id="timestamp-ambiguous-hint" hidden>
-            <button id="timestamp-dmy-button" type="button"></button>
-            <button id="timestamp-mdy-button" type="button"></button>
-          </p>
-        </div>
-      </div>
-    </div>
+${buildTimestampFormatPanel(labels)}
     <span id="loaded-files-label">${labels.loadedFiles}</span>
     <div id="loaded-files"></div>
   </div>`;

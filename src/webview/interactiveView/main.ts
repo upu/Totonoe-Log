@@ -787,7 +787,16 @@ timestampFormatList.addEventListener("focusout", (event) => {
   }
 });
 
-function renderTimestampFormatsScope(scope: "workspace" | "user"): void {
+/**
+ * 保存済みの行が1件も無いのに「保存されました」と出さないよう、行が
+ * 1件以上あるときだけスコープを表示する（issue #325）。パネルを開いた
+ * だけで何もしていないのに保存済みだと誤解させないための条件分岐。
+ */
+function renderTimestampFormatsScope(scope: "workspace" | "user", rowCount: number): void {
+  if (rowCount === 0) {
+    timestampScopeLabel.textContent = "";
+    return;
+  }
   const localized = currentLabels();
   timestampScopeLabel.textContent =
     scope === "workspace" ? localized.savedToWorkspaceLabel : localized.savedToUserLabel;
@@ -1262,7 +1271,7 @@ function renderState(state: InteractiveViewStateMessage): void {
   lineHighlights = new Map(state.highlights ?? []);
   renderHighlightRules(state.highlightRules);
   renderTimestampFormatRows(state.timestampFormatRows);
-  renderTimestampFormatsScope(state.timestampFormatsScope);
+  renderTimestampFormatsScope(state.timestampFormatsScope, state.timestampFormatRows.length);
   renderUnrecognizedLines(state.unrecognizedSampleLines);
   renderLoadedFiles(state.loadedFileNames, state.sourceFilePaths, state.criteria.visibleFiles);
   renderSeverities(state.distinctSeverities, state.criteria.severities);

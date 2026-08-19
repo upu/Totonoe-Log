@@ -6,11 +6,7 @@ suite("interactiveViewLabels (#278)", () => {
     const labels = buildInteractiveViewLabels();
 
     assert.deepStrictEqual(Object.keys(labels).sort(), [
-      "addProposalLabel",
-      "ambiguousDayMonthOrderHint",
       "cannotRemoveLastFileLabel",
-      "dayMonthOrderDmyLabel",
-      "dayMonthOrderMdyLabel",
       "displayLimitMessage",
       "hideFileTitle",
       "hideFileWithPathTitle",
@@ -49,7 +45,6 @@ suite("interactiveViewLabels (#278)", () => {
       "savedToWorkspaceLabel",
       "sourceFilesTitle",
       "statusMessage",
-      "suggestFromSelectionLabel",
       "timestampFormatNameAriaLabel",
       "timestampFormatPatternAriaLabel",
       "unrecognizedLinesEmptyMessage",
