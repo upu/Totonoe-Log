@@ -79,6 +79,18 @@ export type {
   CompileCustomTimestampFormatsResult,
 } from "./customTimestampFormats";
 export { compileCustomTimestampFormats } from "./customTimestampFormats";
+export type {
+  TimestampPatternInferenceFailureReason,
+  TimestampPatternInferenceOptions,
+  TimestampPatternProposal,
+  TimestampPatternInferenceResult,
+} from "./timestampPatternInference";
+export { inferTimestampPattern } from "./timestampPatternInference";
+export type {
+  TimestampPatternPreviewMatch,
+  TimestampPatternPreviewResult,
+} from "./timestampPatternPreview";
+export { previewTimestampFormat, collectUnrecognizedLines } from "./timestampPatternPreview";
 export type { TimestampRecognitionAssessment } from "./timestampCoverage";
 export {
   LOW_RECOGNITION_MIN_LINE_COUNT,
