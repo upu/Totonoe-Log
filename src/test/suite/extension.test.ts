@@ -1279,6 +1279,53 @@ suite("Totonoe Log low timestamp recognition warning", () => {
     );
   });
 
+  /** `interactiveView.test.ts` の同名ヘルパーと同じ実装（issue #321）。 */
+  async function waitFor(predicate: () => boolean, timeoutMs = 2000, intervalMs = 25): Promise<boolean> {
+    const deadline = Date.now() + timeoutMs;
+    while (Date.now() < deadline) {
+      if (predicate()) {
+        return true;
+      }
+      await new Promise((resolve) => setTimeout(resolve, intervalMs));
+    }
+    return predicate();
+  }
+
+  test("the action button on the recognition warning opens the Interactive View for that file (issue #321)", async function () {
+    this.timeout(10000);
+    await activateTotonoeLogExtension();
+    await vscode.commands.executeCommand("workbench.action.closeAllEditors");
+
+    await withTempLogFiles([{ name: "action-button.log", content: UNRECOGNIZED_LOG }], async (uris) => {
+      const source = await vscode.workspace.openTextDocument(uris[0]);
+      await vscode.window.showTextDocument(source);
+
+      const originalShowWarningMessage = vscode.window.showWarningMessage;
+      // 通知に付くアクションボタンを押した状態を再現する：どのラベルが渡されても
+      // 最後の引数（ボタンのラベル文字列）を選んだことにする。
+      (vscode.window as any).showWarningMessage = async (
+        _message: string,
+        ...actions: string[]
+      ) => actions[actions.length - 1];
+      try {
+        await vscode.commands.executeCommand("totonoeLog.openVirtualDocument");
+
+        const webviewTab = (): vscode.Tab | undefined =>
+          vscode.window.tabGroups.all
+            .flatMap((group) => group.tabs)
+            .find((tab) => tab.input instanceof vscode.TabInputWebview);
+        assert.ok(
+          await waitFor(() => webviewTab() !== undefined),
+          "clicking the action button should open the Interactive View"
+        );
+        assert.ok(webviewTab()?.label.includes("action-button.log"));
+      } finally {
+        (vscode.window as any).showWarningMessage = originalShowWarningMessage;
+        await vscode.commands.executeCommand("workbench.action.closeAllEditors");
+      }
+    });
+  });
+
   test("leaves the warning to the Interactive View panel instead of a modal (#186)", async function () {
     this.timeout(10000);
     await activateTotonoeLogExtension();

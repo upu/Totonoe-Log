@@ -277,6 +277,12 @@ export class InteractiveViewPanelController implements vscode.Disposable {
    * なくファイル集合が変わる {@link recomputeEntries} でだけ作り直す。
    */
   private recognitionWarnings: readonly string[] = [];
+  /**
+   * 認識率警告のアクションボタン（issue #321）から開いたとき、次の1回だけ
+   * タイムスタンプ形式パネルを展開させるフラグ。`postState` で読み取ると
+   * 同時にfalseへ戻すため、以降の通常の再描画では効かない。
+   */
+  private focusTimestampPanelOnNextState = false;
   private criteria: SerializedFilterCriteria = createDefaultSerializedCriteria([], 0);
   /**
    * 再描画の世代管理（issue #218）。ファイルの差し替え・絞り込みの変更・設定変更は
@@ -347,6 +353,17 @@ export class InteractiveViewPanelController implements vscode.Disposable {
       void this.applyConfigurationChange(event);
     });
     panel.webview.html = this.renderHtml(panel.webview, nonce);
+  }
+
+  /**
+   * タイムスタンプ認識率の警告（issue #101）のアクションボタンから呼ばれる
+   * （issue #321）。対象ファイルで Interactive View を開き（読み込み内容は
+   * 通常の {@link showOrReveal} と同じくこのファイルへ差し替える）、次の
+   * 状態送信でタイムスタンプ形式パネルを展開させる。
+   */
+  async showOrRevealFocusingTimestampPanel(files: readonly LoadedLogFile[]): Promise<void> {
+    this.focusTimestampPanelOnNextState = true;
+    await this.showOrReveal(files);
   }
 
   dispose(): void {
@@ -752,7 +769,8 @@ export class InteractiveViewPanelController implements vscode.Disposable {
     prepared: PreparedInteractiveState,
     criteriaSnapshot: SerializedFilterCriteria,
     revision: number,
-    session: PatternWorkerSession
+    session: PatternWorkerSession,
+    focusTimestampPanel: boolean
   ): Promise<void> {
     // 失敗した結果はどちらのパターン段で起きたかを区別しないため、
     // フォールバックでは両方を落とす（issue #182）。片方だけ残して再実行すると、
@@ -788,7 +806,8 @@ export class InteractiveViewPanelController implements vscode.Disposable {
       prepared.collapsibleSupported,
       criteriaSnapshot,
       revision,
-      session
+      session,
+      focusTimestampPanel
     );
   }
 
@@ -809,6 +828,10 @@ export class InteractiveViewPanelController implements vscode.Disposable {
     // （書き換えではない）ため参照を保持すれば足りる。送信時に読み直すと、
     // 計算中に届いた新しい条件と、この計算の結果とが1つのメッセージに混ざる。
     const criteriaSnapshot = this.criteria;
+    // 認識率警告のボタンから開いたときだけ一度使う（issue #321）。読み取ると
+    // 同時にfalseへ戻し、以降の再描画（絞り込み変更など）では効かせない。
+    const focusTimestampPanel = this.focusTimestampPanelOnNextState;
+    this.focusTimestampPanelOnNextState = false;
     const prepared = this.prepareInteractiveState(criteriaSnapshot);
     // この再描画で走るパターン処理（一致・無視・マスク・ハイライトと、失敗時の
     // 再計算）を1つのワーカーで順に処理する（issue #303）。再描画をまたいで
@@ -833,11 +856,19 @@ export class InteractiveViewPanelController implements vscode.Disposable {
           prepared.collapsibleSupported,
           criteriaSnapshot,
           revision,
-          session
+          session,
+          focusTimestampPanel
         );
         return;
       }
-      await this.postFallbackState(payload, prepared, criteriaSnapshot, revision, session);
+      await this.postFallbackState(
+        payload,
+        prepared,
+        criteriaSnapshot,
+        revision,
+        session,
+        focusTimestampPanel
+      );
     } finally {
       session.dispose();
     }
@@ -885,7 +916,8 @@ export class InteractiveViewPanelController implements vscode.Disposable {
     collapsibleSupported: boolean,
     criteria: SerializedFilterCriteria,
     revision: number,
-    session: PatternWorkerSession
+    session: PatternWorkerSession,
+    focusTimestampPanel: boolean
   ): Promise<void> {
     // パネルが閉じられた後、および後から始まった再描画に追い越された後は送らない。
     const panel = this.panel;
@@ -935,6 +967,8 @@ export class InteractiveViewPanelController implements vscode.Disposable {
       timestampFormatRows: timestampFormatPanel.rows,
       timestampFormatsScope: timestampFormatPanel.scope,
       unrecognizedSampleLines: timestampFormatPanel.sampleLines,
+      hasTimestampRecognitionWarning: this.recognitionWarnings.length > 0,
+      focusTimestampPanel,
     };
     await panel.webview.postMessage(message);
   }

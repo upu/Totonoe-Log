@@ -18,6 +18,8 @@ import {
 } from "./interactiveView";
 import { createSetViewFilterCommand } from "./setViewFilter";
 import { createOpenVirtualDocumentCommand } from "./openVirtualDocument";
+import { registerTimestampFormatHelperOpener } from "./timestampRecognitionWarning";
+import { loadLogFiles } from "./logFileReading";
 
 function registerNormalizedAndMergedViewFeatures(
   normalizedViewProvider: NormalizedViewContentProvider,
@@ -121,6 +123,14 @@ export function activate(context: vscode.ExtensionContext): void {
     normalizedViewProvider,
     mergedViewProvider
   );
+  // 認識率警告のアクションボタン（issue #321）から Interactive View を開く
+  // 実装をここで1回だけ登録する。正規化/マージビュー系のコマンドは
+  // `timestampRecognitionWarning.ts` を通じて警告を出すだけの薄い経路なので、
+  // それらのシグネチャへ Interactive View への依存を持ち込まずに済む。
+  registerTimestampFormatHelperOpener(async (sourceUri) => {
+    const [file] = await loadLogFiles([sourceUri]);
+    await interactiveViewController.showOrRevealFocusingTimestampPanel([file]);
+  });
 
   context.subscriptions.push(
     ...registerNormalizedAndMergedViewFeatures(
