@@ -475,6 +475,9 @@ function buildFilterPanelLabels() {
     ),
     addIgnorePattern: escapeHtml(vscode.l10n.t("Add an ignore pattern")),
     collapseRepeated: escapeHtml(vscode.l10n.t("Collapse repeated entries")),
+    // 認識率警告のモーダル通知（timestampRecognitionWarning.ts）のアクション
+    // ボタンと同じ英語原文を使い、l10n バンドルの訳を1つに保つ（issue #321）。
+    openTimestampHelperFromWarning: escapeHtml(vscode.l10n.t("Open Timestamp Format Helper")),
   };
 }
 
@@ -567,6 +570,10 @@ function buildFilterPanel(labels: InteractiveViewBodyLabels): string {
   </div>
   <div id="status"></div>
   <div id="warning"></div>
+  <!-- タイムスタンプ認識率の警告（issue #101）が出ているときだけ見せる、
+       タイムスタンプ形式パネルへの近道（issue #321）。手動で「タイムスタンプ ▾」
+       を押すのと同じ状態に飛ぶだけで、ワンショットの確定操作ではない。 -->
+  <button id="open-timestamp-panel-from-warning" type="button" hidden>${labels.openTimestampHelperFromWarning}</button>
   <div id="display-limit"></div>
   <pre id="log-output"></pre>`;
 }

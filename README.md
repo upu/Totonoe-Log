@@ -236,7 +236,9 @@ When most lines of a log are left without a timestamp, Totonoe Log says so
 instead of quietly folding them into one huge entry: the virtual-document
 commands notify you once per file, and the Interactive View shows it in its
 warning line for every loaded file — including the ones added later with
-**+ Add Files...**.
+**+ Add Files...**. Both places offer an "Open Timestamp Format Helper"
+button that jumps straight to the [Timestamp format helper](#timestamp-format-helper),
+already expanded, for the file the warning is about.
 
 ```jsonc
 "totonoeLog.timestampFormats": [

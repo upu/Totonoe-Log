@@ -421,4 +421,18 @@ export interface InteractiveViewStateMessage {
    * 検証プレビューが対象にするサンプルとも一致する。
    */
   readonly unrecognizedSampleLines: readonly string[];
+  /**
+   * 読み込み済みファイルにタイムスタンプ認識率の警告（issue #101）が
+   * 1件以上あるか（issue #321）。`warning` は他の警告文と1本の文字列に
+   * 連結されるため、そこから種別を判別できない——パネル警告行のボタンの
+   * 表示/非表示に使う専用フラグとして別に持つ。
+   */
+  readonly hasTimestampRecognitionWarning: boolean;
+  /**
+   * このメッセージを受けたら、タイムスタンプ形式パネルを一度だけ展開する
+   * （issue #321）。認識率警告のアクションボタンから Interactive View を
+   * 開いた/前面に出したときだけ true——それ以外の通常の再描画では毎回
+   * false にして、ユーザーが自分で閉じたパネルを再描画のたびに開き直さない。
+   */
+  readonly focusTimestampPanel: boolean;
 }

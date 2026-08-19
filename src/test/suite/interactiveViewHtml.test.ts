@@ -60,6 +60,7 @@ const REQUIRED_ELEMENT_IDS = [
   "mask-process-id",
   "mask-timestamp",
   "match-patterns",
+  "open-timestamp-panel-from-warning",
   "severities",
   "status",
   "suggest-from-selection",

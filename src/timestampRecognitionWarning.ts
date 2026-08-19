@@ -14,11 +14,28 @@ import {
 const warnedSourceKeys = new Set<string>();
 
 /**
+ * 認識率警告のアクションボタン（issue #321）から Interactive View を開く
+ * 実装。`warnIfLowTimestampRecognition` の呼び出し元（正規化/マージビュー系の
+ * 全コマンド）は、この時点では Interactive View の存在すら知らない薄い
+ * ユーティリティなので、それらのシグネチャを変えて依存を持ち込む代わりに
+ * `extension.ts` の `activate()` から1回だけ遅延登録する。
+ */
+export type TimestampFormatHelperOpener = (sourceUri: vscode.Uri) => void | Promise<void>;
+let timestampFormatHelperOpener: TimestampFormatHelperOpener | undefined;
+
+/** {@link timestampFormatHelperOpener} を登録する。テストでも直接呼べるよう公開する。 */
+export function registerTimestampFormatHelperOpener(opener: TimestampFormatHelperOpener): void {
+  timestampFormatHelperOpener = opener;
+}
+
+/**
  * タイムスタンプ認識率が低い場合に警告通知を表示する（issue #101）。
  * 「警告すべきか」の判定は純粋ロジック層の {@link assessTimestampRecognition}
  * に委ね、この層は頻度制御（同一ファイルにつきセッション中1回）と通知文言の
  * 組み立てだけを担う。カスタム形式設定（`totonoeLog.timestampFormats`、
- * issue #100）への導線を文言に含める。
+ * issue #100）への導線を文言に含め、開き手が登録されていれば通知に
+ * アクションボタンを添えて Interactive View のタイムスタンプ形式パネルへ
+ * 直接飛べるようにする（issue #316、#321）。
  */
 export function warnIfLowTimestampRecognition(
   sourceUri: vscode.Uri,
@@ -36,7 +53,20 @@ export function warnIfLowTimestampRecognition(
   }
 
   warnedSourceKeys.add(sourceKey);
-  vscode.window.showWarningMessage(vscode.l10n.t("Totonoe Log: {0}", warning));
+  const message = vscode.l10n.t("Totonoe Log: {0}", warning);
+  const opener = timestampFormatHelperOpener;
+  if (!opener) {
+    vscode.window.showWarningMessage(message);
+    return;
+  }
+
+  const actionLabel = vscode.l10n.t("Open Timestamp Format Helper");
+  void vscode.window.showWarningMessage(message, actionLabel).then((choice) => {
+    if (choice === actionLabel) {
+      return opener(sourceUri);
+    }
+    return undefined;
+  });
 }
 
 /**

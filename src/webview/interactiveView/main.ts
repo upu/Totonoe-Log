@@ -105,6 +105,9 @@ const addIgnorePatternButton = document.getElementById("add-ignore-pattern") as 
 const collapseToggle = document.getElementById("collapse-toggle") as HTMLInputElement;
 const statusElement = document.getElementById("status") as HTMLDivElement;
 const warningElement = document.getElementById("warning") as HTMLDivElement;
+const openTimestampPanelFromWarningButton = document.getElementById(
+  "open-timestamp-panel-from-warning"
+) as HTMLButtonElement;
 const displayLimitElement = document.getElementById("display-limit") as HTMLDivElement;
 const logOutputElement = document.getElementById("log-output") as HTMLPreElement;
 
@@ -635,6 +638,12 @@ timestampOptionsButton.addEventListener("click", () => {
   if (labels) {
     setTimestampPanelExpanded(timestampOptionsButton.getAttribute("aria-expanded") !== "true");
   }
+});
+
+// 警告行のボタン（issue #321）は「タイムスタンプ ▾」を手動で押すのと同じ
+// 状態に飛ぶだけの近道なので、拡張機能本体には何も送らずローカルで開くだけ。
+openTimestampPanelFromWarningButton.addEventListener("click", () => {
+  setTimestampPanelExpanded(true);
 });
 
 /** タイムスタンプ形式編集パネルの現在の行を集める（保存済みの検証情報は含めない）。 */
@@ -1276,6 +1285,12 @@ function renderState(state: InteractiveViewStateMessage): void {
     state.totalLineCount
   );
   warningElement.textContent = state.warning ?? "";
+  // ボタンは認識率警告があるときだけ出す（issue #321）。`warning` は他の
+  // 警告文と1本の文字列に連結済みで種別を判別できないため、専用フラグを見る。
+  openTimestampPanelFromWarningButton.hidden = !state.hasTimestampRecognitionWarning;
+  if (state.focusTimestampPanel) {
+    setTimestampPanelExpanded(true);
+  }
   renderDisplayLimit(state.displayLimit);
   if (state.items) {
     renderItems(state.items);

@@ -19,6 +19,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   edited directly with a hand-written pattern; saving works the same way as
   Highlight rules — no separate save step, written straight back to
   `totonoeLog.timestampFormats` (issue #316).
+- **The low-recognition-timestamp warning now links straight to that
+  helper.** Both the modal notification and the Interactive View's panel
+  warning line offer an "Open Timestamp Format Helper" button that opens
+  (or reveals) the Interactive View for the file in question with the
+  timestamp format panel already expanded (issue #321).
 
 ## [0.12.0] - 2026-08-12
 

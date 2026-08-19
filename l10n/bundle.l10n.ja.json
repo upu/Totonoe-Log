@@ -122,6 +122,7 @@
   "Match patterns": "一致パターン",
   "Name (optional)": "名前（任意）",
   "No unrecognized lines to select from.": "選択できる未認識行がありません",
+  "Open Timestamp Format Helper": "タイムスタンプ形式の補助を開く",
   "Orange": "オレンジ",
   "Pattern (regular expression)": "パターン（正規表現）",
   "Pattern to highlight (regular expression)": "ハイライトするパターン（正規表現）",
