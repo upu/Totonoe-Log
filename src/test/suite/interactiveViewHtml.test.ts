@@ -118,11 +118,27 @@ suite("interactiveViewHtml / buildInteractiveViewHtml (#262)", () => {
         "Replace matching text with <MASKED>. To preserve a key name, use the Key field above instead."
       ),
       `aria-label="${localizedHtml("Add a highlight rule")}"`,
+      // タイムスタンプ形式パネル（issue #316）のボタンにラベルが無い状態で
+      // 出荷されていた不具合（issue #325）の再発防止。
+      `>${localizedHtml("Suggest from selection")}</button>`,
+      `>${localizedHtml("+ Add to timestamp formats")}</button>`,
+      `>${localizedHtml("Use day, month order")}</button>`,
+      `>${localizedHtml("Use month, day order")}</button>`,
+      localizedHtml("The day/month order was ambiguous — pick one if this looks wrong:"),
     ];
 
     for (const snippet of expectedSnippets) {
       assert.ok(html.includes(snippet), `missing localized HTML: ${snippet}`);
     }
+  });
+
+  test("places the unrecognized-lines hint before the list it describes (issue #325)", () => {
+    // 文言が「下の行を選択」なので、案内文は一覧より前に無ければならない。
+    const html = buildHtml();
+    const hintIndex = html.indexOf('id="timestamp-unrecognized-lines-hint"');
+    const listIndex = html.indexOf('id="timestamp-unrecognized-lines"');
+    assert.ok(hintIndex >= 0 && listIndex >= 0, "both elements should be present");
+    assert.ok(hintIndex < listIndex, "the hint should come before the list it refers to as \"below\"");
   });
 
   test("puts the nonce on the CSP meta, the style tag and the script tag", () => {

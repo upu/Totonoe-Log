@@ -46,14 +46,7 @@ export function buildInteractiveViewLabels(): InteractiveViewLabels {
     timestampFormatPatternAriaLabel: vscode.l10n.t("Pattern to recognize (regular expression)"),
     removeTimestampFormatTitle: vscode.l10n.t("Delete this timestamp format"),
     removeTimestampFormatAriaLabel: vscode.l10n.t("Delete this timestamp format"),
-    suggestFromSelectionLabel: vscode.l10n.t("Suggest from selection"),
     noSelectionMessage: vscode.l10n.t("Select part of a line first."),
-    addProposalLabel: vscode.l10n.t("+ Add to timestamp formats"),
-    ambiguousDayMonthOrderHint: vscode.l10n.t(
-      "The day/month order was ambiguous — pick one if this looks wrong:"
-    ),
-    dayMonthOrderDmyLabel: vscode.l10n.t("Use day, month order"),
-    dayMonthOrderMdyLabel: vscode.l10n.t("Use month, day order"),
     matchSummaryMessage: vscode.l10n.t("{0} / {1} unrecognized lines matched"),
     savedToWorkspaceLabel: vscode.l10n.t("Saved to workspace settings"),
     savedToUserLabel: vscode.l10n.t("Saved to user settings"),

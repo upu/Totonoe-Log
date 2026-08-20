@@ -314,12 +314,7 @@ export interface InteractiveViewLabels {
   readonly timestampFormatPatternAriaLabel: string;
   readonly removeTimestampFormatTitle: string;
   readonly removeTimestampFormatAriaLabel: string;
-  readonly suggestFromSelectionLabel: string;
   readonly noSelectionMessage: string;
-  readonly addProposalLabel: string;
-  readonly ambiguousDayMonthOrderHint: string;
-  readonly dayMonthOrderDmyLabel: string;
-  readonly dayMonthOrderMdyLabel: string;
   readonly matchSummaryMessage: string;
   readonly savedToWorkspaceLabel: string;
   readonly savedToUserLabel: string;
