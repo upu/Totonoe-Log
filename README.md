@@ -16,6 +16,13 @@ Start with **Interactive View**, where every filter is a live toggle. Everything
 
 For a lookup-style list of every command — command IDs, where each one can be run from, and what it produces — see the [command reference](https://github.com/upu/Totonoe-Log/blob/main/docs/features/commands.md).
 
+- **[Normalize](#normalize-into-one-timeline)** — parse mixed log formats into one consistent, common structure
+- **[Merge](#merge-multiple-files)** — combine multiple files into a single chronological timeline
+- **[Filter](#filter-out-the-noise)** — narrow down by severity, time range, or pattern
+- **[Collapse](#collapse-repeated-lines)** — fold repeated noise into one line
+- **[Compare](#compare-two-logs)** — diff two logs without dates or hosts flooding the result
+- **[Mask](#masking-your-own-identifiers)** — hide timestamps, hosts, and your own identifiers before sharing
+
 ## Interactive View
 
 `Totonoe Log: Show Interactive View` opens the log in a Webview panel where the whole investigation happens in one place, with no round-tripping through Quick Pick dialogs. Run it from the Command Palette against the active editor's log (unsaved changes included), or right-click a log file — or a multi-file selection — in the Explorer.
