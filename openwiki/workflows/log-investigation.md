@@ -3,6 +3,14 @@ type: ワークフロー
 title: ログ調査ワークフロー
 description: 入力解決から正規化、マージ、フィルタ、マスク、折りたたみ、export、比較、元行ジャンプまでの主要な利用・実行フロー。
 tags: [workflow, interactive-view, virtual-document]
+openwiki:
+  roles: [workflow, integration, domain]
+  change_kinds: [investigation-flow, filtering, export]
+  source_paths: [src/openVirtualDocument.ts, src/interactiveView.ts, src/normalize/buildInteractivePayload.ts]
+  symbols: [InteractiveViewPanelController, PatternWorkerSession, RefreshRevisionGate, SourceLineMap]
+  test_paths: [src/test/suite/interactiveView.test.ts, src/test/suite/openInVirtualDocument.test.ts, src/test/suite/goToSourceLine.test.ts]
+  invariants: [exportは表示上限で切り詰めない。, 非同期再描画では古い結果を公開しない。, 可能な経路では元行対応を保持する。]
+  validation_commands: [npm run compile && npm run build && npm test -- --grep "Interactive View|virtual document|source line"]
 ---
 
 # ログ調査ワークフロー
@@ -58,7 +66,7 @@ sequenceDiagram
 
 この図は、重い正規表現評価を隔離し、1回の再描画内ではmatch・ignore・mask・highlightに同じ `PatternWorkerSession` を使いながら、古い要求の結果を捨てるlatest-wins再描画を示す。セッションは再描画ごとに破棄されるため、重なった再描画は互いのworker待ちにならない。
 
-1ファイルでは元の行順を維持し、2ファイル以上で時刻順へmergeする。ファイル表示、severity、date、match、ignoreを適用した後、custom mask、collapse、format、表示上限、highlightの順に状態を作る。設定変更のうち `timestampFormats`、source/file timezone offset、clock skewは再parseを必要とし、その他は保持済みエントリから再描画する。
+1ファイルでは元の行順を維持し、2ファイル以上で時刻順へmergeする。ファイル表示、severity、date、match、ignoreを適用した後、custom mask、collapse、format、表示上限、highlightの順に状態を作る。設定変更のうち `timestampFormats`、source/file timezone offset、clock skewは再parseを必要とし、その他は保持済みエントリから再描画する。Interactive Viewの「タイムスタンプ ▾」は `timestampFormats` 自体を編集し、設定変更監視を通じて再parseする。未認識行の選択から保存までの専用フローは[タイムスタンプ形式補助ワークフロー](/openwiki/workflows/timestamp-format-helper.md)を参照する。
 
 match・ignoreの各欄は欄内OR、欄同士ANDである。不正な個別パターンは名指しして外し、残りを動かす。日付範囲の終了値は入力した最小単位の末尾までを含み、たとえば分までの入力はその分の `59.999` 秒まで残す。表示上限 `totonoeLog.interactiveView.maxDisplayLines` はWebview送信時だけに効き、折りたたみでは見出し行と展開後の全行を合わせたDOM行数を数える。exportは切り詰めず全結果を対象にする。
 

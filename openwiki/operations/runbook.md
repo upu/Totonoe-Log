@@ -18,7 +18,7 @@ npm test
 npm run check:package
 ```
 
-`npm test` はcompile済みtestsとbundle済み `out/extension.js` を使うため、`compile` と `build` を先に行う。開発中は `npm run check-types`、`npm run lint`、`npm run watch` を使う。選択基準は[テスト指針](/openwiki/testing/guide.md)に従う。
+`npm test` はcompile済みtestsとbundle済み `out/extension.js` を使うため、`compile` と `build` を先に行う。開発中は `npm run check-types`、`npm run lint`、`npm run watch` を使う。`.vscode/tasks.json` のwatch problem matcherはesbuildの `file:line:column` 行を解析するため、VS CodeのProblemsから発生箇所へ移動できる。matcherを変える場合はwatch中の実エラー出力形式と揃える。選択基準は[テスト指針](/openwiki/testing/guide.md)に従う。
 
 ## VSIX
 

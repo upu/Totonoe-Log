@@ -3,6 +3,14 @@ type: 統合ガイド
 title: VS Code統合ポイント
 description: Totonoe Log のコマンド、URI scheme、Webview protocol、設定、ファイルI/O、worker、diff、セキュリティ境界を整理する。
 tags: [integration, vscode, webview]
+openwiki:
+  roles: [integration, architecture, workflow]
+  change_kinds: [command, configuration, webview-protocol, localization]
+  source_paths: [package.json, src/extension.ts, src/webview/interactiveView/protocol.ts, src/timestampFormatSettings.ts]
+  symbols: [activate, WebviewToExtensionMessage, InteractiveViewStateMessage, resolveTimestampFormatsTarget]
+  test_paths: [src/test/suite/extension.test.ts, src/test/suite/interactiveView.test.ts, src/test/suite/packageLocalization.test.ts]
+  invariants: [manifest contributionとactivate時の登録を一致させる。, protocolはhostとbrowserの両方で型検査する。, timestampFormatsはresource無しで読み書きする。]
+  validation_commands: [npm run compile && npm run build]
 ---
 
 # VS Code統合ポイント
@@ -35,7 +43,7 @@ tags: [integration, vscode, webview]
 
 `src/webview/interactiveView/protocol.ts` は拡張ホストとbrowser bundleの共有契約である。Node、DOM、`vscode`へ依存せず、primitive・配列・plain objectだけを使う。
 
-Webviewからは `ready`、`filterChanged`、`addFiles`、`removeFile`、`exportVirtualDocument`、`revealSourceLine`、`highlightRulesChanged` を送る。拡張側からはcriteria、本文またはcollapse items、件数、ファイル、行対応、warning、highlight、表示上限情報を含む単一 `state` を返す。
+Webviewからは `ready`、`filterChanged`、`addFiles`、`removeFile`、`exportVirtualDocument`、`revealSourceLine`、`highlightRulesChanged`、`timestampFormatsChanged`、`timestampPatternRequested` を送る。拡張側からはcriteria、本文またはcollapse items、件数、ファイル、行対応、warning、highlight、表示上限、timestamp format行・保存scope・未認識サンプルを含む `state` を返す。pattern提案はまだ設定を変えないため、唯一の非state応答 `timestampPatternResult` を使う。この追加protocolのシーケンスは[タイムスタンプ形式補助ワークフロー](/openwiki/workflows/timestamp-format-helper.md)にある。
 
 `state.labels` は、Webviewが動的に生成する要素の翻訳済み文言である。`src/interactiveViewLabels.ts` が `vscode.l10n.t()` で一度構築し、Webviewは独自に表示言語を判定せず、受信したラベルだけを使う。静的コントロールは `src/interactiveViewHtml.ts` が同じAPIで翻訳し、`vscode.env.language` をHTMLの `lang` へ設定する。初回 `state` が届くまではフォームを無効化するため、controllerはHTMLを設定する前にmessage受信とpanel保持を完了しなければならない。この多言語化境界は[アーキテクチャ概要](/openwiki/architecture/overview.md)のInteractive View経路に対応する。
 
@@ -66,13 +74,15 @@ VS Codeの表示言語へ追従する文言は、用途ごとに3つの経路を
 
 設定は `totonoeLog` namespaceにあり、schemaの正本は `package.json`、表示文言の正本は `package.nls.json` と `package.nls.ja.json` である。主な群は次のとおり。
 
-- parse: `timestampFormats`, `timezone.sourceOffset`, `timezone.fileOffsets`, `clockSkew.fileOffsets`
+- parse: `timestampFormats`, `severityTokens`, `timezone.sourceOffset`, `timezone.fileOffsets`, `clockSkew.fileOffsets`
 - display: `timezone.display`, `gap.thresholdSeconds`, `interactiveView.maxDisplayLines`
 - collapse: `collapse.threshold`
 - mask: `copyMasked.maskTimestamp`, `maskHost`, `maskProcessId`
 - highlight: `highlightRules`
 
 Interactive Viewを開いたまま設定変更を反映するのは `interactiveViewConfigWatch.ts`。parse結果に影響する設定は全ファイルを再parseし、それ以外は再描画する。folder固有設定を扱うときはresource scopeを失わない。特にhighlight編集は既存定義のscopeへ書き戻す。
+
+`totonoeLog.timestampFormats` は例外的にresource無しで読み書きする。`src/timestampFormatSettings.ts:resolveTimestampFormatsTarget` は、workspace値が既にあればworkspace、そうでなければuserを選び、`WorkspaceFolder` へは保存しない。parse側の `readConfiguredTimestampFormats()` もresource無しで読むためであり、folder scopeへ書くと「保存できたが実行時に効かない」状態になる。パネルのscope表示、設定書き戻し、保存直後の別文書での認識までを `interactiveView.test.ts` と `extension.test.ts` が検証する。
 
 ## ファイルI/Oと大容量結果
 

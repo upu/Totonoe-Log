@@ -4,6 +4,11 @@ title: Totonoe Log コードWiki クイックスタート
 description: ログを正規化・マージ・絞り込み・折りたたみ・比較する VS Code 拡張 Totonoe Log の目的、開発開始手順、主要な設計領域への入口。
 resource: "https://github.com/upu/Totonoe-Log"
 tags: [quickstart, vscode-extension, logs]
+openwiki:
+  roles: [repository, architecture, workflow]
+  change_kinds: [task-routing, onboarding]
+  source_paths: [package.json, src/extension.ts, src/normalize/index.ts]
+  validation_commands: [npm run compile && npm run lint && npm run build]
 ---
 
 # Totonoe Log コードWiki クイックスタート
@@ -12,7 +17,7 @@ tags: [quickstart, vscode-extension, logs]
 
 Totonoe Log は「バラバラなログを、調査しやすい時系列に整える」VS Code 拡張である。形式の異なるログを共通モデルへ正規化し、時系列マージ、セベリティ・日時・正規表現による絞り込み、繰り返しの折りたたみ、共有前のマスク、差分比較を提供する。製品説明の正本は `README.ja.md`、コマンドの起動導線と出力の正本は `docs/features/commands.ja.md`、開発方針の正本は `AGENTS.md` である。
 
-現在の `package.json` は v0.11.0 を示す。変更履歴の `[Unreleased]` では、組み込みセベリティ語彙と `totonoeLog.severityTokens`、行頭より前に既知フィールドを持つタイムスタンプ、JSON Lines（NDJSON）の構造化正規化が追加されている。詳細な解析規則は[ログ処理ドメイン](/openwiki/domain/log-processing.md)を参照する。
+現在の `package.json` は v0.12.0 を示す。このリリースでは、組み込みセベリティ語彙と `totonoeLog.severityTokens`、行頭より前に既知フィールドを持つタイムスタンプ、JSON Lines（NDJSON）の構造化正規化が加わった。変更履歴の `[Unreleased]` では、Interactive Viewから選択範囲に基づくcustom timestamp patternを提案・検証・保存し、低認識率警告からその補助へ移動できる。解析規則は[ログ処理ドメイン](/openwiki/domain/log-processing.md)、新しい操作と実装境界は[タイムスタンプ形式補助ワークフロー](/openwiki/workflows/timestamp-format-helper.md)を参照する。
 
 ## 最短で開発を始める
 
@@ -47,8 +52,22 @@ npm run check:package
 
 1. [ログ処理ドメイン](/openwiki/domain/log-processing.md)で `LogEntry`、`MergedEntry`、`LineSource` と処理順を理解する。
 2. [ログ調査ワークフロー](/openwiki/workflows/log-investigation.md)で入力から表示、export、元行ジャンプまでを追う。
-3. [VS Code統合](/openwiki/integrations/vscode.md)でコマンド、仮想ドキュメント、Webview、設定境界を確認する。
-4. [テスト戦略](/openwiki/testing/guide.md)から変更内容に対応する回帰テストを選ぶ。
+3. [タイムスタンプ形式補助ワークフロー](/openwiki/workflows/timestamp-format-helper.md)で未認識行からのpattern提案、preview、設定保存、再parseを追う。
+4. [VS Code統合](/openwiki/integrations/vscode.md)でコマンド、仮想ドキュメント、Webview、設定境界を確認する。
+5. [テスト戦略](/openwiki/testing/guide.md)から変更内容に対応する回帰テストを選ぶ。
+
+## タスク別ルーティング
+
+| 変更領域・意図 | Wiki | 正確なソース入口 | 重要なsymbol・型 | focused test | 最小検証コマンド |
+| --- | --- | --- | --- | --- | --- |
+| parse、timestamp、JSON Lines、severity | [ログ処理ドメイン](/openwiki/domain/log-processing.md) | `src/normalize/parseLog.ts`, `src/normalize/jsonLogLine.ts`, `src/normalize/customTimestampFormats.ts` | `LogEntry`, `parseLog`, `compileCustomTimestampFormats` | `src/test/suite/normalize.test.ts` | `npm run compile && npm test -- --grep "parseLog|timestampFormats|JSON Lines"` |
+| 未認識時刻からpatternを提案・保存 | [タイムスタンプ形式補助](/openwiki/workflows/timestamp-format-helper.md) | `src/normalize/timestampPatternInference.ts`, `src/interactiveView.ts`, `src/timestampFormatSettings.ts` | `inferTimestampPattern`, `previewTimestampFormat`, `writeTimestampFormatRows` | `src/test/suite/timestampPatternInference.test.ts`, `src/test/suite/interactiveView.test.ts`, `src/test/suite/extension.test.ts` | `npm run compile && npm run build && npm test -- --grep "inferTimestampPattern|timestampFormatSettings|timestamp formats"` |
+| filter、mask、collapse、highlight | [ログ調査ワークフロー](/openwiki/workflows/log-investigation.md) | `src/normalize/filterEntries.ts`, `src/normalize/displayMask.ts`, `src/normalize/collapseRepeatedEntries.ts`, `src/normalize/highlightDisplayLines.ts` | `FilterCriteria`, `PatternWorkerSession`, `RefreshRevisionGate` | `src/test/suite/normalize.test.ts`, `src/test/suite/interactiveViewRefresh.test.ts` | `npm run compile && npm test -- --grep "filter|mask|collapse|highlight"` |
+| Interactive View UI・protocol | [VS Code統合](/openwiki/integrations/vscode.md) | `src/webview/interactiveView/protocol.ts`, `src/interactiveView.ts`, `src/webview/interactiveView/main.ts` | `WebviewToExtensionMessage`, `InteractiveViewStateMessage`, `InteractiveViewPanelController` | `src/test/suite/interactiveView.test.ts`, `src/test/suite/interactiveViewHtml.test.ts`, `src/test/suite/interactiveViewLabels.test.ts` | `npm run compile && npm run build && npm test -- --grep "interactiveView"` |
+| command、menu、仮想文書、元行ジャンプ | [VS Code統合](/openwiki/integrations/vscode.md) | `package.json`, `src/extension.ts`, `src/virtualDocumentContentProvider.ts` | `activate`, `VirtualDocumentContentProvider`, `SourceLineMap` | `src/test/suite/extension.test.ts`, `src/test/suite/openInVirtualDocument.test.ts`, `src/test/suite/goToSourceLine.test.ts` | `npm run compile && npm run build && npm test -- --grep "command|virtual document|source line"` |
+| build、VSIX、release | [運用ランブック](/openwiki/operations/runbook.md) | `package.json`, `scripts/esbuild.js`, `scripts/check-package-contents.js`, `.github/workflows/release.yml` | npm scripts, `EXPECTED` | package contents check | `npm run build && npm run check:package` |
+
+`npm test -- --grep` はcompile済みMocha test名を絞る。変更に合う安定したsuite名が無い場合や公開面を横断する場合だけ全 `npm test` へ広げる。
 
 ## 変更時の必須確認
 
@@ -61,10 +80,10 @@ npm run check:package
 
 ## 最近の発展
 
-v0.9.0前後ではInteractive Viewを中心に、複数パターン、ハイライト編集、マージ後の折りたたみ、認識率警告、マスク後の見た目に基づく折りたたみが追加された。v0.10.0ではフィルタと仮想文書コマンドを統合し、v0.11.0では整形結果を表示言語に依存しないASCII表現へ揃え、設定検証の多言語化と日時入力の厳密化を進めた。その後はセベリティ方言、前置きフィールド付きタイムスタンプ、JSON Linesへ入力範囲を拡張しており、「調査操作と共通モデルを保ったまま、実運用のログ形式をより広く受け入れる」方向へ発展している。
+v0.9.0前後ではInteractive Viewを中心に、複数パターン、ハイライト編集、マージ後の折りたたみ、認識率警告、マスク後の見た目に基づく折りたたみが追加された。v0.10.0ではフィルタと仮想文書コマンドを統合し、v0.11.0では整形結果を表示言語に依存しないASCII表現へ揃え、設定検証の多言語化と日時入力の厳密化を進めた。v0.12.0ではセベリティ方言、前置きフィールド付きタイムスタンプ、JSON Linesへ入力範囲を拡張した。その後は認識できない日時を利用者が選択し、既存のcustom format契約へ接続する補助を加えており、「共通モデルを広げ続けるだけでなく、未対応形式を利用者自身が安全に補える」方向へ発展している。
 
 ## Backlog
 
 - **アクセシビリティとWebview DOM詳細** — `src/webview/interactiveView/main.ts`。初期ページでは実行境界とプロトコルを優先し、個々のDOMイベントとCSSは未整理。
-- **全設定キーのリファレンス** — `package.json` の `contributes.configuration`。既存の `README.ja.md` に一覧があるため重複を避け、Wikiでは設計上重要な設定群のみ扱う。
+- **全設定キーのリファレンス** — `package.json` の `contributes.configuration`。`docs/features/settings.ja.md` に型・既定値・効果の一覧があるため重複を避け、Wikiでは設計上重要な設定群のみ扱う。
 - **タイムスタンプ形式ごとの完全仕様** — `src/normalize/timestampFormats.ts`, `customTimestampFormats.ts`。ドメイン上の優先順位と不変条件は記載したが、全形式の例は既存READMEとテストを正本とする。
