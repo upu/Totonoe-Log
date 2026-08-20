@@ -173,6 +173,55 @@ suite("normalize / inferTimestampPattern (#320)", () => {
   });
 });
 
+suite("normalize / inferTimestampPattern suggestedName (#329)", () => {
+  function suggestedNameFor(line: string, start: number, end: number): string {
+    const result = inferTimestampPattern(line, start, end);
+    assert.strictEqual(result.ok, true, `expected a proposal for "${line.slice(start, end)}"`);
+    return result.proposal.suggestedName;
+  }
+
+  test("reflects the separators and field order of a dotted DD.MM.YYYY selection", () => {
+    const name = suggestedNameFor(
+      "02.01.2024 03:04:00 INFO started",
+      0,
+      "02.01.2024 03:04:00".length
+    );
+    assert.strictEqual(name, "DD.MM.YYYY_hh:mm:ss");
+  });
+
+  test("collapses the date/time boundary separator to an underscore regardless of its original character", () => {
+    // ISO風の "T" 区切りも、DD.MM.YYYY の空白と同じ位置（日付と時刻の境界）
+    // だけを "_" にする——日付内・時刻内の "-" ":" はそのまま残す。
+    const name = suggestedNameFor("2024-01-02T03:04:05 hello", 0, "2024-01-02T03:04:05".length);
+    assert.strictEqual(name, "YYYY-MM-DD_hh:mm:ss");
+  });
+
+  test("includes a fractional-seconds placeholder when the selection has one", () => {
+    const name = suggestedNameFor(
+      "02.01.2024 03:04:00.678 hello",
+      0,
+      "02.01.2024 03:04:00.678".length
+    );
+    assert.strictEqual(name, "DD.MM.YYYY_hh:mm:ss.SSS");
+  });
+
+  test("reflects an explicit dayMonthOrder override in the day/month placeholder order", () => {
+    const line = "02.03.2024 03:04:05";
+    const asDmy = inferTimestampPattern(line, 0, line.length, { dayMonthOrder: "dmy" });
+    assert.strictEqual(asDmy.ok, true);
+    assert.strictEqual(asDmy.proposal.suggestedName, "DD.MM.YYYY_hh:mm:ss");
+
+    const asMdy = inferTimestampPattern(line, 0, line.length, { dayMonthOrder: "mdy" });
+    assert.strictEqual(asMdy.ok, true);
+    assert.strictEqual(asMdy.proposal.suggestedName, "MM.DD.YYYY_hh:mm:ss");
+  });
+
+  test("keeps the existing epoch names unchanged", () => {
+    assert.strictEqual(suggestedNameFor("ts=1704164645678 boom", 3, 3 + 13), "custom-epoch-ms");
+    assert.strictEqual(suggestedNameFor("1704164645.678 hello", 0, "1704164645.678".length), "custom-epoch-sec");
+  });
+});
+
 suite("normalize / previewTimestampFormat (#320)", () => {
   test("returns the same error codes compileCustomTimestampFormats would produce", () => {
     const preview = previewTimestampFormat("broken", "(", ["2024-01-02 03:04:05"]);

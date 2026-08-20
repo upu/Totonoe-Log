@@ -410,7 +410,31 @@ function buildPattern(
 /** `compileCustomTimestampFormats` の行頭アンカーに対応する、前置き許容の上限文字数。 */
 const MAX_UNANCHORED_PREFIX_LENGTH = 128;
 
-function suggestNameFor(roles: ReadonlyMap<number, DigitRole>): string {
+/** カレンダー形式の各グループ名を、初見でも読める見た目の記号に対応させる。 */
+const CALENDAR_PLACEHOLDERS: Readonly<Record<string, string>> = {
+  y: "YYYY",
+  mo: "MM",
+  d: "DD",
+  h: "hh",
+  mi: "mm",
+  s: "ss",
+  ms: "SSS",
+};
+
+function isTimeRoleGroup(group: string): boolean {
+  return group === "h" || group === "mi" || group === "s" || group === "ms";
+}
+
+/**
+ * 提案名を組み立てる（issue #329）。`custom-calendar` のような固定名では
+ * 複数登録したときに見分けがつかないため、選択範囲の見た目（区切り文字・
+ * 並び順）をそのまま反映する——「02.01.2024 03:04:00」→「DD.MM.YYYY_hh:mm:ss」。
+ * 日付部分と時刻部分の境界の区切り（空白・ISO の "T" 等さまざま）だけは、
+ * 読みやすさのため "_" に統一する。それ以外の区切り（日付内の "."、時刻内の
+ * ":" 等）は選択範囲の文字をそのまま使う。エポック形式は複数登録しても
+ * 見分けが付きにくくならないため、既存の固定名のままにする。
+ */
+function suggestNameFor(mainTokens: readonly Token[], roles: ReadonlyMap<number, DigitRole>): string {
   const groups = new Set([...roles.values()].map((role) => role.group));
   if (groups.has("epochMs")) {
     return "custom-epoch-ms";
@@ -418,7 +442,24 @@ function suggestNameFor(roles: ReadonlyMap<number, DigitRole>): string {
   if (groups.has("epochSec")) {
     return "custom-epoch-sec";
   }
-  return "custom-calendar";
+
+  const firstTimeRoleIndex = mainTokens.findIndex((_, index) => {
+    const role = roles.get(index);
+    return role !== undefined && isTimeRoleGroup(role.group);
+  });
+
+  return mainTokens
+    .map((token, index) => {
+      const role = roles.get(index);
+      if (role) {
+        return CALENDAR_PLACEHOLDERS[role.group];
+      }
+      if (index === firstTimeRoleIndex - 1) {
+        return "_";
+      }
+      return token.text;
+    })
+    .join("");
 }
 
 function trimSelection(line: string, start: number, end: number): { start: number; end: number } {
@@ -486,7 +527,7 @@ export function inferTimestampPattern(
     ok: true,
     proposal: {
       pattern,
-      suggestedName: suggestNameFor(classification.roles),
+      suggestedName: suggestNameFor(mainTokens, classification.roles),
       groupNames,
       ambiguousDayMonthOrder: classification.ambiguousDayMonthOrder,
     },
