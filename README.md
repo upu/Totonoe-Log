@@ -33,20 +33,7 @@ Very large results are rendered only up to `totonoeLog.interactiveView.maxDispla
 
 Filtering removes what does not match; highlighting leaves everything in place and colors what you are looking for. When you are still working out what went wrong, the lines around a hit are usually what explain it, so the two are separate features.
 
-The **ハイライト ▾** button in the Interactive View opens a small editor for these rules — add a row, type a pattern, pick a color from the dropdown, reorder with ▲▼, delete with ✕. There is no separate save step: every edit is written straight back to the `totonoeLog.highlightRules` setting, so the panel and the settings file are always two views of the same thing.
-
-The setting is a plain array, so you can also write it by hand — and commit it to `.vscode/settings.json` to share your project's patterns with the team:
-
-```json
-"totonoeLog.highlightRules": [
-  { "name": "OOM", "pattern": "OutOfMemory", "color": "red" },
-  { "name": "timeout", "pattern": "timed? ?out", "color": "orange" }
-]
-```
-
-`pattern` is a case-insensitive regular expression, and every match on a line is colored, not just the first. `color` is one of `red`, `orange`, `yellow`, `green`, `blue`, `purple` — a fixed set rather than free-form color codes, so that a readable value can be used for light and dark themes alike; it defaults to `yellow`. `name` is only there to tell your own rules apart and to name the rule in warnings, and defaults to `highlight-<n>`.
-
-When two rules match overlapping text the rule listed first wins, so put the more specific ones higher — that is what ▲▼ are for. A rule with an invalid regular expression or an unknown color is skipped with a warning naming it, while the remaining rules keep working; it still shows up in the panel so you can repair it. Editing the setting by hand recolors an open panel right away, and the panel writes back to wherever the rules are already defined (workspace settings if that is where they live, your user settings otherwise).
+The **ハイライト ▾** button in the Interactive View opens a small editor for these rules — add a row, type a pattern, pick a color from the dropdown, reorder with ▲▼, delete with ✕. There is no separate save step: every edit is written straight back to the `totonoeLog.highlightRules` setting, so the panel and the settings file are always two views of the same thing. See the [highlight rules reference](https://github.com/upu/Totonoe-Log/blob/main/docs/features/highlight-rules.md) for the setting's JSON shape and how overlapping rules are resolved.
 
 ### Timestamp format helper
 
@@ -54,13 +41,7 @@ Writing the named-group regular expression in [Custom timestamp formats](#custom
 
 ### Masking your own identifiers
 
-No general rule can recognize in-house identifiers — user names, tokens, contract IDs — so the mask panel has two fields for them.
-
-**"キー"** is the one to reach for first: list the key names whose values should go (`user, token`, separated by commas or spaces) and only the values are replaced, so `user=hoge` becomes `user=<MASKED>` with the key still readable. It covers `key=value`, `key: value`, and quoted values (`token="abc"` → `token="<MASKED>"`), matches keys case-insensitively, and takes them literally, so regex metacharacters and non-ASCII names (`契約ID`) work as typed; a key that only appears inside a longer one (`superuser=x` when masking `user`) is left alone.
-
-**"任意パターン"** takes a regular expression and replaces every match with `<MASKED>`, for anything the key field cannot express. An invalid or too-slow pattern disables only that one mask, with a warning, while every other mask keeps working. Both fields apply together, and both are panel state that is never saved to settings.
-
-Process-ID masking, available here and in `Copy Masked Text`, covers syslog-style `sshd[1234]:` tags and `pid=1234` / `pid: 1234` / `[pid 1234]` notations (replaced with `<PID>`), while leaving log4j thread names such as `[main]` and array indices such as `retries[3]` alone.
+No general rule can recognize in-house identifiers — user names, tokens, contract IDs — so the mask panel has two fields for them: **"キー"** replaces just the values of key names you list (`user, token`), keeping the keys themselves readable, and **"任意パターン"** replaces every match of a regular expression, for anything the key field cannot express. See the [masking reference](https://github.com/upu/Totonoe-Log/blob/main/docs/features/masking-identifiers.md) for the exact matching rules and process-ID masking.
 
 ## Normalize into one timeline
 
@@ -173,64 +154,35 @@ To compare what you have narrowed down in Interactive View, press its "Export as
 
 Logs written in local time without an offset (e.g. `2024-01-02 03:04:05`)
 are interpreted as UTC by default. When servers in different timezones are
-involved, that skews the merged timeline. Three settings fix this:
-
-- `totonoeLog.timezone.sourceOffset` — the UTC offset to assume for
-  timestamps without explicit timezone information (default `UTC`).
-  Timestamps that spell out an offset or `Z`, and epoch timestamps, are
-  never shifted: what the log says always wins
-- `totonoeLog.timezone.fileOffsets` — per-file overrides, matched against
-  the file name (first matching rule wins):
-
-  ```jsonc
-  "totonoeLog.timezone.fileOffsets": [
-    { "filePattern": "tokyo-.*\\.log", "offset": "+09:00" },
-    { "filePattern": "nyc-.*\\.log", "offset": "-05:00" }
-  ]
-  ```
-
-- `totonoeLog.timezone.display` — the timezone every view renders
-  timestamps in: `UTC` (default, `Z` suffix), `local` (this machine's
-  timezone, DST-aware), or a fixed offset such as `+09:00` (rendered as
-  `2024-01-02T12:04:05.000+09:00`)
-
-Timezone auto-detection is not implemented: a timestamp without an offset
-carries no reliable signal to detect one from, so guessing would silently
-corrupt the timeline instead of tidying it.
+involved, that skews the merged timeline. Three settings fix this —
+`totonoeLog.timezone.sourceOffset`, `totonoeLog.timezone.fileOffsets` for
+per-file overrides, and `totonoeLog.timezone.display` for how views render
+timestamps. Timezone auto-detection is not implemented: a timestamp without
+an offset carries no reliable signal to detect one from, so guessing would
+silently corrupt the timeline instead of tidying it. See the
+[timezone normalization reference](https://github.com/upu/Totonoe-Log/blob/main/docs/features/timezone-normalization.md)
+for the full settings syntax.
 
 ## Clock skew correction
 
 Timezone settings can't help when a host's clock itself is wrong — say,
 a server drifting 40 seconds ahead because NTP is broken. The
 `totonoeLog.clockSkew.fileOffsets` setting corrects such logs by ±N
-seconds, per file-name pattern (first matching rule wins):
-
-```jsonc
-"totonoeLog.clockSkew.fileOffsets": [
-  { "filePattern": "app-server\\.log", "offsetSeconds": -40 },
-  { "filePattern": "db-.*\\.log", "offsetSeconds": 2.5 }
-]
-```
-
-Unlike `totonoeLog.timezone.sourceOffset`, the correction applies to
-every recognized timestamp — including ones with an explicit offset,
-`Z`, or epoch form — because the clock that produced them was itself
-off. Merged and normalized/filtered/collapsed views sort, display, and
-date-filter by the corrected times. The raw log text is never
-rewritten, and the compare view is unaffected (it masks timestamps
-entirely). Invalid entries are skipped with a warning; the remaining
-rules keep working.
+seconds, per file-name pattern. See the
+[clock skew correction reference](https://github.com/upu/Totonoe-Log/blob/main/docs/features/clock-skew-correction.md)
+for the settings syntax and exactly which views and timestamp forms it
+applies to.
 
 ## Custom timestamp formats
 
 If your logs use a timestamp format the built-ins don't recognize, add it
 with the `totonoeLog.timestampFormats` setting. Each entry is a regular
 expression whose named capture groups tell Totonoe Log how to interpret the
-match. Custom formats are tried before the built-in ones, so they can also
-override a built-in interpretation. Patterns are automatically anchored to
-the start of the line. The Interactive View's
+match, tried before the built-in formats. The Interactive View's
 [Timestamp format helper](#timestamp-format-helper) can propose a pattern
-from a selection instead of writing the regular expression by hand.
+from a selection instead of writing the regular expression by hand. See the
+[custom timestamp formats reference](https://github.com/upu/Totonoe-Log/blob/main/docs/features/custom-timestamp-formats.md)
+for the full syntax and supported capture groups.
 
 When most lines of a log are left without a timestamp, Totonoe Log says so
 instead of quietly folding them into one huge entry: the virtual-document
@@ -239,28 +191,6 @@ warning line for every loaded file — including the ones added later with
 **+ Add Files...**. Both places offer an "Open Timestamp Format Helper"
 button that jumps straight to the [Timestamp format helper](#timestamp-format-helper),
 already expanded, for the file the warning is about.
-
-```jsonc
-"totonoeLog.timestampFormats": [
-  {
-    "name": "jp-date",
-    "pattern": "(?<y>\\d{4})年(?<mo>\\d{1,2})月(?<d>\\d{1,2})日 (?<h>\\d{1,2}):(?<mi>\\d{2}):(?<s>\\d{2})"
-  }
-]
-```
-
-Supported capture groups:
-
-- Calendar style: `y` `mo` `d` `h` `mi` `s` (all required), plus optional
-  `ms` (fractional seconds), `tzs` `tzh` `tzm` (offset sign/hours/minutes),
-  and `tzz` (a literal `Z` meaning explicit UTC). Without an offset the
-  timestamp is interpreted as UTC, or as `totonoeLog.timezone.sourceOffset`
-  when that setting is configured
-- Epoch style: `epochMs` (epoch milliseconds) or `epochSec` (epoch seconds,
-  with an optional `ms` group for the fractional part)
-
-Invalid entries (bad regex, missing groups) are skipped with a warning;
-the remaining formats keep working.
 
 ## Installation
 
