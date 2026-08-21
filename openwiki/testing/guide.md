@@ -3,6 +3,13 @@ type: テストガイド
 title: テスト指針
 description: Totonoe Log の純粋ロジック、VS Code統合、Interactive View、非同期更新を検証するテスト配置と、変更種別ごとの実行手順。
 tags: [testing, ci, quality]
+openwiki:
+  roles: [testing, repository, delivery]
+  change_kinds: [focused-validation, integration-test, package-check]
+  source_paths: [.vscode-test.mjs, package.json, src/test/suite]
+  test_paths: [src/test/suite/normalize.test.ts, src/test/suite/interactiveView.test.ts, src/test/suite/extension.test.ts, src/test/suite/timestampPatternInference.test.ts]
+  invariants: [内部ロジックだけでなく実際のconsumer経路を検証する。, 通常は変更領域に絞りreleaseとpackage検証は条件付きで行う。]
+  validation_commands: [npm run compile && npm test -- --grep "対象suite名または安定したtest名"]
 ---
 
 # テスト指針
@@ -24,7 +31,8 @@ CI相当の順序とOS差は[運用ランブック](/openwiki/operations/runbook
 | ファイル | 主な対象 |
 | --- | --- |
 | `src/test/suite/normalize.test.ts` | parse、timestamp、severity、filter、merge、mask、collapse、highlight、timezone、clock skew、line source |
-| `src/test/suite/extension.test.ts` | command登録、比較、設定などの拡張統合 |
+| `src/test/suite/timestampPatternInference.test.ts` | 選択範囲からのpattern推論、提案名、日/月曖昧性、失敗理由、保存時と同じpreview、未認識行抽出 |
+| `src/test/suite/extension.test.ts` | command登録、比較、設定、認識率警告action、設定保存後のconsumer経路などの拡張統合 |
 | `src/test/suite/openInVirtualDocument.test.ts`, `mergedView.test.ts` | 単一・複数入力から仮想文書を開く経路、encoding、大容量fallback |
 | `src/test/suite/setViewFilterNormalized.test.ts`, `setViewFilterMerged.test.ts` | 開いた仮想文書へのfilter適用と行対応 |
 | `src/test/suite/goToSourceLine.test.ts`, `virtualDocumentGuard.test.ts` | 元行ジャンプと、整形済み文書を入力へ再利用しないガード |
@@ -44,6 +52,12 @@ CI相当の順序とOS差は[運用ランブック](/openwiki/operations/runbook
 
 [ログ処理ドメイン](/openwiki/domain/log-processing.md)の不変条件を `normalize.test.ts` で確認する。認識済み・未認識、継続行、無効日付、offset有無、clock skew、同時刻tie-break、同名ファイルの `fileIndex` を含める。patternを増やしたら `demo/` に手動確認用の行も追加する。
 
+### Custom timestamp patternの推論・保存
+
+[タイムスタンプ形式補助ワークフロー](/openwiki/workflows/timestamp-format-helper.md)のtest matrixを使う。純粋ロジックは `timestampPatternInference.test.ts` の `normalize / inferTimestampPattern`、`suggestedName`、`previewTimestampFormat`、`collectUnrecognizedLines` suiteへ絞る。推論したpatternが `compileCustomTimestampFormats()` を通り `parseLog()` で実際に認識されるところまで確認し、月名・2桁年・field不足を誤提案しないことも守る。
+
+設定層を変えた場合は `interactiveView.test.ts` の `timestampFormatSettings` suiteでrow変換・順序・保存scopeを確認する。publicな利用経路まで跨ぐ場合は `extension.test.ts` の `Totonoe Log custom timestamp formats` と `low timestamp recognition warning` suiteを加え、保存直後の別文書が再起動なしで認識されること、警告actionが対象ファイルのInteractive Viewを開くことを検証する。通常の最小コマンド例は `npm run compile && npm run build && npm test -- --grep "inferTimestampPattern|timestampFormatSettings|custom timestamp formats|low timestamp recognition warning"` である。
+
 ### filter・正規表現
 
 severity/date/match/ignoreのAND・OR、空条件、複数行message、構文エラー、timeoutを確認する。timeout時に全件表示へ誤fallbackしないこと、Interactive Viewで古い結果を公開しないことも検証する。
@@ -61,7 +75,7 @@ severity/date/match/ignoreのAND・OR、空条件、複数行message、構文エ
 
 ### Webview protocol
 
-`protocol.ts` 変更時はhostとbrowserの両型検査に加え、production buildでNode・`vscode` 依存の誤importがないことを確認する。export変更では押下直前のcriteria、特にmaskが欠けない回帰ケースを追加する。[VS Code統合](/openwiki/integrations/vscode.md)の共有契約を参照する。
+`protocol.ts` 変更時はhostとbrowserの両型検査に加え、production buildでNode・`vscode` 依存の誤importがないことを確認する。export変更では押下直前のcriteria、特にmaskが欠けない回帰ケースを追加する。timestamp helper変更では `timestampFormatsChanged` / `timestampPatternRequested` と `timestampPatternResult` / `state` の双方、初回stateまでの操作抑止、`interactiveViewHtml.test.ts` の要素ID・label契約を確認する。[VS Code統合](/openwiki/integrations/vscode.md)の共有契約を参照する。
 
 ### 多言語化
 

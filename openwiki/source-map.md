@@ -14,6 +14,7 @@ tags: [source-map, history, navigation]
 | command/menu | `package.json`, `src/extension.ts` | `docs/features/commands.ja.md`, `extension.test.ts` |
 | 入力・encoding | `src/logFileReading.ts`, `src/logSourceDocument.ts` | `openVirtualDocument.ts`, `interactiveViewFiles.ts` |
 | parse・timestamp | `src/normalize/parseLog.ts`, `timestampFormats.ts`, `customTimestampFormats.ts` | `types.ts`, `normalize.test.ts` |
+| timestamp format補助 | `src/normalize/timestampPatternInference.ts`, `timestampPatternPreview.ts` | `src/timestampFormatSettings.ts`, `interactiveView.ts`, `protocol.ts`, `timestampPatternInference.test.ts` |
 | timezone・clock skew | `src/timezoneSettings.ts`, `clockSkewSettings.ts` | `src/normalize/timezone.ts`, `clockSkew.ts` |
 | merge | `src/normalize/mergeLogFiles.ts`, `src/mergedView.ts` | `formatMergedLog.ts`, `mergedView.test.ts` |
 | filter | `src/normalize/filterEntries.ts`, `src/filterPrompts.ts` | `setViewFilter.ts`, `setViewFilterNormalized.test.ts`, `setViewFilterMerged.test.ts` |
@@ -47,11 +48,12 @@ tags: [source-map, history, navigation]
 3. **原文への帰還** — `fileIndex` と `LineSource` により、整形後も元ログ行へ移動可能にした。
 4. **Interactive Viewの成長** — 複数ファイル、即時filter、export、mask、表示上限、設定hot reloadを段階的に集約した。
 5. **非同期の正しさ** — exportは押下時criteriaを使い、worker完了順の逆転にはlatest-winsで対処した。
-6. **ノイズ処理の統合** — 複数pattern、highlight編集、マージ横断collapse、認識率警告をpanelへ集約し、旧専用collapse commandを廃止した。
-7. **操作の単純化** — filterをビューの状態へ移し、単一・複数ファイルの仮想表示を `Open in Virtual Document` へ統合した。
-8. **表示品質** — v0.10.0ではseverity列幅とgroup suffixを調整し、複数行エントリの継続行もメッセージ列へ揃えた。比較ビューでは列paddingや継続行の字下げが不要diffを生むため例外扱いである。
+6. **未対応形式の自己解決** — 低認識率警告を知らせるだけでなく、未認識行または本文の選択からcustom timestamp patternを提案し、同じcompile規則でpreviewして設定へ保存できるようにした。
+7. **ノイズ処理の統合** — 複数pattern、highlight編集、マージ横断collapse、認識率警告をpanelへ集約し、旧専用collapse commandを廃止した。
+8. **操作の単純化** — filterをビューの状態へ移し、単一・複数ファイルの仮想表示を `Open in Virtual Document` へ統合した。
+9. **表示品質** — v0.10.0ではseverity列幅とgroup suffixを調整し、複数行エントリの継続行もメッセージ列へ揃えた。比較ビューでは列paddingや継続行の字下げが不要diffを生むため例外扱いである。
 
-v0.9.0後のマルチルート設定、command統合、worker timeout後処理、列整列は v0.10.0 としてリリースされ、`package.json` と変更履歴のversionは一致している。
+v0.9.0後のマルチルート設定、command統合、worker timeout後処理、列整列は v0.10.0 としてリリースされた。続くv0.11.0の表示・多言語化境界、v0.12.0の入力形式拡張を経て、現在の `package.json` と変更履歴の最新リリースversionは一致している。
 
 ## 最近変更された高感度領域
 
@@ -60,6 +62,7 @@ v0.9.0後のマルチルート設定、command統合、worker timeout後処理�
 - `openVirtualDocument.ts`: Explorerとactive documentの入力規則。
 - `highlightRuleSettings.ts`: multi-rootのresource scope。
 - worker利用filter・mask・highlight: timeout後の早期returnとlatest-wins。
+- `timestampPatternInference.ts`, `timestampPatternPreview.ts`, `timestampFormatSettings.ts`: 推論可能な日時形状、compileとの検証一致、resource無しの保存scope。
 
 変更前に[テスト指針](/openwiki/testing/guide.md)を確認する。
 

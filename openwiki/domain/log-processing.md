@@ -3,6 +3,14 @@ type: ドメインモデル
 title: ログ処理ドメインと不変条件
 description: Totonoe Log が共有する LogEntry、JSON Lines とプレーンログの解析、セベリティ、時刻補正、マージ、フィルタ、折りたたみ、マスクの意味と不変条件を定義する。
 tags: [domain, logs, normalization]
+openwiki:
+  roles: [domain, architecture, testing]
+  change_kinds: [parsing, timestamp, transformation]
+  source_paths: [src/normalize/types.ts, src/normalize/parseLog.ts, src/normalize/customTimestampFormats.ts, src/normalize/timestampPatternInference.ts]
+  symbols: [LogEntry, MergedEntry, LineSource, parseLog, compileCustomTimestampFormats, inferTimestampPattern]
+  test_paths: [src/test/suite/normalize.test.ts, src/test/suite/timestampPatternInference.test.ts]
+  invariants: [未認識行を捨てない。, 時刻補正後にマージする。, 本文行数を変える処理はLineSourceを同期する。]
+  validation_commands: [npm run compile && npm test -- --grep "parseLog|timestamp|merge|LineSource"]
 ---
 
 # ログ処理ドメインと不変条件
@@ -83,6 +91,8 @@ erDiagram
 2. 時刻自体にoffsetや `Z` がなければ、ファイル別または共通のsource offsetを仮定する。
 3. parse後、認識済み時刻すべてへclock skewを加える。
 4. 補正後の `timestampMs` でマージする。
+
+custom formatの実行契約は `src/normalize/customTimestampFormats.ts:compileCustomTimestampFormats` が所有する。Interactive Viewの選択範囲からpatternを作る `inferTimestampPattern()` と、保存前にサンプルへ当てる `previewTimestampFormat()` はこの契約の補助であり、独自の日時解釈を追加しない。推論は完全なカレンダー日時またはエポックを対象とし、月名、2桁年、必要field不足は理由code付きで拒否する。変更面と検証matrixは[タイムスタンプ形式補助ワークフロー](/openwiki/workflows/timestamp-format-helper.md)を参照する。
 
 マージは時刻昇順、未認識を末尾に置く。同一時刻または双方未認識では、ファイル入力順とファイル内出現順を明示的なtie-breakにする。推測によるtimezone自動検出は行わない。確証のない推測で時系列を静かに壊す方が危険だからである。
 

@@ -3,6 +3,14 @@ type: アーキテクチャ概要
 title: Totonoe Log アーキテクチャ概要
 description: 拡張ホスト、純粋な正規化層、仮想ドキュメント、Interactive View Webview、ビルド成果物の責務とデータフローを説明する。
 tags: [architecture, vscode-extension, webview]
+openwiki:
+  roles: [architecture, integration, repository]
+  change_kinds: [runtime-flow, webview-protocol, build-boundary]
+  source_paths: [src/extension.ts, src/interactiveView.ts, src/virtualDocumentContentProvider.ts, src/webview/interactiveView/protocol.ts]
+  symbols: [activate, InteractiveViewPanelController, VirtualDocumentContentProvider, InteractiveViewStateMessage]
+  test_paths: [src/test/suite/extension.test.ts, src/test/suite/interactiveView.test.ts, src/test/suite/interactiveViewHtml.test.ts]
+  invariants: [ログ処理は拡張ホスト側に置きWebviewへ重複実装しない。, Webview protocolはJSON可能な値だけを運ぶ。, 非同期再描画はlatest-winsを守る。]
+  validation_commands: [npm run compile && npm run build]
 ---
 
 # アーキテクチャ概要
@@ -35,7 +43,8 @@ flowchart TD
 | 入力・設定 | `src/logFileReading.ts`, `logSourceDocument.ts`, `*Settings.ts` | エディタまたはディスクから読み、encoding・timezone・clock skew等を解決する |
 | ドメイン処理 | `src/normalize/` | parse、merge、filter、mask、collapse、format、line mappingを行う |
 | 仮想文書 | `src/virtualDocumentContentProvider.ts`, `normalizedView.ts`, `mergedView.ts`, `compareView.ts` | 読み取り専用本文、再フィルタ材料、元行対応をURI単位で保持する |
-| Interactive controller | `src/interactiveView.ts`, `src/interactiveViewLabels.ts` | Webviewの状態、翻訳済み動的ラベル、ファイル群、非同期処理、export、設定変更を調停する |
+| Interactive controller | `src/interactiveView.ts`, `src/interactiveViewLabels.ts` | Webviewの状態、翻訳済み動的ラベル、ファイル群、非同期処理、export、timestamp pattern提案、設定変更を調停する |
+| Timestamp helper | `src/normalize/timestampPatternInference.ts`, `timestampPatternPreview.ts`, `src/timestampFormatSettings.ts` | 選択範囲からの純粋なpattern推論、保存時と同一規則のpreview、VS Code設定へのscope-awareな書き戻しを分担する |
 | Interactive HTML template | `src/interactiveViewHtml.ts` | 拡張ホスト側で翻訳済みHTML/CSS、CSP、Webview script tag、文書の `lang` を組み立てる |
 | Webview UI | `src/webview/interactiveView/main.ts` | hostから受け取ったラベルでフォーム操作と安全なテキスト描画を行う |
 | 共有protocol | `src/webview/interactiveView/protocol.ts` | Node・DOM・`vscode`に依存しないJSON可能な状態型と翻訳済みラベル型を定義する |
@@ -59,7 +68,7 @@ flowchart TD
 
 `InteractiveViewPanelController` は同時に1パネルを管理する。パネル生成時はscript URI、nonce、`vscode.env.language` を `buildInteractiveViewHtml` へ渡し、`src/interactiveViewHtml.ts` が拡張ホスト側の翻訳済みHTML/CSS、CSP、文書の `lang` を構築する。このtemplateはbrowser bundleではないため `src/webview/` ではなく `src/` 直下に置かれ、`src/test/suite/interactiveViewHtml.test.ts` がCSPと `main.ts` の `getElementById` に対応する要素IDを検証する。
 
-Webviewは条件をJSONで送り、拡張ホストがworker threadを含む正規化処理を実行して、表示データと `src/interactiveViewLabels.ts` で翻訳した動的UI文言を単一の `state` メッセージで返す。静的UI文言は `src/interactiveViewHtml.ts` が生成時に翻訳する。`RegExp` や `Set` は送信しない。
+Webviewは条件をJSONで送り、拡張ホストがworker threadを含む正規化処理を実行して、表示データと `src/interactiveViewLabels.ts` で翻訳した動的UI文言を `state` メッセージで返す。保存前のtimestamp pattern提案だけは設定や表示stateを変更しないため、`timestampPatternRequested` に対して専用の `timestampPatternResult` を返す。静的UI文言は `src/interactiveViewHtml.ts` が生成時に翻訳する。`RegExp` や `Set` は送信しない。提案から `totonoeLog.timestampFormats` の保存・再parseまでの詳細は[タイムスタンプ形式補助ワークフロー](/openwiki/workflows/timestamp-format-helper.md)を参照する。
 
 ```mermaid
 sequenceDiagram
