@@ -90,15 +90,26 @@ export function collectUnrecognizedLines(
     if (entry.matched) {
       continue;
     }
-    for (const line of entry.lines) {
-      if (line.trim().length === 0) {
-        continue;
-      }
-      lines.push(line);
-      if (lines.length >= limit) {
-        return lines;
-      }
+    appendUnrecognizedLines(lines, entry, limit);
+    if (lines.length >= limit) {
+      return lines;
     }
   }
   return lines;
+}
+
+/**
+ * 1エントリ分の未認識行を `lines` へ積む。上限に達した時点で打ち切るので、
+ * 呼び出し側は戻り値ではなく `lines` の長さで打ち切りを判定する。
+ */
+function appendUnrecognizedLines(lines: string[], entry: LogEntry, limit: number): void {
+  for (const line of entry.lines) {
+    if (line.trim().length === 0) {
+      continue;
+    }
+    lines.push(line);
+    if (lines.length >= limit) {
+      return;
+    }
+  }
 }

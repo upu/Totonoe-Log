@@ -61,36 +61,64 @@ export interface TimestampRecognitionAssessment {
  * 替わった兆候として別集計する。空行は形式未対応の証拠にならないため、
  * 分母・分子のどちらからも除外する。
  */
+/** {@link assessTimestampRecognition} が行を数えながら持ち回す途中集計。 */
+interface RecognitionTally {
+  totalLineCount: number;
+  unrecognizedLineCount: number;
+  /** 日時らしい継続行が連続した最長区間の行数。 */
+  longestSuspiciousRun: number;
+  /** いま続いている区間の行数。区間が途切れたら 0 に戻す。 */
+  currentSuspiciousRun: number;
+}
+
+/**
+ * 1行を集計へ反映する。空行はどの数にも入れず、連続区間も途切れさせない
+ * ——形式未対応の証拠にならないため、無かったものとして扱う。
+ */
+function tallyLine(
+  tally: RecognitionTally,
+  line: string,
+  isContinuationLine: boolean,
+  matched: boolean
+): void {
+  if (line.trim().length === 0) {
+    return;
+  }
+  tally.totalLineCount += 1;
+
+  if (!matched) {
+    tally.unrecognizedLineCount += 1;
+    tally.currentSuspiciousRun = 0;
+    return;
+  }
+
+  if (isContinuationLine && TIMESTAMP_LIKE_CONTINUATION_REGEX.test(line)) {
+    tally.currentSuspiciousRun += 1;
+    tally.longestSuspiciousRun = Math.max(tally.longestSuspiciousRun, tally.currentSuspiciousRun);
+    return;
+  }
+
+  tally.currentSuspiciousRun = 0;
+}
+
 export function assessTimestampRecognition(
   entries: readonly LogEntry[]
 ): TimestampRecognitionAssessment {
-  let totalLineCount = 0;
-  let unrecognizedLineCount = 0;
-  let suspiciousContinuationLineCount = 0;
-  let currentSuspiciousContinuationLineCount = 0;
+  const tally: RecognitionTally = {
+    totalLineCount: 0,
+    unrecognizedLineCount: 0,
+    longestSuspiciousRun: 0,
+    currentSuspiciousRun: 0,
+  };
 
   for (const entry of entries) {
-    for (let lineIndex = 0; lineIndex < entry.lines.length; lineIndex++) {
-      const line = entry.lines[lineIndex];
-      if (line.trim().length === 0) {
-        continue;
-      }
-      totalLineCount += 1;
-      if (!entry.matched) {
-        unrecognizedLineCount += 1;
-        currentSuspiciousContinuationLineCount = 0;
-      } else if (lineIndex > 0 && TIMESTAMP_LIKE_CONTINUATION_REGEX.test(line)) {
-        currentSuspiciousContinuationLineCount += 1;
-        suspiciousContinuationLineCount = Math.max(
-          suspiciousContinuationLineCount,
-          currentSuspiciousContinuationLineCount
-        );
-      } else {
-        currentSuspiciousContinuationLineCount = 0;
-      }
+    for (const [lineIndex, line] of entry.lines.entries()) {
+      tallyLine(tally, line, lineIndex > 0, entry.matched);
     }
   }
 
+  const { totalLineCount, unrecognizedLineCount } = tally;
+  const suspiciousContinuationLineCount = tally.longestSuspiciousRun;
   const unrecognizedRatio = totalLineCount === 0 ? 0 : unrecognizedLineCount / totalLineCount;
   const hasLowRecognition =
     totalLineCount >= LOW_RECOGNITION_MIN_LINE_COUNT &&
