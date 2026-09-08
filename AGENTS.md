@@ -83,6 +83,13 @@ VSCode 拡張機能「Totonoe Log」。コンセプトは「バラバラなロ�
   `vscode.window.*` をモックで上書きする都合上、`any` 関連ルールと
   `require-await` を緩和している。`scripts/**` は CommonJS の素の Node スクリプト
   として別ルールセットを当てる（詳細は `eslint.config.mjs` のコメント参照）
+- 関数の複雑さは 2 軸で見る。分岐の「数」は `complexity`（上限 15）、分岐の
+  「入れ子の深さ」による読みにくさは `eslint-plugin-sonarjs` の
+  `sonarjs/cognitive-complexity`（上限 10）で検知する。後者は導入時点（#338）で
+  既存の 11 箇所が超過していたため、当面 `warn` で運用する（`npm run lint` は
+  `--max-warnings` を付けていないので CI は通る）。既存箇所は #339〜#344 で
+  解消し、警告が 0 件になったら #345 で `error` に上げる。新しく書くコードは
+  超過させないこと
 - `no-restricted-syntax` で、`src/**` に日本語の文字列リテラル・テンプレートを
   直接書くことを禁止している（l10n が腐るのを防ぐ機械的なゲート）。文言は英語を
   ソース言語として書き、訳は `package.nls.ja.json` / `l10n/bundle.l10n.ja.json`
