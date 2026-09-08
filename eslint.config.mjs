@@ -61,13 +61,9 @@ const commonTypeScriptRules = {
   // 分岐の「数」は complexity で、分岐の「入れ子の深さ」による読みにくさは
   // cognitive-complexity で別軸に検知する（upu/YAMORU と同じ閾値）。
   //
-  // 導入時点（issue #338）で既存の 11 箇所が超過していた（最大 26）。閾値を
-  // 一旦緩めて下げていくラチェットは、最大値が既存の `complexity: 15` すら
-  // 超えるため意味を成さない。そこで「新規コードの超過に気付ける」ことを
-  // 先に取り、当面は warn で運用する（`npm run lint` は `--max-warnings` を
-  // 付けていないので CI は落ちない）。既存箇所は issue #339〜#344 で解消し、
-  // 警告が 0 件になったら issue #345 で error に上げる。
-  "sonarjs/cognitive-complexity": ["warn", 10],
+  // 導入時（issue #338）は既存の超過が 11 箇所あったため warn で入れ、
+  // issue #339〜#344 で解消してから issue #345 で error に上げた。
+  "sonarjs/cognitive-complexity": ["error", 10],
   "max-depth": ["error", 3],
   // 「なぜ」を説明するコメントを厚くしても関数長として罰しない。
   "max-lines-per-function": [

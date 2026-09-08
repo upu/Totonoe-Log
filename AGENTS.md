@@ -85,11 +85,10 @@ VSCode 拡張機能「Totonoe Log」。コンセプトは「バラバラなロ�
   として別ルールセットを当てる（詳細は `eslint.config.mjs` のコメント参照）
 - 関数の複雑さは 2 軸で見る。分岐の「数」は `complexity`（上限 15）、分岐の
   「入れ子の深さ」による読みにくさは `eslint-plugin-sonarjs` の
-  `sonarjs/cognitive-complexity`（上限 10）で検知する。後者は導入時点（#338）で
-  既存の 11 箇所が超過していたため、当面 `warn` で運用する（`npm run lint` は
-  `--max-warnings` を付けていないので CI は通る）。既存箇所は #339〜#344 で
-  解消し、警告が 0 件になったら #345 で `error` に上げる。新しく書くコードは
-  超過させないこと
+  `sonarjs/cognitive-complexity`（上限 10）で検知する。どちらも `error`
+  （後者は #338 で `warn` として導入し、既存の超過 11 箇所を #339〜#344 で
+  解消したうえで #345 で上げた）。超過したら閾値を緩めるのではなく、関心ごとに
+  関数を切り出して下げること
 - `no-restricted-syntax` で、`src/**` に日本語の文字列リテラル・テンプレートを
   直接書くことを禁止している（l10n が腐るのを防ぐ機械的なゲート）。文言は英語を
   ソース言語として書き、訳は `package.nls.ja.json` / `l10n/bundle.l10n.ja.json`
