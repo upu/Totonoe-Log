@@ -1,5 +1,5 @@
 import { escapeForRegExp } from "./escapeForRegExp";
-import { parseJsonLogLine, type JsonLogLine } from "./jsonLogLine";
+import { parseJsonLogLine, type JsonLogLine, type ResolveTimestamp } from "./jsonLogLine";
 import { normalizeSeverity } from "./severityNames";
 import { getDefaultTimestampFormats } from "./timestampFormats";
 import type { LogEntry, TimestampFormat, TimestampParseContext } from "./types";
@@ -279,52 +279,90 @@ function createUnmatchedEntry(line: string, lineNumber: number): MutableEntry {
  * の「不明」エントリとして保持し、情報を決してサイレントに破棄しない。
  */
 export function parseLog(text: string, options: ParseLogOptions = {}): LogEntry[] {
+  const lines = text.length === 0 ? [] : text.split(/\r\n|\r|\n/);
+  return collectEntries(lines, resolveParseSettings(options));
+}
+
+/** {@link ParseLogOptions} の既定値を解決した後の、1回のパース全体で使い回す設定。 */
+interface ParseSettings {
+  readonly timestampFormats: readonly TimestampFormat[];
+  readonly parseContext: TimestampParseContext;
+  readonly severityRegex: RegExp;
+  readonly resolveTimestamp: ResolveTimestamp;
+}
+
+function resolveParseSettings(options: ParseLogOptions): ParseSettings {
   const timestampFormats = options.timestampFormats ?? getDefaultTimestampFormats();
   const parseContext: TimestampParseContext = {
     fallbackUtcOffsetMinutes: options.sourceUtcOffsetMinutes,
   };
-  const severityRegex =
-    options.severityTokens && options.severityTokens.length > 0
-      ? buildSeverityRegex(options.severityTokens)
-      : DEFAULT_SEVERITY_REGEX;
-  const lines = text.length === 0 ? [] : text.split(/\r\n|\r|\n/);
 
+  return {
+    timestampFormats,
+    parseContext,
+    severityRegex:
+      options.severityTokens && options.severityTokens.length > 0
+        ? buildSeverityRegex(options.severityTokens)
+        : DEFAULT_SEVERITY_REGEX,
+    // JSON Lines の時刻フィールドも、プレーンな行と同じ形式一覧で解釈する
+    // （ISO 文字列・エポック数値・ソースオフセットの扱いを1つの規則に保つため）。
+    resolveTimestamp: (value) => {
+      const found = matchTimestampAt(value, 0, timestampFormats, parseContext);
+      return found === undefined
+        ? undefined
+        : { timestampMs: found.timestampMs, rawTimestamp: found.match[0] };
+    },
+  };
+}
+
+/**
+ * 1行がエントリの**開始**かどうかを判定し、開始ならその新規エントリを返す。
+ * JSON Lines として読めた行はタイムスタンプ探索を行わない——JSON 側で本文まで
+ * 切り出せているので、行頭の生テキストを再び形式一覧に掛ける意味がないため。
+ */
+function startEntryForLine(
+  line: string,
+  lineNumber: number,
+  settings: ParseSettings
+): MutableEntry | undefined {
+  const jsonLine = parseJsonLogLine(line, settings.resolveTimestamp);
+  if (jsonLine) {
+    return createJsonEntry(line, lineNumber, jsonLine);
+  }
+
+  const timestampMatch = findTimestampMatch(line, settings.timestampFormats, settings.parseContext);
+  if (timestampMatch === undefined) {
+    return undefined;
+  }
+  return createMatchedEntry(line, lineNumber, timestampMatch, settings.severityRegex);
+}
+
+/**
+ * 行を順に見て、開始行ごとにエントリを切り替えながら積む。開始行でない行は
+ * 直前のエントリへの継続行とし、まだエントリが無ければ「不明」エントリとして
+ * 拾う（情報をサイレントに捨てないため）。
+ */
+function collectEntries(lines: readonly string[], settings: ParseSettings): LogEntry[] {
   const entries: LogEntry[] = [];
   let current: MutableEntry | undefined;
 
-  // JSON Lines の時刻フィールドも、プレーンな行と同じ形式一覧で解釈する
-  // （ISO 文字列・エポック数値・ソースオフセットの扱いを1つの規則に保つため）。
-  const resolveTimestamp = (value: string): { timestampMs: number; rawTimestamp: string } | undefined => {
-    const found = matchTimestampAt(value, 0, timestampFormats, parseContext);
-    return found === undefined
-      ? undefined
-      : { timestampMs: found.timestampMs, rawTimestamp: found.match[0] };
-  };
-
-  for (let lineIndex = 0; lineIndex < lines.length; lineIndex++) {
-    const line = lines[lineIndex];
+  for (const [lineIndex, line] of lines.entries()) {
     const lineNumber = lineIndex + 1;
-    const jsonLine = parseJsonLogLine(line, resolveTimestamp);
-    const timestampMatch = jsonLine ? undefined : findTimestampMatch(line, timestampFormats, parseContext);
+    const started = startEntryForLine(line, lineNumber, settings);
 
-    if (jsonLine) {
-      if (current) {
+    if (started !== undefined) {
+      if (current !== undefined) {
         entries.push(finalizeEntry(current));
       }
-      current = createJsonEntry(line, lineNumber, jsonLine);
-    } else if (timestampMatch) {
-      if (current) {
-        entries.push(finalizeEntry(current));
-      }
-      current = createMatchedEntry(line, lineNumber, timestampMatch, severityRegex);
-    } else if (current) {
+      current = started;
+    } else if (current !== undefined) {
       current.lines.push(line);
     } else {
       current = createUnmatchedEntry(line, lineNumber);
     }
   }
 
-  if (current) {
+  if (current !== undefined) {
     entries.push(finalizeEntry(current));
   }
 
