@@ -219,6 +219,33 @@ interface CalendarClassification {
   readonly ambiguousDayMonthOrder: boolean;
 }
 
+/**
+ * 年以外の2トークンのうち、どちらが日でどちらが月かを決める。
+ *
+ * 13 以上の値があればそれが日で確定する。どちらも 12 以下だと数値だけでは
+ * 決まらないので（`ambiguous`）、明示指定の並び順 → 年の位置からの推定
+ * （`YYYY` が先頭なら `y-m-d` 系とみなして月が先、末尾なら `d.m.y` 系と
+ * みなして日が先）の順に従う。
+ */
+function resolveDayMonthPositions(
+  triple: readonly [Token, Token, Token],
+  yearIndex: number,
+  options: TimestampPatternInferenceOptions
+): { dayPos: number; monthPos: number; ambiguous: boolean } {
+  const [posA, posB] = [0, 1, 2].filter((i) => i !== yearIndex);
+  const valueA = Number(triple[posA].text);
+  const valueB = Number(triple[posB].text);
+  const ambiguous = valueA <= 12 && valueB <= 12;
+
+  const dayFirst = ambiguous
+    ? (options.dayMonthOrder ?? (yearIndex === 0 ? "mdy" : "dmy")) === "dmy"
+    : valueA > 12;
+
+  return dayFirst
+    ? { dayPos: posA, monthPos: posB, ambiguous }
+    : { dayPos: posB, monthPos: posA, ambiguous };
+}
+
 /** カレンダー形式の日付部分（年・月・日の3トークン）の役割を決める。 */
 function classifyDatePart(
   triple: readonly [Token, Token, Token],
@@ -230,21 +257,9 @@ function classifyDatePart(
     const allShort = triple.every((token) => token.text.length <= 2);
     return allShort ? "twoDigitYear" : "missingFields";
   }
+
   const yearIndex = fourDigitPositions[0];
-  const [posA, posB] = [0, 1, 2].filter((i) => i !== yearIndex);
-  const valueA = Number(triple[posA].text);
-  const valueB = Number(triple[posB].text);
-  const ambiguous = valueA <= 12 && valueB <= 12;
-
-  let dayPos: number;
-  let monthPos: number;
-  if (!ambiguous) {
-    [dayPos, monthPos] = valueA > 12 ? [posA, posB] : [posB, posA];
-  } else {
-    const order = options.dayMonthOrder ?? (yearIndex === 0 ? "mdy" : "dmy");
-    [dayPos, monthPos] = order === "dmy" ? [posA, posB] : [posB, posA];
-  }
-
+  const { dayPos, monthPos, ambiguous } = resolveDayMonthPositions(triple, yearIndex, options);
   const roles = new Map<number, DigitRole>([
     [positions[yearIndex], { group: "y", widthPattern: "\\d{4}" }],
     [positions[monthPos], { group: "mo", widthPattern: "\\d{1,2}" }],
