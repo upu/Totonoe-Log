@@ -23,6 +23,21 @@ function isValidBoundaryTime(parts: DateBoundaryParts): boolean {
   return parts.hour <= 23 && parts.minute <= 59 && parts.second <= 59;
 }
 
+/**
+ * 入力に書かれていた時刻単位はその値を、書かれていなければ境界の種類に応じて
+ * 補う——開始境界はその単位の始まり（0）、終了境界は終わり（`unitEndValue`）。
+ */
+function fillOmittedUnit(
+  captured: string | undefined,
+  boundaryKind: DateBoundaryKind,
+  unitEndValue: number
+): number {
+  if (captured !== undefined) {
+    return Number(captured);
+  }
+  return boundaryKind === "end" ? unitEndValue : 0;
+}
+
 function parseDateBoundaryParts(
   input: string,
   boundaryKind: DateBoundaryKind
@@ -38,15 +53,14 @@ function parseDateBoundaryParts(
   // 終了境界は、書かれていない下位単位を最大値で埋めて「書かれた最小単位の
   // 末尾まで」を含める。ミリ秒は入力の文法上そもそも書けないため、終了境界
   // では常に 999 になる。
-  const fillsToUnitEnd = boundaryKind === "end";
   const parts = {
     year: Number(match[1]),
     month: Number(match[2]) - 1,
     day: Number(match[3]),
-    hour: captures[4] === undefined ? (fillsToUnitEnd ? 23 : 0) : Number(captures[4]),
-    minute: captures[5] === undefined ? (fillsToUnitEnd ? 59 : 0) : Number(captures[5]),
-    second: captures[6] === undefined ? (fillsToUnitEnd ? 59 : 0) : Number(captures[6]),
-    millisecond: fillsToUnitEnd ? 999 : 0,
+    hour: fillOmittedUnit(captures[4], boundaryKind, 23),
+    minute: fillOmittedUnit(captures[5], boundaryKind, 59),
+    second: fillOmittedUnit(captures[6], boundaryKind, 59),
+    millisecond: boundaryKind === "end" ? 999 : 0,
   };
   if (!isValidBoundaryTime(parts)) {
     return undefined;

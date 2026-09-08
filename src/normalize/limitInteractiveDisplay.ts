@@ -37,11 +37,31 @@ function countItemLines(item: InteractiveDisplayItem): number {
 }
 
 /**
+ * グループ1件だけで残り行数を超えるとき、そこに収まるところまで `lines` を
+ * 切り詰めたグループを作る。見出し行のぶんを引くと残せる `lines` が1行も
+ * 無くなる場合（残り1行のとき）は、展開しても何も出ないグループになるので
+ * 作らない。行以外の表示単位（`kind: "line"`）は切り詰めようがないので同様。
+ */
+function truncateGroupToFit(
+  item: InteractiveDisplayItem,
+  remaining: number
+): InteractiveDisplayItem | undefined {
+  // 見出し行のぶんを引いた残りが `lines` に割ける行数。
+  const remainingGroupLines = remaining - 1;
+  if (item.kind !== "group" || remainingGroupLines <= 0) {
+    return undefined;
+  }
+
+  const lines = item.lines.slice(0, remainingGroupLines);
+  return item.lineSources
+    ? { ...item, lines, lineSources: item.lineSources.slice(0, remainingGroupLines) }
+    : { ...item, lines };
+}
+
+/**
  * 上限に収まるところまで表示単位を詰める。グループ1件だけで上限を超える
- * 場合は、そのグループの `lines` を上限まで切り詰めて1件だけ残す——
- * 何も表示されない画面を返さないため。ただし見出し行のぶんを引くと残せる
- * `lines` が1行も無くなる場合（上限が1行のとき）だけは、展開しても何も
- * 出ないグループになるので載せない。
+ * 場合は、そのグループを切り詰めて1件だけ残す——何も表示されない画面を
+ * 返さないため。
  */
 function limitItems(
   items: readonly InteractiveDisplayItem[],
@@ -61,15 +81,12 @@ function limitItems(
       lineCount += itemLines;
       continue;
     }
-    // 見出し行のぶんを引いた残りが `lines` に割ける行数。
-    const remainingGroupLines = remaining - 1;
-    if (limited.length === 0 && item.kind === "group" && remainingGroupLines > 0) {
-      const lines = item.lines.slice(0, remainingGroupLines);
-      limited.push(
-        item.lineSources
-          ? { ...item, lines, lineSources: item.lineSources.slice(0, remainingGroupLines) }
-          : { ...item, lines }
-      );
+
+    // ここに来るのは、この1件だけで残り行数を超えるケース。まだ1件も載せて
+    // いないときだけ、切り詰めたグループで画面を埋める。
+    const truncated = limited.length === 0 ? truncateGroupToFit(item, remaining) : undefined;
+    if (truncated !== undefined) {
+      limited.push(truncated);
       lineCount += remaining;
     }
     break;
