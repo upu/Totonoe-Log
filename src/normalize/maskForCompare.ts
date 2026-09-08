@@ -142,6 +142,50 @@ export interface MaskForCopyOptions {
 }
 
 /**
+ * {@link MaskForCopyOptions} の既定値を解決した後の、実際にマスクする対象。
+ * オプションを個々の補助関数へ配って回るための内部形なので公開しない。
+ */
+interface MaskTargets {
+  readonly timestamp: boolean;
+  readonly host: boolean;
+  readonly processId: boolean;
+}
+
+/**
+ * syslog形式の行の、タイムスタンプより後ろ（ホスト名トークンから始まる部分）を
+ * マスクする。この形式はホスト名・タグの位置が確定しているので、本文中の
+ * IPアドレスを拾う {@link maskHostAddresses} とは別に、位置指定で置き換える。
+ */
+function maskSyslogHeader(afterTimestamp: string, targets: MaskTargets): string {
+  const withHostMasked = targets.host
+    ? afterTimestamp.replace(/^(\s*)(\S+)/, `$1${HOST_PLACEHOLDER}`)
+    : afterTimestamp;
+  return targets.processId ? maskSyslogTagProcessId(withHostMasked) : withHostMasked;
+}
+
+/**
+ * エントリの先頭行について、位置で決まるマスク——認識済みタイムスタンプと、
+ * syslog形式のホスト名・PID——を掛ける。タイムスタンプを認識できていない
+ * エントリは位置の手がかりが無いので、行をそのまま返す。
+ */
+function maskEntryHeadLine(entry: LogEntry, headLine: string, targets: MaskTargets): string {
+  if (!entry.matched || entry.rawTimestamp === undefined) {
+    return headLine;
+  }
+
+  const rest = headLine.slice(entry.rawTimestamp.length);
+  const afterTimestamp =
+    entry.timestampFormat === "syslog" ? maskSyslogHeader(rest, targets) : rest;
+  return (targets.timestamp ? TIMESTAMP_PLACEHOLDER : entry.rawTimestamp) + afterTimestamp;
+}
+
+/** 行のどこに現れても構わないマスク（IPアドレス・PID）を1行分に掛ける。 */
+function maskLineContent(line: string, targets: MaskTargets): string {
+  const withHostMasked = targets.host ? maskHostAddresses(line) : line;
+  return targets.processId ? maskProcessIds(withHostMasked) : withHostMasked;
+}
+
+/**
  * {@link parseLog} が返す {@link LogEntry} の配列を、外部のdiffツールに貼り
  * 付けやすいマスク済みテキストへ整形する。{@link formatMaskedLogForCompare}
  * とは異なり、タイムスタンプ・severityをISO形式などに書き換えたり行番号
@@ -156,30 +200,19 @@ export function maskLogTextForCopy(
   entries: readonly LogEntry[],
   options: MaskForCopyOptions = {}
 ): string {
-  const maskTimestamp = options.maskTimestamp ?? true;
-  const maskHost = options.maskHost ?? true;
-  const maskProcessId = options.maskProcessId ?? false;
+  const targets: MaskTargets = {
+    timestamp: options.maskTimestamp ?? true,
+    host: options.maskHost ?? true,
+    processId: options.maskProcessId ?? false,
+  };
   const outputLines: string[] = [];
 
   for (const entry of entries) {
-    const lines = [...entry.lines];
-
-    if (entry.matched && entry.rawTimestamp !== undefined) {
-      let afterTimestamp = lines[0].slice(entry.rawTimestamp.length);
-      if (entry.timestampFormat === "syslog") {
-        afterTimestamp = maskHost
-          ? afterTimestamp.replace(/^(\s*)(\S+)/, `$1${HOST_PLACEHOLDER}`)
-          : afterTimestamp;
-        afterTimestamp = maskProcessId
-          ? maskSyslogTagProcessId(afterTimestamp)
-          : afterTimestamp;
-      }
-      lines[0] = (maskTimestamp ? TIMESTAMP_PLACEHOLDER : entry.rawTimestamp) + afterTimestamp;
-    }
-
-    for (const line of lines) {
-      const withHostMasked = maskHost ? maskHostAddresses(line) : line;
-      outputLines.push(maskProcessId ? maskProcessIds(withHostMasked) : withHostMasked);
+    for (const [index, line] of entry.lines.entries()) {
+      // 位置で決まるマスク（タイムスタンプ・syslogのホスト名/PID）は先頭行だけの
+      // 話なので、そこを差し替えてから行全体のマスクに渡す。
+      const headMasked = index === 0 ? maskEntryHeadLine(entry, line, targets) : line;
+      outputLines.push(maskLineContent(headMasked, targets));
     }
   }
 
