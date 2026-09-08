@@ -9,7 +9,8 @@ import {
   type DisplayMaskOptions,
 } from "./displayMask";
 
-import { computeSeverityWidth, formatSeverity, messageColumnIndent } from "./severityColumn";
+import { computeSeverityWidth } from "./severityColumn";
+import { composeEntryHeader } from "./entryHeader";
 import { formatGroupSuffix } from "./groupSuffix";
 
 /** {@link formatCollapsedLog} の挙動を調整するオプション。 */
@@ -62,7 +63,7 @@ function formatHeaderTimestamps(
   item: CollapsedItem,
   displayTimezone: DisplayTimezone,
   mask: DisplayMaskOptions | undefined
-): { readonly startText: string; readonly endText?: string } | undefined {
+): HeaderTimestamps | undefined {
   const first = item.kind === "single" ? item.entry : item.entries[0];
   if (!first.matched || first.timestampMs === undefined) {
     return undefined;
@@ -79,6 +80,30 @@ function formatHeaderTimestamps(
   return {
     startText,
     endText: formatMaskableTimestamp(last.timestampMs, displayTimezone, mask),
+  };
+}
+
+/** 見出し行に出すタイムスタンプ。グループで開始・終了が異なるときだけ `endText` を持つ。 */
+type HeaderTimestamps = { readonly startText: string; readonly endText?: string };
+
+/**
+ * アイテムが単独エントリかグループかで変わる3点——代表エントリ・ガターに出す
+ * ラベル・見出し末尾の繰り返し表記——をまとめて求める（issue #341）。
+ * 呼び出し側で `item.kind` を3回見ると、どれか1つを直し忘れたときに
+ * 「ラベルは範囲なのに本文は代表エントリのまま」のような食い違いが起きる。
+ */
+function describeCollapsedItem(
+  item: CollapsedItem,
+  timestamps: HeaderTimestamps | undefined
+): { representative: LogEntry; gutterLabel: string | number; suffix: string } {
+  if (item.kind === "single") {
+    return { representative: item.entry, gutterLabel: item.entry.startLine, suffix: "" };
+  }
+
+  return {
+    representative: item.entries[0],
+    gutterLabel: rangeLabel(item.entries),
+    suffix: formatGroupSuffix(item.entries.length, timestamps?.startText, timestamps?.endText),
   };
 }
 
@@ -123,26 +148,23 @@ export function formatCollapsedLogWithLineSources(
   const lineSources: (LineSource | undefined)[] = [];
 
   for (const item of items) {
-    const representative = item.kind === "single" ? item.entry : item.entries[0];
+    const timestamps = formatHeaderTimestamps(item, displayTimezone, options.mask);
+    const { representative, gutterLabel, suffix } = describeCollapsedItem(item, timestamps);
     const messageLines = maskDisplayMessageLines(
       representative.message.split("\n"),
       representative.timestampFormat,
       options.mask
     );
-    const timestamps = formatHeaderTimestamps(item, displayTimezone, options.mask);
-    const suffix =
-      item.kind === "group"
-        ? formatGroupSuffix(item.entries.length, timestamps?.startText, timestamps?.endText)
-        : "";
-    const headerText = timestamps !== undefined
-      ? `${timestamps.startText} ${formatSeverity(representative.severity, severityWidth)} ${messageLines[0]}${suffix}`
-      : `${messageLines[0]}${suffix}`;
-    const gutterLabel = item.kind === "single" ? representative.startLine : rangeLabel(item.entries);
+    const { headerText, continuationIndent } = composeEntryHeader(
+      timestamps?.startText,
+      representative.severity,
+      severityWidth,
+      `${messageLines[0]}${suffix}`
+    );
+
     outputLines.push(formatGutter(gutterLabel, gutterWidth) + headerText);
     lineSources.push({ fileIndex: 0, line: representative.startLine });
 
-    const continuationIndent =
-      timestamps !== undefined ? messageColumnIndent(timestamps.startText, severityWidth) : "";
     for (let i = 1; i < messageLines.length; i++) {
       outputLines.push(
         formatGutter(representative.startLine + i, gutterWidth) +

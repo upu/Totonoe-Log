@@ -2,13 +2,10 @@ import type { LogEntry } from "./types";
 import type { FormattedLogWithLineSources, LineSource } from "./lineSources";
 import { computeMaxLineNumber, formatGutter } from "./gutter";
 import { type DisplayTimezone } from "./timezone";
-import { computeGapMs, formatGapMarkerText, GAP_MARKER_LABEL } from "./gapDetection";
-import {
-  formatMaskableTimestamp,
-  maskDisplayMessageLines,
-  type DisplayMaskOptions,
-} from "./displayMask";
-import { computeSeverityWidth, formatSeverity, messageColumnIndent } from "./severityColumn";
+import { gapMarkerTextBetween, GAP_MARKER_LABEL } from "./gapDetection";
+import { maskDisplayMessageLines, type DisplayMaskOptions } from "./displayMask";
+import { computeSeverityWidth } from "./severityColumn";
+import { composeEntryHeader, displayTimestampText } from "./entryHeader";
 
 /** {@link formatNormalizedLog} の挙動を調整するオプション。 */
 export interface FormatNormalizedLogOptions {
@@ -77,34 +74,33 @@ export function formatNormalizedLogWithLineSources(
   const gapThresholdMs = options.gapThresholdMs;
   const displayTimezone = options.displayTimezone ?? 0;
 
-  for (let i = 0; i < entries.length; i++) {
-    const entry = entries[i];
+  // 先頭エントリでは undefined のままギャップ判定に渡す（判定側が
+  // 「直前が無ければ区切り行なし」を返すので、ここで先頭を分岐しなくてよい）。
+  let previousTimestampMs: number | undefined;
 
-    if (i > 0) {
-      const gapMs = computeGapMs(entries[i - 1].timestampMs, entry.timestampMs, gapThresholdMs);
-      if (gapMs !== undefined) {
-        outputLines.push(formatGutter(GAP_MARKER_LABEL, gutterWidth) + formatGapMarkerText(gapMs));
-        lineSources.push(undefined);
-      }
+  for (const entry of entries) {
+    const gapMarker = gapMarkerTextBetween(previousTimestampMs, entry.timestampMs, gapThresholdMs);
+    if (gapMarker !== undefined) {
+      outputLines.push(formatGutter(GAP_MARKER_LABEL, gutterWidth) + gapMarker);
+      lineSources.push(undefined);
     }
+    previousTimestampMs = entry.timestampMs;
 
     const messageLines = maskDisplayMessageLines(
       entry.message.split("\n"),
       entry.timestampFormat,
       options.mask
     );
+    const { headerText, continuationIndent } = composeEntryHeader(
+      displayTimestampText(entry, displayTimezone, options.mask),
+      entry.severity,
+      severityWidth,
+      messageLines[0]
+    );
 
-    const timestampText = entry.matched && entry.timestampMs !== undefined
-      ? formatMaskableTimestamp(entry.timestampMs, displayTimezone, options.mask)
-      : undefined;
-    const headerText = timestampText !== undefined
-      ? `${timestampText} ${formatSeverity(entry.severity, severityWidth)} ${messageLines[0]}`
-      : messageLines[0];
     outputLines.push(formatGutter(entry.startLine, gutterWidth) + headerText);
     lineSources.push({ fileIndex: 0, line: entry.startLine });
 
-    const continuationIndent =
-      timestampText !== undefined ? messageColumnIndent(timestampText, severityWidth) : "";
     for (let j = 1; j < messageLines.length; j++) {
       outputLines.push(
         formatGutter(entry.startLine + j, gutterWidth) + continuationIndent + messageLines[j]

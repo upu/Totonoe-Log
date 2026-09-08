@@ -1,13 +1,10 @@
 import type { FormattedLogWithLineSources, LineSource } from "./lineSources";
 import type { MergedEntry } from "./mergeLogFiles";
 import { type DisplayTimezone } from "./timezone";
-import { computeGapMs, formatGapMarkerText } from "./gapDetection";
-import {
-  formatMaskableTimestamp,
-  maskDisplayMessageLines,
-  type DisplayMaskOptions,
-} from "./displayMask";
-import { computeSeverityWidth, formatSeverity, messageColumnIndent } from "./severityColumn";
+import { gapMarkerTextBetween } from "./gapDetection";
+import { maskDisplayMessageLines, type DisplayMaskOptions } from "./displayMask";
+import { computeSeverityWidth } from "./severityColumn";
+import { composeEntryHeader, displayTimestampText } from "./entryHeader";
 
 /** {@link formatMergedLog} の挙動を調整するオプション。 */
 export interface FormatMergedLogOptions {
@@ -92,39 +89,34 @@ export function formatMergedLogWithLineSources(
   const outputLines: string[] = [];
   const lineSources: (LineSource | undefined)[] = [];
 
-  for (let i = 0; i < mergedEntries.length; i++) {
-    const { entry, fileName, kind, fileIndex } = mergedEntries[i];
+  // 先頭エントリでは undefined のままギャップ判定に渡す（判定側が
+  // 「直前が無ければ区切り行なし」を返すので、ここで先頭を分岐しなくてよい）。
+  let previousTimestampMs: number | undefined;
 
-    if (i > 0) {
-      const gapMs = computeGapMs(
-        mergedEntries[i - 1].entry.timestampMs,
-        entry.timestampMs,
-        gapThresholdMs
-      );
-      if (gapMs !== undefined) {
-        outputLines.push(blankPrefix + formatGapMarkerText(gapMs));
-        lineSources.push(undefined);
-      }
+  for (const { entry, fileName, kind, fileIndex } of mergedEntries) {
+    const gapMarker = gapMarkerTextBetween(previousTimestampMs, entry.timestampMs, gapThresholdMs);
+    if (gapMarker !== undefined) {
+      outputLines.push(blankPrefix + gapMarker);
+      lineSources.push(undefined);
     }
+    previousTimestampMs = entry.timestampMs;
 
     const messageLines = maskDisplayMessageLines(
       entry.message.split("\n"),
       entry.timestampFormat,
       options.mask
     );
-    const headerPrefix = `${fileName.padEnd(fileNameWidth)} | ${kind.padEnd(kindWidth)} | `;
+    const { headerText, continuationIndent } = composeEntryHeader(
+      displayTimestampText(entry, displayTimezone, options.mask),
+      entry.severity,
+      severityWidth,
+      messageLines[0]
+    );
 
-    const timestampText = entry.matched && entry.timestampMs !== undefined
-      ? formatMaskableTimestamp(entry.timestampMs, displayTimezone, options.mask)
-      : undefined;
-    const headerText = timestampText !== undefined
-      ? `${timestampText} ${formatSeverity(entry.severity, severityWidth)} ${messageLines[0]}`
-      : messageLines[0];
+    const headerPrefix = `${fileName.padEnd(fileNameWidth)} | ${kind.padEnd(kindWidth)} | `;
     outputLines.push(headerPrefix + headerText);
     lineSources.push({ fileIndex, line: entry.startLine });
 
-    const continuationIndent =
-      timestampText !== undefined ? messageColumnIndent(timestampText, severityWidth) : "";
     for (let j = 1; j < messageLines.length; j++) {
       outputLines.push(blankPrefix + continuationIndent + messageLines[j]);
       lineSources.push({ fileIndex, line: entry.startLine + j });

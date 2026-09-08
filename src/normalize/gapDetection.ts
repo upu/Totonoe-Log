@@ -46,3 +46,22 @@ export function formatGapMarkerText(gapMs: number): string {
   const secondsText = Number.isInteger(rounded) ? String(rounded) : rounded.toFixed(1);
   return `${secondsText}s gap`;
 }
+
+/**
+ * 隣り合う2エントリの間に挿入する区切り行のテキストを返す。挿入しない場合は
+ * `undefined`。{@link computeGapMs} と {@link formatGapMarkerText} を続けて
+ * 呼ぶだけだが、整形側のループから「差を求める → しきい値を見る → 文字列に
+ * する」の入れ子を追い出すために用意している（issue #341）。
+ *
+ * 直前のエントリが無い（先頭エントリ）場合は `previousTimestampMs` に
+ * `undefined` を渡す。{@link computeGapMs} がそのまま `undefined` を返すので、
+ * 呼び出し側で「先頭かどうか」を分岐しなくてよい。
+ */
+export function gapMarkerTextBetween(
+  previousTimestampMs: number | undefined,
+  currentTimestampMs: number | undefined,
+  gapThresholdMs: number | undefined
+): string | undefined {
+  const gapMs = computeGapMs(previousTimestampMs, currentTimestampMs, gapThresholdMs);
+  return gapMs === undefined ? undefined : formatGapMarkerText(gapMs);
+}
