@@ -207,58 +207,98 @@ export async function promptFilterKinds(): Promise<Set<FilterKind> | undefined> 
  * 変えないため。エントリを引数で受け取る形にすると、パースとそれに伴う認識率警告
  * （issue #101）がピッカーより前に出てしまう。
  */
+/**
+ * 条件ごとのプロンプトが「中断された」ことを表す番兵。
+ *
+ * 条件は「選ばれなかった」ときも「入力が無かった」ときも `undefined` を返す
+ * ため、キャンセル・不正入力による中断を `undefined` で表すと区別が付かない。
+ * 中断だけを別の値にして、呼び出し側が全体の中断へ変換できるようにする。
+ */
+const CANCELLED = Symbol("cancelled");
+
+type Cancellable<T> = T | typeof CANCELLED;
+
+async function promptSeverities(
+  selectedKinds: ReadonlySet<FilterKind>,
+  entries: readonly LogEntry[]
+): Promise<Cancellable<Set<string> | undefined>> {
+  if (!selectedKinds.has("severity")) {
+    return undefined;
+  }
+
+  const severities = await promptSeveritySelection(entries);
+  return severities ?? CANCELLED;
+}
+
+async function promptDateRangeCriteria(
+  selectedKinds: ReadonlySet<FilterKind>,
+  displayTimezone: DisplayTimezone
+): Promise<Cancellable<FilterCriteria["dateRange"]>> {
+  if (!selectedKinds.has("dateRange")) {
+    return undefined;
+  }
+
+  // null はキャンセル、または不正な入力による中断を表す。
+  const startMs = await promptDateBoundary("start", displayTimezone);
+  if (startMs === null) {
+    return CANCELLED;
+  }
+
+  const endMs = await promptDateBoundary("end", displayTimezone);
+  if (endMs === null) {
+    return CANCELLED;
+  }
+
+  // 境界が1つも入力されていないなら、日付条件そのものを付けない（issue #231）。
+  // `filterEntriesByDateRange` は DateRange が指定されているだけでタイムスタンプ
+  // 未認識のエントリを除外するため、両端とも `undefined` の範囲を渡すと、
+  // 日付では何も絞り込めていないのに未認識行だけが黙って消える。
+  // Interactive View 側（`interactiveViewCriteria.ts`）の #220 と同じ方針。
+  if (startMs === undefined && endMs === undefined) {
+    return undefined;
+  }
+  return { startMs, endMs };
+}
+
+async function promptIgnorePatterns(
+  selectedKinds: ReadonlySet<FilterKind>
+): Promise<Cancellable<readonly RegExp[] | undefined>> {
+  if (!selectedKinds.has("ignorePattern")) {
+    return undefined;
+  }
+
+  // ユーザーがキャンセルした場合、または不正な入力による中断の場合は何もしない。
+  const ignorePattern = await promptIgnorePattern();
+  if (ignorePattern === undefined) {
+    return CANCELLED;
+  }
+
+  // QuickPick 経路は1欄1パターンのまま（複数指定は Interactive View 限定、
+  // issue #206 のスコープ外）。`FilterCriteria` 側が配列になったので包むだけ。
+  return [ignorePattern];
+}
+
 export async function promptFilterCriteriaForKinds(
   selectedKinds: ReadonlySet<FilterKind>,
   entries: readonly LogEntry[],
   displayTimezone: DisplayTimezone
 ): Promise<FilterCriteria | undefined> {
-  let severities: Set<string> | undefined;
-  if (selectedKinds.has("severity")) {
-    severities = await promptSeveritySelection(entries);
-    if (severities === undefined) {
-      return undefined;
-    }
+  const severities = await promptSeverities(selectedKinds, entries);
+  if (severities === CANCELLED) {
+    return undefined;
   }
 
-  let dateRange: FilterCriteria["dateRange"];
-  if (selectedKinds.has("dateRange")) {
-    const startMs = await promptDateBoundary("start", displayTimezone);
-    // null はキャンセル、または不正な入力による中断を表す。
-    if (startMs === null) {
-      return undefined;
-    }
-
-    const endMs = await promptDateBoundary("end", displayTimezone);
-    if (endMs === null) {
-      return undefined;
-    }
-
-    // 境界が1つも入力されていないなら、日付条件そのものを付けない（issue #231）。
-    // `filterEntriesByDateRange` は DateRange が指定されているだけでタイムスタンプ
-    // 未認識のエントリを除外するため、両端とも `undefined` の範囲を渡すと、
-    // 日付では何も絞り込めていないのに未認識行だけが黙って消える。
-    // Interactive View 側（`interactiveViewCriteria.ts`）の #220 と同じ方針。
-    if (startMs !== undefined || endMs !== undefined) {
-      dateRange = { startMs, endMs };
-    }
+  const dateRange = await promptDateRangeCriteria(selectedKinds, displayTimezone);
+  if (dateRange === CANCELLED) {
+    return undefined;
   }
 
-  let ignorePattern: RegExp | undefined;
-  if (selectedKinds.has("ignorePattern")) {
-    ignorePattern = await promptIgnorePattern();
-    // ユーザーがキャンセルした場合、または不正な入力による中断の場合は何もしない。
-    if (ignorePattern === undefined) {
-      return undefined;
-    }
+  const ignorePatterns = await promptIgnorePatterns(selectedKinds);
+  if (ignorePatterns === CANCELLED) {
+    return undefined;
   }
 
-  // QuickPick 経路は1欄1パターンのまま（複数指定は Interactive View 限定、
-  // issue #206 のスコープ外）。`FilterCriteria` 側が配列になったので包むだけ。
-  return {
-    severities,
-    dateRange,
-    ignorePatterns: ignorePattern !== undefined ? [ignorePattern] : undefined,
-  };
+  return { severities, dateRange, ignorePatterns };
 }
 
 /**
